@@ -2,6 +2,15 @@
 
 WowUp installs the Forever ZIP attached to tagged GitHub releases.
 
+## 1.5.102 - 2026-11-25
+
+### Changes
+- Rank Quest shows how many of your quests are displayed out of the total in your quest log (for example, `4/20 Quests`). Search, filters, and collapsed groups change the number shown. Party-only quests do not count toward your personal totals.
+
+### Hotfixes
+- Clicking Rank Quest toolbar controls keeps the toolbar open. Clicking outside Rank Quest still collapses it.
+- Boss Target Marking no longer keeps a dead boss selected, marks it, or pings it. Smart Target continues looking for a living boss on the same press.
+
 ## 1.5.99 — 2026-11-25
 
 ### Changes

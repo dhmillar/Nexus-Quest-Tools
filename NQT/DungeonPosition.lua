@@ -1965,10 +1965,12 @@ do
         end
     end
 
+    local clearDead="\n/cleartarget [dead]"
+
     local function reacquireTail(label,ping)
         if not label then return "" end
         return "\n/stopmacro [harm,nodead]\n/cleartarget\n/stopmacro [exists]"
-            .."\n/targetexact [noexists] "..label.."\n/atmob k0:"..planFor(label:lower())..ping
+            .."\n/targetexact [noexists] "..label.."\n/atmob k0:"..planFor(label:lower())..ping..clearDead
     end
 
     local function smartSearch(fallback,free)
@@ -1992,7 +1994,7 @@ do
         searchSlots,searchHit={},nil
         local body="/stopmacro [combat]\n/cleartarget\n/stopmacro [exists]"
         local ping=AT.db.bossMarkPing and "\n/ping [@target,harm,nodead] Attack" or ""
-        local recover=reacquireTail(recent,ping)
+        local recover=recent and reacquireTail(recent,ping) or clearDead
         local mark=free and ("\n/tm [harm,nodead] ~"..free) or ""
         local tail,count,lastProbe
         for _,entry in ipairs(freeNames) do
@@ -2015,7 +2017,7 @@ do
         return body..tail..recover
     end
 
-    function AT.GetBossTargetMacro(preview,smart)
+    function AT.GetBossTargetMacro(preview,smart,maxBytes)
         local name,id,kind=context()
         if not name then return false end
         if id~=lastInstance then
@@ -2088,12 +2090,32 @@ do
                 if recent and recent~=labels[1] then
                     -- After the one planned marker attempt, recover our
                     -- last target on a miss, without giving it a new icon.
-                    local recover="\n/targetexact [noexists] "..recent.."\n/atmob v"..planFor(recent:lower())
-                    if #body+#recover+#ping+34<=255 then body=body..recover end
+                    local probe="\n/targetexact [noexists][dead] "..recent
+                    local recover=probe.."\n/atmob v"..planFor(recent:lower())
+                    local function fits(core,tail)
+                        return not maxBytes or #core+#tail+#ping+#clearDead<=maxBytes
+                    end
+                    if fits(body,recover) then body=body..recover
+                    else
+                        local shorter=body:gsub("/targetexact %[noexists%] ","/targetexact ",1)
+                        if fits(shorter,recover) then body=shorter..recover
+                        -- This is already the last successful name; reporting
+                        -- it again is optional when macro space is tight.
+                        elseif fits(shorter,probe) then body=shorter..probe end
+                    end
                 end
             end
         end
-        body=body..ping
+        -- Exact-name targeting can pick a corpse, even if the scan saw
+        -- a live boss when this macro was prepared. Guard marks and pings
+        -- natively, then clear the corpse after all acquisition paths.
+        if maxBytes and #body+#ping+#clearDead>maxBytes then
+            -- There is already a no-target guard immediately before the first probe.
+            body=body:gsub("/targetexact %[noexists%] ","/targetexact ",1)
+        end
+        if maxBytes and #body+#ping+#clearDead>maxBytes then ping="" end
+        body=body..ping..clearDead
+        if maxBytes and #body>maxBytes then return true,nil,"That boss name does not fit in the action-bar macro." end
         return true,body
     end
 

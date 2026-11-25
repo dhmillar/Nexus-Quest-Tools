@@ -37,6 +37,8 @@ local function object()
     function o:Show() self.shown=true end
     function o:Hide() self.shown=false end
     function o:SetShown(v) self.shown=v end
+    function o:IsShown() return self.shown end
+    function o:IsVisible() return self.shown and (not self.parent or self.parent:IsVisible()) end
     function o:SetScript(k,v) self.scripts[k]=v end
     function o:SetText(v)
         self.text=v
@@ -66,7 +68,7 @@ local function object()
     function o:ClearFocus() self.focused=false end
     function o:HasFocus() return self.focused==true end
     function o:GetParent() return self.parent end
-    function o:IsMouseOver() return true end
+    function o:IsMouseOver() return self.mouseOver==true or (self.mouseOver==nil and self.kind~="EditBox" and self.kind~="Frame") end
     function o:SetFocus() self.focused=true end
     function o:CreateTexture() local a=object();textures[#textures+1]=a;return a end
     function o:SetAtlas(atlas) self.atlas=atlas end
@@ -155,12 +157,31 @@ do
         GetMouseFoci=function() return {target} end
         watcher.scripts.OnEvent(watcher,"GLOBAL_MOUSE_DOWN","LeftButton")
     end
-    panel.IsMouseOver=function() return false end
+    header.mouseOver=true
     for _,theme in ipairs({1,2}) do
         AT.db.questHUDTheme=theme;AT.db.questHUDFontOffset=5;AT.RefreshQuestHUD()
         state(false)
         clickHeader(); state(true)
-        mouse(widgets[1]); state(true)
+        assert(header:GetWidth()<panel:GetWidth(),"expanded title hit area must leave toolbar space")
+        for _,button in ipairs(widgets) do
+            assert(button:GetFrameLevel()>header:GetFrameLevel(),"every toolbar control must be above the header")
+            mouse(button); state(true)
+        end
+        mouse(party); state(true)
+        header.scripts.OnMouseUp(header,"LeftButton");state(true)
+        body.mouseOver=true
+        mouse(UIParent);state(true)
+        mouse(nil);state(true)
+        -- Exercise an actual font-control click after a world/root focus result.
+        local smaller
+        for _,button in ipairs(widgets) do
+            if button.label.text=="-" and button:GetWidth()==22 then smaller=button;break end
+        end
+        assert(smaller)
+        smaller.scripts.OnClick(smaller)
+        assert(AT.db.questHUDFontOffset==4)
+        state(true)
+        body.mouseOver=false
         mouse(find("Acquired in Stranglethorn"));state(true)
         glass.scripts.OnClick(glass)
         search:SetText("dusk")
@@ -179,7 +200,7 @@ do
         AT.db.rankQuestLocked=nil
     end
     GetMouseFoci=nil
-    panel.IsMouseOver=function() return true end
+    header.mouseOver=true
     AT.db.questHUDTheme,AT.db.questHUDFontOffset=oldTheme,oldFont
     AT.RefreshQuestHUD()
     print("PASS compact title and toolbar in both themes, title click, click inside, outside/world dismissal, drag and search preservation")
@@ -511,6 +532,8 @@ do
     print("PASS search field and hint match the section title in both themes across the font-size range")
     -- Ensure a case-insensitive partial search can find remote/log-wide rows,
     -- while matching multiple keywords across the title and the zone bucket.
+    local originalEnabled=AT.db.questHUDEnabled; AT.db.questHUDEnabled=true
+    AT.RefreshQuestHUD()
     AT.BrowseQuestHUD(nil)
     local nav=C_SuperTrack.GetSuperTrackedQuestID()
     find("Zones")
@@ -538,7 +561,6 @@ do
         if f.points and f.points.TOPLEFT and f.points.TOPLEFT[5]==-82 then count=f end
     end
     assert(count and scroll)
-    local originalEnabled=AT.db.questHUDEnabled; AT.db.questHUDEnabled=true
     local originalWidth,originalTheme,originalFont=panel:GetWidth(),AT.db.questHUDTheme,AT.db.questHUDFontOffset
     for _,theme in ipairs({1,2}) do
         AT.db.questHUDTheme=theme
@@ -564,8 +586,25 @@ do
     print("PASS area heading uses available width; search and quest rows never overlap at minimum, default, or maximum HUD width")
     toggle.scripts.OnClick(toggle)
     assert(search.shown and search.focused and not toggle.shown and not clear.shown)
+    AT.db.questHUDEnabled=true
+    local nativeGetCount=C_QuestLog.GetNumQuestLogEntries
+    C_QuestLog.GetNumQuestLogEntries=function() return #entries,20 end
+    AT.RefreshQuestHUD()
+    search:SetText("never-matches-any-quest")
+    assert(find("0/20 Quests"),"no matches should keep the full native quest count")
     search:SetText("dusk")
     assert(search.shown and clear.shown and find("Search Results"))
+    search:SetText("only in duskwood")
+    assert(count:GetText()=="1/20 Quests",count:GetText())
+    local branch=assert(find("-  Duskwood"))
+    branch.scripts.OnClick(branch)
+    assert(count:GetText()=="0/20 Quests",count:GetText())
+    branch.scripts.OnClick(branch)
+    assert(count:GetText()=="1/20 Quests",count:GetText())
+    search:SetText("dusk")
+    C_QuestLog.GetNumQuestLogEntries=nativeGetCount
+    AT.RefreshQuestHUD()
+    AT.db.questHUDEnabled=originalEnabled
     GetMouseFoci=function() return {search} end
     watch.scripts.OnEvent(watch,"GLOBAL_MOUSE_DOWN","LeftButton")
     assert(search.focused,"click on the search box must retain focus")
@@ -937,9 +976,9 @@ for _,theme in ipairs({"Map","Minimal"}) do
     assert(find("Completed") and find("A flight to Duskwood") and not find("Only local POI"))
     assert(find("A flight to Duskwood").groupIcon.shown,"explicit group tag survives transition to Completed")
     assert(not find("[26] Acquired in Stranglethorn").groupIcon.shown,"difficulty is not a group flag")
-    assert(find("2 QUESTS"),"count is scoped to completed rows in the browsed zone")
+    assert(find("2/6 Quests"),"count is scoped to completed rows in the browsed zone")
     AT.BrowseQuestHUD(nil)
-    assert(find("Only local POI") and find("3 QUESTS"),"native-untracked completed row appears by origin zone")
+    assert(find("Only local POI") and find("3/6 Quests"),"native-untracked completed row appears by origin zone")
     clickButton("Completed")
     assert(find("No NPC metadata"))
     clickButton(theme)
@@ -948,7 +987,7 @@ assert(selected==selection and removeCount[16]==watch16)
 -- A turned-in quest is absent from both views.
 for i,entry in ipairs(entries) do if entry.questID==16 then table.remove(entries,i);break end end
 AT.RefreshQuestHUD(); clickButton("In Progress")
-assert(not find("Only local POI") and find("2 QUESTS"))
+assert(not find("Only local POI") and find("2/5 Quests"))
 print("PASS actual status toggle in Map/Minimal, selected zones/count, preserves spacing/watch selection, completed untracked and turned-in excluded")
 clickButton("Completed")
 gameComplete[11]=nil
@@ -1565,6 +1604,24 @@ stillHeld=false
 watch.scripts.OnEvent(watch,"QUEST_TURNED_IN",5010);drain()
 local remote=find("Forest hidden quest")
 assert(remote and remote.partyOnly and not remote.circle.available and remote.detail.text:find("Turned in by you",1,true))
+do
+    local forest=sections[1]
+    local oldQuests,oldCollapsed,oldCount=forest.quests,forest.collapsed,C_QuestLog.GetNumQuestLogEntries
+    forest.quests={
+        {questID=88001,title="Forest own quest 1"}, {questID=88002,title="Forest own quest 2"},
+        {questID=88003,title="Forest own quest 3"}, {questID=88004,title="Forest own quest 4"},
+    }
+    forest.collapsed=false
+    C_QuestLog.GetNumQuestLogEntries=function() return #getVisible(),20 end
+    AT.RefreshQuestHUD()
+    assert(find("Forest hidden quest").partyOnly,"the retained teammate quest stays visible")
+    for n=1,4 do assert(find("Forest own quest "..n)) end
+    assert(find("4/20 Quests") and not find("5/20 Quests"),"count only player quests even with a visible party-only row")
+    forest.quests,forest.collapsed,C_QuestLog.GetNumQuestLogEntries=oldQuests,oldCollapsed,oldCount
+    AT.RefreshQuestHUD()
+    remote=assert(find("Forest hidden quest"))
+    print("PASS Rank Quest 4/20 with four own quests and one extra retained teammate quest visible")
+end
 local unchangedNav,lastOpen=AT.GetQuestNavigationID(),opened
 ctrl=false;remote.titleHit.scripts.OnClick(remote.titleHit,"LeftButton")
 assert(AT.GetQuestNavigationID()==unchangedNav and opened==lastOpen)

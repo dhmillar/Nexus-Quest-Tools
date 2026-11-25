@@ -243,18 +243,18 @@ local function visibleQuestLog()
             end
         end
     end
-    return all,headers,(is(total,"number") and total or nil),true
+    return all,headers,(is(total,"number") and total>=0 and total<math.huge and total%1==0 and total or nil),true
 end
 
 local function allQuestLog()
     local visible,headers,total,ready=visibleQuestLog()
-    if not ready then return logCache and logCache.rows or visible end
+    if not ready then return logCache and logCache.rows or visible,logCache and logCache.total end
     local found=0
     for _ in pairs(visible) do found=found+1 end
     if #headers==0 then
         local full=not total or found>=total
         logCache={rows=visible,total=total,full=full,attempted=full};logDirty=nil
-        return visible
+        return visible,total
     end
     local missing=not total or found<total
     local scan=missing and (not logCache or not logCache.attempted or logDirty or logCache.total~=total)
@@ -293,7 +293,7 @@ local function allQuestLog()
             if not visible[qid] and call(Q.IsOnQuest,qid)~=false then visible[qid]=item end
         end
     end
-    return visible
+    return visible,total
 end
 
 local namedZoneCache={}
@@ -326,7 +326,7 @@ end
 
 local starterMemo={}
 local function build(zoneID,zoneName)
-    local result={zones={},rows={},dungeons={},current=zoneID}
+    local result={zones={},rows={},dungeons={},current=zoneID,total=0}
     if not Q then return result end
     local zonesByName,associated={},{}
     local party=call(AT.IsQuestPartyProgressActive)==true
@@ -366,7 +366,8 @@ local function build(zoneID,zoneName)
             existing.kind=kind
         end
     end
-    for qid,source in pairs(allQuestLog()) do
+    local ownLog,nativeTotal=allQuestLog()
+    for qid,source in pairs(ownLog) do
         local entry,header,i=source.info,source.header,source.index
         local title=field(entry,"title") or call(Q.GetTitleForQuestID,qid)
         if id(qid) and not removedQuests[qid] then
@@ -407,11 +408,15 @@ local function build(zoneID,zoneName)
                 if id(origin) then row.origin=origin
                 elseif id(accepted) then row.origin=accepted; row.recorded=true end
                 result.rows[qid]=row
+                result.total=result.total+1
                 if row.origin then associate(row.origin,nil,row,row.recorded and "recorded" or "origin") end
                 if row.destination then associate(row.destination,nil,row,"destination") end
                 if zoneID and poi[qid] then associate(zoneID,zoneName,row,"destination") end
         end
     end
+    -- The native total accounts for quests under collapsed log headers.
+    -- Fall back to unique player-owned rows if the API omits the total.
+    result.total=math.max(result.total,nativeTotal or 0)
     for key,bucket in pairs(result.zones) do
         if is(bucket.name,"string") and bucket.name~="Zone" then
             local previous=zonesByName[bucket.name]
@@ -1325,7 +1330,10 @@ local function arrange()
     hud.partyToggle:SetShown(toolbarOpen and partyEnabled)
     local titleWidth=hud:GetWidth()-13-10-24-8-hud.palette:GetWidth()-hud.statusFilter:GetWidth()
         -(partyEnabled and (hud.partyToggle:GetWidth()+4) or 0)-6
-    hud.eyebrow:SetWidth(math.max(1,toolbarOpen and titleWidth or hud:GetWidth()-26))
+    local labelWidth=math.max(1,toolbarOpen and titleWidth or hud:GetWidth()-26)
+    hud.eyebrow:SetWidth(labelWidth)
+    -- When expanded, the drag/toggle surface ends before the first button.
+    hud.header:SetWidth(toolbarOpen and labelWidth+13 or hud:GetWidth())
     color(hud.partyToggle.fill,inlineParty and .095 or .11,inlineParty and .45 or .17,inlineParty and .39 or .21,.96)
     hud.partyToggle.icon:SetAlpha(inlineParty and 1 or .67)
     applyTypography(hud.eyebrow,a,toolbarOpen and 10 or 18,toolbarOpen and "GameFontHighlightSmall" or a.font,not toolbarOpen)
@@ -1392,7 +1400,6 @@ local function arrange()
     hud.allTab:SetSize(buttonWidth,23)
     hud.shownZone=not allZones and selected and selected.key
     hud.zoneName:SetText(searching and "Search Results" or allZones and "All Zones" or (selected and selected.name or "Finding your zone"))
-    hud.count:SetText(#entries==1 and "1 QUEST" or (#entries .. " QUESTS"))
     local groupWord=(selectedDungeon or currentDungeonView) and "dungeon" or "zone"
     local emptyLabel=completedView and "No quests ready to turn in" or "No quests in progress"
     hud.empty:SetText(searching and "No matching quests." or (emptyLabel .. (allZones and "." or (" for this " .. groupWord .. "."))))
@@ -1423,7 +1430,7 @@ local function arrange()
     local pinnedID=call(AT.GetQuestHUDManualFocus)
     local width=math.max(180,hud.scroll:GetWidth()-8)
     hud.content:SetWidth(width)
-    local yOffset,shownRows,shownGroups=0,0,0
+    local yOffset,shownRows,shownGroups,shownOwned=0,0,0,0
     local outerWidth=width
     local groupScope=searching and "search" or (allZones and "all-zones")
         or (selectedDungeon==ALL_DUNGEONS and "all-dungeons")
@@ -1484,6 +1491,7 @@ local function arrange()
             local indent=groupScope and 12 or 0
             width=outerWidth-indent
             local q=e.row
+            if not q.partyOnly then shownOwned=shownOwned+1 end
             local b=hud.rows[shownRows] or addRow(shownRows)
             b.qid,b.partyOnly=q.id,q.partyOnly
             b.turnInLabel,b.turnInName=nil,nil
@@ -1568,6 +1576,7 @@ local function arrange()
             b:Show()
         end
     end
+    hud.count:SetText(("%d/%d Quests"):format(shownOwned,model.total))
     for n=shownRows+1,#hud.rows do hud.rows[n].qid=nil;hud.rows[n].item.link=nil;hud.rows[n]:Hide() end
     for n=shownGroups+1,#hud.branches do hud.branches[n].branchKey=nil;hud.branches[n]:Hide() end
     setExtent(hud.scroll,hud.content,yOffset)
@@ -1767,11 +1776,11 @@ local function dismissEmptySearch(search)
     arrange()
 end
 
-local function containsMouse(parent,target,known)
-    if not known then return call(parent.IsMouseOver,parent)==true end
-    for _=1,16 do
+local function containsMouse(parent,target)
+    for _=1,32 do
+        if not ordinary(target) then break end
         if target==parent then return true end
-        if not is(target,"table") then break end
+        if type(target)~="table" and type(target)~="userdata" then break end
         local nextParent=call(target.GetParent,target)
         if nextParent==target then break end
         target=nextParent
@@ -1779,19 +1788,29 @@ local function containsMouse(parent,target,known)
     return false
 end
 
+local function pointerOver(frame)
+    return call(frame.IsVisible,frame)~=false and call(frame.IsMouseOver,frame)==true
+end
+
 local function releaseOnOutsideClick()
     if not hud or not (toolbarOpen or searchOpen) then return end
-    -- Use the top mouse focus so controls covering the HUD still count as outside.
     local foci=call(GetMouseFoci)
-    local target,known
-    if is(foci,"table") then target,known=field(foci,1),true
-    elseif type(GetMouseFocus)=="function" then target,known=call(GetMouseFocus),true end
-    if toolbarOpen and not containsMouse(hud,target,known and target~=nil) then
+    local target=field(foci,1)
+    if not target then
+        if containsMouse(hud,foci) then target=foci
+        else target=call(GetMouseFocus) end
+    end
+    -- GLOBAL_MOUSE_DOWN can arrive with no button focus yet, before the
+    -- button's own mouse-up click. Use the displayed HUD hit area as well.
+    local inside=containsMouse(hud,target) or pointerOver(hud.body)
+        or (hud.railFrame:IsShown() and pointerOver(hud.railFrame))
+        or (hud.dungeonFrame:IsShown() and pointerOver(hud.dungeonFrame))
+    if toolbarOpen and not inside then
         toolbarOpen,popupOpen,dungeonOpen=false,false,false
         arrange()
     end
     local search=hud.search
-    if searchOpen and not containsMouse(search,target,known) then
+    if searchOpen and not (containsMouse(search,target) or pointerOver(search)) then
         if call(search.HasFocus,search)==true then search:ClearFocus() end
         dismissEmptySearch(search)
     end
@@ -1814,12 +1833,19 @@ function AT.InitQuestHUD()
     hud.mapTrim=box(body,"ARTWORK");hud.mapTrim:SetPoint("TOP",body,"TOP",0,3)
     hud.rule=box(body,"ARTWORK");hud.rule:SetPoint("TOPLEFT");hud.rule:SetPoint("TOPRIGHT");hud.rule:SetHeight(2)
     local header=CreateFrame("Frame",nil,body)
-    header:SetPoint("TOPLEFT",body,"TOPLEFT",0,0);header:SetPoint("TOPRIGHT",body,"TOPRIGHT",0,0)
-    header:SetHeight(34);header:EnableMouse(true);header:RegisterForDrag("LeftButton")
-    local dragged,moving
-    header:SetScript("OnMouseDown",function() dragged=false end)
+    hud.header=header
+    header:SetPoint("TOPLEFT",body,"TOPLEFT",0,0)
+    header:SetSize(hud:GetWidth(),34);header:EnableMouse(true);header:RegisterForDrag("LeftButton")
+    local armed,dragged,moving
+    header:SetScript("OnMouseDown",function(_,mouseButton)
+        armed=mouseButton=="LeftButton"
+        dragged=false
+    end)
     header:SetScript("OnMouseUp",function(_,mouseButton)
-        if mouseButton~="LeftButton" or dragged or call(header.IsMouseOver,header)~=true then return end
+        if mouseButton~="LeftButton" then return end
+        local clicked=armed and not dragged
+        armed=false
+        if not clicked or not pointerOver(header) then return end
         toolbarOpen=not toolbarOpen
         if not toolbarOpen then popupOpen,dungeonOpen=false,false end
         arrange()
@@ -1982,7 +2008,7 @@ function AT.InitQuestHUD()
     more:ClearAllPoints();more:SetPoint("RIGHT",dungeonButton,"LEFT",-5,0)
     less:ClearAllPoints();less:SetPoint("RIGHT",more,"LEFT",-4,0)
     -- The title drag hit area extends behind this row. Keep all controls above it.
-    for _,control in ipairs({less,more,dungeonButton,zoneButton}) do
+    for _,control in ipairs({collapse,palette,statusFilter,partyToggle,less,more,dungeonButton,zoneButton}) do
         control:RegisterForClicks("LeftButtonUp")
         if control.SetFrameLevel and header.GetFrameLevel then control:SetFrameLevel(header:GetFrameLevel()+2) end
     end

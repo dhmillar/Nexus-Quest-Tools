@@ -142,10 +142,11 @@ end
 local bossMacroUntil,bossRefreshQueued=0,false
 local function macroBody(name)
     if AT.GetBossTargetMacro then
-        local active,body=AT.GetBossTargetMacro(true)
+        local prefix=marker.."\n/atmob [btn:2]e;h\n/stopmacro [btn:2][combat]\n"
+        local active,body=AT.GetBossTargetMacro(true,nil,255-#prefix+#"/stopmacro [combat]\n")
         if active then
             if body then body=body:gsub("^/stopmacro %[combat%]\n","",1) end
-            local out=marker.."\n/atmob [btn:2]e;h\n/stopmacro [btn:2][combat]\n"..(body or "/atmob b")
+            local out=prefix..(body or "/atmob b")
             if #out<=255 then return out end
             return marker.."\n/atmob [btn:2]e;b"
         end
