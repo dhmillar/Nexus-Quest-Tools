@@ -16,6 +16,7 @@ local defaults = {
     dungeonPositionShowSelf = true,
     dungeonPositionShowParty = true,
     questPartyProgress = true,
+    questLeftoverMarks = false,
     questHUDCollapsed = false,
     questHUDRailOpen = false,
     questHUDFontOffset = 0,
@@ -58,6 +59,7 @@ loader:SetScript("OnEvent", function(self, event, arg)
         safeInit("Target portrait", AT.InitPortrait)
         safeInit("Minimap guidance", AT.InitQuestRoute)
         safeInit("Rank Quest", AT.InitQuestHUD)
+        safeInit("Quest leftover bag marks", AT.InitQuestLeftovers)
         safeInit("Dungeon Position", AT.InitDungeonPosition)
         safeInit("Settings", AT.InitOptions)
     end

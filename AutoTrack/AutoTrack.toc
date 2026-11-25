@@ -3,7 +3,7 @@
 ## IconTexture: Interface\AddOns\AutoTrack\MinimapAT.tga
 ## Notes: Sticky nearby quest tracking and a reusable named-target macro.
 ## Author: Dennis
-## Version: 1.5.40
+## Version: 1.5.43
 ## SavedVariables: AutoTrackDB
 ## SavedVariablesPerCharacter: AutoTrackCharDB
 ## OptionalDeps: Questie, ShortestPathForever, ForeverDungeonJournal
@@ -20,6 +20,7 @@ Route.lua
 WorldRoute.lua
 PartyProgress.lua
 QuestItems.lua
+QuestLeftovers.lua
 DungeonCatalog.lua
 QuestHUD.lua
 DungeonPosition.lua

@@ -1,7 +1,7 @@
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $addon = Join-Path $root 'AutoTrack'
-$expected = @('AutoTrack.toc','Bindings.xml','Core.lua','DungeonCatalog.lua','DungeonPosition.lua','MinimapAT.tga','NextMob.lua','Options.lua','PartyPerson.tga','PartyProgress.lua','Portrait.lua','QuestHUD.lua','QuestItems.lua','QuestMenu.lua','Quests.lua','QueueBadge.tga','README.md','Roads.lua','Route.lua','SmartTarget.lua','Target.lua','Walking.lua','WorldRoute.lua')
+$expected = @('AutoTrack.toc','Bindings.xml','Core.lua','DungeonCatalog.lua','DungeonPosition.lua','MinimapAT.tga','NextMob.lua','Options.lua','PartyPerson.tga','PartyProgress.lua','Portrait.lua','QuestHUD.lua','QuestItems.lua','QuestLeftovers.lua','LeftoverTrash.tga','QuestMenu.lua','Quests.lua','QueueBadge.tga','README.md','Roads.lua','Route.lua','SmartTarget.lua','Target.lua','Walking.lua','WorldRoute.lua')
 $files = @(Get-ChildItem -LiteralPath $addon -Force)
 if (Compare-Object ($files.Name | Sort-Object) ($expected | Sort-Object)) { throw 'Review any new or missing addon file before packaging.' }
 if ($files | Where-Object { $_.PSIsContainer -or ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) }) { throw 'Unexpected addon directory or linked file.' }

@@ -31,6 +31,7 @@ local function updateState()
     if AT.RefreshPortrait then AT.RefreshPortrait() end
     if AT.RefreshQuestRoute then AT.RefreshQuestRoute() end
     if AT.RefreshQuestHUD then AT.RefreshQuestHUD() end
+    if AT.RefreshQuestLeftovers then AT.RefreshQuestLeftovers() end
     if AT.RefreshDungeonPosition then AT.RefreshDungeonPosition() end
     refreshPanel()
     if minimapButton then
@@ -195,8 +196,9 @@ local function buildPanel()
 
     option(rank, "questHUDEnabled", "Enable Rank Quest", -2, "Show the movable, zone-organized Rank Quest panel and hide the stock quest display.")
     option(rank, "questPartyProgress", "Quest Party Progress", -30, "Show the party progress Blizzard reports on hover, and keep shared quests visible while a party member still needs objectives.")
-    makeText(rank, "GameFontHighlightSmall", -79, "Right-click a quest to exclude it from automatic tracking.")
-    makeText(rank, "GameFontDisableSmall", -102, "Ctrl-click quest titles to number them. /at order lists them.")
+    option(rank, "questLeftoverMarks", "Mark leftover quest items in bags", -58, "Adds a trash badge only when a turned-in quest can be verified and no current known objective uses that item. Never deletes anything.")
+    makeText(rank, "GameFontHighlightSmall", -101, "Right-click a quest to exclude it from automatic tracking.")
+    makeText(rank, "GameFontDisableSmall", -123, "Ctrl-click quest titles to number them. /at order lists them.")
 
     option(dungeon, "dungeonPositionEnabled", "Enable Dungeon Position", -2)
     option(dungeon, "dungeonPositionAutoOpen", "Open automatically in a dungeon", -30)

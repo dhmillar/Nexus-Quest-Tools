@@ -16,7 +16,7 @@ Type `/nqt` to open settings. The existing `/at` and `/autotrack` commands still
 
 - **General:** Automatic quest focus, completion cleanup, and route guidance.
 - **Auto Macro:** Named-target macro with optional markers and pings on a keypress.
-- **Rank Quest:** Party progress, dungeon and zone grouping, turn-in details, and whole-log search.
+- **Rank Quest:** Party progress, dungeon and zone grouping, turn-in details, and whole-log search. Optional leftover-item badges in Blizzard bags explain why a verified item is not needed by the current log. They never delete items.
 - **Dungeon Position:** Matching floor art from the client or an installed Dungeon Journal. Shows only coordinates exposed by WoW on supported floors; no third-party map art is bundled.
 
 See the [addon changelog and controls](AutoTrack/README.md).
