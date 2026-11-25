@@ -250,7 +250,7 @@ function AT.InitOptions()
     local icon = minimapButton:CreateTexture("AutoTrackMinimapButtonIcon", "OVERLAY", nil, 4)
     icon:SetSize(26, 26)
     icon:SetPoint("CENTER")
-    icon:SetTexture("Interface/AddOns/AutoTrack/MinimapAT.tga")
+    icon:SetTexture("Interface/AddOns/NQT/MinimapAT.tga")
     minimapButton.icon = icon
     minimapButton:RegisterForClicks("LeftButtonUp", "RightButtonUp")
     minimapButton:RegisterForDrag("LeftButton")

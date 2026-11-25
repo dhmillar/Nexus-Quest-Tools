@@ -42,7 +42,7 @@ function hooksecurefunc(_,key,fn) if key=="SetBagItem" then tipHook=fn end end
 function CreateFrame() watcher={RegisterEvent=function()end,SetScript=function(_,_,cb)watcher.event=cb end};return watcher end
 local deferred
 C_Timer={After=function(_,cb)deferred=cb end}
-assert(loadfile("AutoTrack/QuestLeftovers.lua"))("AutoTrack",AT)
+assert(loadfile("NQT/QuestLeftovers.lua"))("NQT",AT)
 AT.InitQuestLeftovers()
 assert(buttons[1].mark.shown and buttons[2].mark.shown and buttons[1].mark.path:match("LeftoverTrash.tga"))
 for i=3,10 do assert(not buttons[i].mark,"must not mark unverified or protected slot "..i) end

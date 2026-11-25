@@ -774,7 +774,7 @@ local function addRow(n)
     circle:RegisterForClicks("LeftButtonUp","RightButtonUp")
     circle.icon=box(circle,"ARTWORK")
     circle.icon:SetAllPoints(circle)
-    circle.icon:SetTexture("Interface/AddOns/AutoTrack/QueueBadge.tga")
+    circle.icon:SetTexture("Interface/AddOns/NQT/QueueBadge.tga")
     circle.dot=text(circle,"GameFontNormalSmall");circle.dot:SetPoint("CENTER");circle.dot:SetText("•")
     circle:SetScript("OnClick",function(self,key)
         if key=="RightButton" then openRowMenu(b);return end
@@ -1784,7 +1784,7 @@ function AT.InitQuestHUD()
     if partyToggle.SetFrameLevel and header.GetFrameLevel then partyToggle:SetFrameLevel(header:GetFrameLevel()+2) end
     local icon=partyToggle:CreateTexture(nil,"ARTWORK")
     icon:SetSize(16,16);icon:SetPoint("CENTER")
-    icon:SetTexture("Interface\\AddOns\\AutoTrack\\PartyPerson.tga")
+    icon:SetTexture("Interface\\AddOns\\NQT\\PartyPerson.tga")
     partyToggle.icon=icon
     partyToggle:SetScript("OnEnter",function(self)
         self.fill:SetAlpha(.78)

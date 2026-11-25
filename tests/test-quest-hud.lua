@@ -86,8 +86,8 @@ function AT.ToggleQuestExcluded(q) excluded=q;return true end
 C_SuperTrack={SetSuperTrackedQuestID=function(q) selected=q end,GetSuperTrackedQuestID=function() return selected end}
 function QuestMapFrame_OpenToQuestDetails(q) opened=q end
 function IsControlKeyDown() return ctrl end
-assert(loadfile("AutoTrack/DungeonCatalog.lua"))("AutoTrack",AT)
-assert(loadfile("AutoTrack/QuestHUD.lua"))("AutoTrack",AT)
+assert(loadfile("NQT/DungeonCatalog.lua"))("NQT",AT)
+assert(loadfile("NQT/QuestHUD.lua"))("NQT",AT)
 do
     local fresh,savedMap,invalid={},{questHUDTheme=1,questHUDThemeSchema=2},{questHUDTheme=99,questHUDThemeSchema=2}
     AT.NormalizeQuestHUDTheme(fresh);AT.NormalizeQuestHUDTheme(savedMap);AT.NormalizeQuestHUDTheme(invalid)
@@ -171,7 +171,7 @@ do
     AT.ToggleQuestExcluded=function(id) excluded=id;excludedValue=not excludedValue end
     AT.GetQuestHUDManualFocus=function() return pin end
     AT.ToggleQuestHUDManualFocus=function(id) if pin==id then pin=nil else pin=id end end
-    assert(loadfile("AutoTrack/QuestMenu.lua"))("AutoTrack",AT)
+    assert(loadfile("NQT/QuestMenu.lua"))("NQT",AT)
     local function menu()
         row=find("Acquired in Stranglethorn")
         row.scripts.OnClick(row,"RightButton")
@@ -517,7 +517,7 @@ end
 C_QuestLog.RemoveQuestWatch=function(q)
     nativeWatch[q]=nil; removeCount[q]=(removeCount[q] or 0)+1
 end
-assert(loadfile("AutoTrack/Quests.lua"))("AutoTrack",AT)
+assert(loadfile("NQT/Quests.lua"))("NQT",AT)
 AT.RefreshQuests()
 AT.BrowseQuestHUD(nil)
 AT.RefreshQuestHUD()
@@ -639,7 +639,7 @@ end
 print("PASS repeated Ctrl-click tracking order, same-frame suppression before timers, combat alpha and unrelated wrapper visibility")
 AT.db.questHUDCollapsed=true;AT.RefreshQuestHUD()
 assert(find("Rank Quest  +"),"the closed tab must say Rank Quest")
-local src=assert(io.open("AutoTrack/Options.lua")):read("*all")
+local src=assert(io.open("NQT/Options.lua")):read("*all")
 assert(src:find("Enable Rank Quest",1,true) and not src:find("Enable Quest HUD",1,true))
 assert(AT.db.questHUDEnabled,"do not rename or reset saved variables")
 print("PASS Rank Quest labels in both layouts, collapsed tab and existing setting preservation")
@@ -1292,7 +1292,7 @@ C_TooltipInfo={GetQuestPartyProgress=function(q,omit,ignore)
     lines[#lines+1]={type=12,leftText="Other",numFulfilled=0,numRequired=99}
     return {lines=lines}
 end}
-assert(loadfile("AutoTrack/PartyProgress.lua"))("AutoTrack",AT)
+assert(loadfile("NQT/PartyProgress.lua"))("NQT",AT)
 local originalFrame=CreateFrame
 local tooltip
 CreateFrame=function(kind,name,parent,template)

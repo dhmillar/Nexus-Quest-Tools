@@ -153,7 +153,7 @@ local function paint(button)
         if not button.CreateTexture or (InCombatLockdown and InCombatLockdown()) then return end
         mark=button:CreateTexture(nil,"OVERLAY",nil,7)
         mark:SetSize(15,15);mark:SetPoint("TOPRIGHT",button,"TOPRIGHT",-1,-1)
-        mark:SetTexture("Interface/AddOns/AutoTrack/LeftoverTrash.tga")
+        mark:SetTexture("Interface/AddOns/NQT/LeftoverTrash.tga")
         painted[button]=mark
     end
     mark:Show()
