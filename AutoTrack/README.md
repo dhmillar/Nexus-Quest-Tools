@@ -1,4 +1,4 @@
-# Auto Track 1.5.34
+# Auto Track 1.5.35
 For World of Warcraft: Forever 1.60.1 (interface 16001). Uses the Blizzard quest tracker and a native character-specific action-bar macro. Optional compatibility with Questie.
 
 ## Install or update
@@ -132,3 +132,10 @@ In Rank Quest, click a ready quest's left tracking circle in Completed to pin it
 - Opening the world map inside an instance opens Dungeon Position first when enabled. World Map switches back for that opening. An already-visible Dungeon Journal map takes precedence; otherwise AutoTrack can render floor textures directly from an installed Journal or use the client’s own matching floor art.
 - No third-party art is bundled. If neither the client nor the installed Journal exposes floor art, the panel explains that there is no map available.
 - Position icons only use the supported C_Map API and a matching native floor. Unavailable, restricted, or wrong-floor coordinates are not shown. Custom Journal artwork has no reliable coordinate alignment; AutoTrack never projects dots onto it from a different map.
+
+### 1.5.34
+- Rank Quest search uses the same font size as its section heading, follows the font-size controls, and has a taller field.
+
+### 1.5.35
+- Rank Quest search starts tucked behind the magnifying glass at the far right. Click it to start typing. Search stays visible while working; click X or delete the query to close it.
+- Dungeon Position can draw on Dungeon Journal's live map view when the selected dungeon and visible floor match verified native tiles. It only shows locations the game makes available; opening the map from Dungeon Position settings reports when live positions are unavailable.

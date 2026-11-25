@@ -2,6 +2,7 @@ local _, AT = ...
 local panel, watcher, watchedMap
 local shownKey, selectedFloor, sourceMode, pages, nativeID, renderedMap
 local elapsed, leaving = 0, false
+local journalDots, journalArmed, journalElapsed = nil, false, 0
 
 local function ordinary(v)
     return not issecretvalue or not issecretvalue(v)
@@ -104,14 +105,15 @@ local function journalMaps(name, id)
         if match then key=match;entry=journal.DUNGEON_MAPS[key] end
     end
     if safe(journal.IsDungeonLocked,key)==true or safe(journal.IsDungeonMapLocked,key)==true then return end
-    if type(entry)=="table" and type(entry.floors)=="table" and #entry.floors>0 then return entry.floors,journal end
+    if type(entry)=="table" and type(entry.floors)=="table" and #entry.floors>0 then return entry.floors,journal,key end
 end
 
-local function nativeArt(map)
+local function nativeArt(map,firstOnly)
     if not mapID(map) or not C_Map then return end
     local layers=safe(C_Map.GetMapArtLayers,map)
     if not usable(layers,"table") then return end
     for i,layer in ipairs(layers) do
+        if firstOnly and i~=1 then return end
         local w,h,tw,th=field(layer,"layerWidth"),field(layer,"layerHeight"),field(layer,"tileWidth"),field(layer,"tileHeight")
         if positive(w) and positive(h) and positive(tw) and positive(th) then
             local count=math.ceil(w/tw)*math.ceil(h/th)
@@ -241,25 +243,114 @@ end
 
 local function journalOwnsWorldMap()
     local journal=_G.ForeverDungeonJournal_NS
-    local journalFrame=_G.ForeverDungeonJournalFrame
-    if type(journal)~="table" or not journalFrame or not journalFrame.dungeonMapPanel then return false end
-    local ui=journalFrame.dungeonMapPanel
+    local frame=_G.ForeverDungeonJournalFrame
+    if type(journal)~="table" or not frame or not frame.dungeonMapPanel then return false end
+    local ui=frame.dungeonMapPanel
     if safe(ui.IsVisible,ui)~=true then return false end
     for _=1,9 do
         ui=safe(ui.GetParent,ui)
         if not ui then return false end
-        if ui==watchedMap then return true end
+        if ui==watchedMap then return true,frame end
     end
     return false
 end
 
-local function showCurrent()
+local function hideJournalDots()
+    if journalDots then
+        journalDots:Hide()
+        for _,dot in ipairs(journalDots.dots) do dot:Hide() end
+    end
+end
+
+local function journalAlignedArt(frame, name, id, kind)
+    local floors,journal,key=journalMaps(name,id)
+    if not floors or safe(journal.GetSelectedDungeon)~=key then return end
+    local index=frame.dungeonMapFloor
+    local floor=mapID(index) and floors[index]
+    local map=field(floor,"uiMapID")
+    local holder,displayed=frame.dungeonMapArtHolder,frame.dungeonMapArtTiles
+    if not holder or safe(holder.IsVisible,holder)~=true or type(displayed)~="table" or
+        not mapID(map) or map~=nativeMap(name,id,kind) or floor.texture or
+        frame.dungeonMapArtMissing or frame.dungeonMapArtCopy then return end
+    -- Journal 2.1.5 renders native art layer 1. Never use a different
+    -- layer, a named legacy tile, replacement parchment, or copied map.
+    local tiles=nativeArt(map,true)
+    if not tiles then return end
+    for i,expected in ipairs(tiles) do
+        local tile=displayed[i]
+        if not mapID(expected) or not tile or safe(tile.IsVisible,tile)~=true or
+            safe(tile.GetParent,tile)~=holder then return end
+        local actual
+        if type(tile.GetTextureFileID)=="function" then actual=safe(tile.GetTextureFileID,tile)
+        else actual=safe(tile.GetTexture,tile) end
+        if not mapID(actual) or actual~=expected then return end
+    end
+    local w,h=safe(holder.GetWidth,holder),safe(holder.GetHeight,holder)
+    if positive(w) and positive(h) then return map,holder,w,h end
+end
+
+local function refreshJournalDots(frame,name,id,kind)
+    local map,holder,w,h=journalAlignedArt(frame,name,id,kind)
+    if not map then hideJournalDots();return "Live positions aren't available for this Dungeon Journal floor." end
+    if not journalDots or journalDots:GetParent()~=holder then
+        hideJournalDots()
+        journalDots=CreateFrame("Frame",nil,holder)
+        journalDots:SetAllPoints(holder)
+        journalDots:EnableMouse(false)
+        journalDots:EnableMouseWheel(false)
+        journalDots.dots={}
+        for i=1,5 do
+            local dot=journalDots:CreateTexture(nil,"OVERLAY")
+            dot:SetTexture("Interface\\Buttons\\WHITE8X8")
+            dot:SetSize(i==1 and 11 or 8,i==1 and 11 or 8)
+            if i==1 then dot:SetVertexColor(.25,1,.53) else dot:SetVertexColor(.28,.67,1) end
+            dot:Hide();journalDots.dots[i]=dot
+        end
+    end
+    local available,total=0,0
+    for i,dot in ipairs(journalDots.dots) do
+        local token=i==1 and "player" or "party"..(i-1)
+        local allowed=(i==1 and AT.db.dungeonPositionShowSelf~=false) or
+            (i>1 and AT.db.dungeonPositionShowParty~=false and safe(UnitExists,token)==true)
+        local x,y
+        if allowed then available=available+1;x,y=clientPoint(map,token) end
+        if x then
+            total=total+1
+            dot:ClearAllPoints()
+            dot:SetPoint("CENTER",holder,"TOPLEFT",x*w,-y*h)
+            dot:Show()
+        else dot:Hide() end
+    end
+    journalDots:SetShown(total>0)
+    if available>0 and total==0 then return "WoW is not exposing live positions on this Dungeon Journal floor." end
+end
+
+local function updateJournalDots()
+    if not (journalArmed and watchedMap and watchedMap:IsShown() and
+        AT.db and AT.db.enabled~=false and AT.db.dungeonPositionEnabled~=false) then
+        hideJournalDots();return
+    end
+    local owns,frame=journalOwnsWorldMap()
+    local name,id,kind=instance()
+    if owns and name then
+        panel:Hide()
+        return refreshJournalDots(frame,name,id,kind)
+    end
+    hideJournalDots()
+end
+
+local function showCurrent(notify)
     if not (AT.db and AT.db.enabled~=false and AT.db.dungeonPositionEnabled~=false) then return false end
     local name,id,kind=instance()
     if not name or not panel or not watchedMap or not watchedMap:IsShown() then return false end
     -- When Dungeon Journal already supplies the map in this very window,
     -- leave its controls and view alone; never create competing overlays.
-    if journalOwnsWorldMap() then panel:Hide();return true end
+    journalArmed=true
+    if journalOwnsWorldMap() then
+        local unavailable=updateJournalDots()
+        if notify and unavailable and AT.Say then AT.Say(unavailable) end
+        return true
+    end
     local key=id or name
     local refreshedPages=journalMaps(name,id)
     local nmap=nativeMap(name,id,kind)
@@ -329,16 +420,18 @@ local function attach()
     map:HookScript("OnShow",function()
         if not leaving and AT.db and AT.db.dungeonPositionAutoOpen~=false then showCurrent() end
     end)
-    map:HookScript("OnHide",function() panel:Hide() end)
+    map:HookScript("OnHide",function()
+        journalArmed=false;hideJournalDots();panel:Hide()
+    end)
 end
 
 function AT.RefreshDungeonPosition()
     attach()
     if not panel then return end
     if not AT.db or AT.db.enabled==false or AT.db.dungeonPositionEnabled==false or not instance() then
-        panel:Hide();return
+        hideJournalDots();panel:Hide();return
     end
-    if panel:IsShown() then showCurrent() end
+    if panel:IsShown() then showCurrent() else updateJournalDots() end
 end
 
 function AT.OpenDungeonPositionMap()
@@ -357,7 +450,7 @@ function AT.OpenDungeonPositionMap()
         leaving=false
         attach()
     end
-    return showCurrent()
+    return showCurrent(true)
 end
 
 function AT.InitDungeonPosition()
@@ -365,6 +458,11 @@ function AT.InitDungeonPosition()
     if watcher then return end
     if watchedMap and watchedMap:IsShown() and AT.db and AT.db.dungeonPositionAutoOpen~=false then showCurrent() end
     watcher=CreateFrame("Frame")
+    watcher:SetScript("OnUpdate",function(_,dt)
+        if not journalArmed or not watchedMap or not watchedMap:IsShown() then return end
+        journalElapsed=journalElapsed+dt
+        if journalElapsed>=.15 then journalElapsed=0;updateJournalDots() end
+    end)
     for _,event in ipairs({"ADDON_LOADED","PLAYER_ENTERING_WORLD","ZONE_CHANGED_NEW_AREA","PLAYER_MAP_CHANGED","GROUP_ROSTER_UPDATE"}) do
         pcall(watcher.RegisterEvent,watcher,event)
     end
@@ -373,7 +471,8 @@ function AT.InitDungeonPosition()
         attach()
         if not panel or not watchedMap:IsShown() then return end
         local name,id=instance()
-        if not name then panel:Hide();shownKey=nil;return end
+        if not name then hideJournalDots();panel:Hide();shownKey=nil;return end
+        updateJournalDots()
         if panel:IsShown() or (event=="PLAYER_ENTERING_WORLD" and (id or name)~=shownKey and
             AT.db and AT.db.dungeonPositionAutoOpen~=false) then showCurrent() end
     end)

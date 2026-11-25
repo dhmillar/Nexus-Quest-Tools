@@ -5,7 +5,7 @@ local ALL_ZONES,ALL_DUNGEONS={},{}
 local popupOpen,completedView=false,false
 local preferredCompleted,resolveStatusOnSelection=false,false
 local selectedDungeon,dungeonOpen
-local searchWords={}
+local searchWords,searchOpen={},false
 local observedObjectives, highlights={},{}
 local partyRetained,partyTurnedIn={},{}
 local removedQuests={}
@@ -1038,7 +1038,6 @@ local function arrangeDungeonMenu(theme,offset)
         local option=hud.dungeonRows[i]
         if not option then
             option=button(hud.dungeonContent,"",0,0,204,23,function(self)
-                if #searchWords>0 then hud.search:SetText("");searchWords={} end
                 selectedDungeon,dungeonOpen=self.dungeonKey,false
                 resolveStatusOnSelection=true
                 hud.scroll:SetVerticalScroll(0)
@@ -1216,7 +1215,16 @@ local function arrange()
     hud.eyebrow:SetWordWrap(false)
     hud.palette.label:SetText(a.name)
     hud.statusFilter.label:SetText(completedView and "Completed" or "In Progress")
-    hud.searchHint:SetShown((hud.search:GetText() or "")=="")
+    local hasText=(hud.search:GetText() or "")~=""
+    hud.search:SetShown(searchOpen)
+    hud.searchToggle:SetShown(not searchOpen)
+    hud.searchToggle:SetHeight(hud.search:GetHeight())
+    hud.searchClear:SetShown(searchOpen and hasText)
+    hud.searchHint:SetShown(not hasText)
+    local r,g,b=unpack(a.ink)
+    hud.searchToggle.icon:SetVertexColor(r,g,b)
+    color(hud.searchToggle.fill,a.map and .22 or .10,a.map and .14 or .15,a.map and .075 or .18,.96)
+    color(hud.searchClear.fill,a.map and .22 or .10,a.map and .14 or .15,a.map and .075 or .18,.96)
     hud.zoneName:SetWidth(math.max(1,hud:GetWidth()-249))
     color(hud.searchBack,a.map and .10 or .045,a.map and .065 or .055,a.map and .035 or .065,.94)
     for _,control in ipairs({hud.palette,hud.statusFilter,hud.collapse,hud.smaller,hud.larger,hud.zoneButton,hud.dungeonButton,hud.tab,hud.drawer}) do
@@ -1466,7 +1474,6 @@ local function arrange()
     if AT.SetRankQuestItemTargets then AT.SetRankQuestItemTargets(hud.rows,hud.scroll,verifiedQuestItem) end
 end
 local function browse(z)
-    if #searchWords>0 then hud.search:SetText("");searchWords={} end
     resolveStatusOnSelection=true
     viewedZone=z
     selectedDungeon,dungeonOpen=nil,false
@@ -1667,15 +1674,46 @@ function AT.InitQuestHUD()
     local search=CreateFrame("EditBox",nil,body)
     search:SetSize(216,28);search:SetPoint("TOPRIGHT",body,"TOPRIGHT",-13,-57)
     search:SetAutoFocus(false);search:SetMaxLetters(128)
-    search:SetFontObject(GameFontNormalLarge);search:SetTextInsets(8,8,0,0)
+    search:SetFontObject(GameFontNormalLarge);search:SetTextInsets(8,37,0,0)
     if search.SetFrameLevel and header.GetFrameLevel then search:SetFrameLevel(header:GetFrameLevel()+2) end
     hud.search=search
     hud.searchBack=box(search,"BACKGROUND");hud.searchBack:SetAllPoints(search)
     hud.searchHint=text(search,"GameFontNormalLarge");hud.searchHint:SetPoint("LEFT",8,0)
     hud.searchHint:SetText("Search all quests")
+    local openSearch=button(body,"",0,0,30,28,function(self)
+        if GameTooltip and GameTooltip.IsOwned and GameTooltip:IsOwned(self) then GameTooltip:Hide() end
+        searchOpen=true
+        arrange()
+        search:SetFocus()
+    end)
+    openSearch:ClearAllPoints();openSearch:SetPoint("TOPRIGHT",body,"TOPRIGHT",-13,-57)
+    local glass=openSearch:CreateTexture(nil,"ARTWORK")
+    glass:SetSize(17,17);glass:SetPoint("CENTER")
+    if not applyAtlas(glass,"common-search-magnifyingglass",false) then
+        glass:SetTexture("Interface\\Common\\UI-Searchbox-Icon")
+    end
+    openSearch.icon=glass
+    openSearch:SetScript("OnEnter",function(self)
+        self.fill:SetAlpha(.72)
+        if GameTooltip then GameTooltip:SetOwner(self,"ANCHOR_BOTTOM");GameTooltip:SetText("Search all quests");GameTooltip:Show() end
+    end)
+    openSearch:SetScript("OnLeave",function(self)
+        self.fill:SetAlpha(1)
+        if GameTooltip and GameTooltip.IsOwned and GameTooltip:IsOwned(self) then GameTooltip:Hide() end
+    end)
+    local clearSearch=button(search,"X",0,0,25,23,function() search:SetText("") end)
+    clearSearch:ClearAllPoints();clearSearch:SetPoint("RIGHT",search,"RIGHT",-3,0)
+    for _,control in ipairs({openSearch,clearSearch}) do
+        control:RegisterForClicks("LeftButtonUp")
+        if control.SetFrameLevel and search.GetFrameLevel then control:SetFrameLevel(search:GetFrameLevel()+1) end
+    end
+    hud.searchToggle,hud.searchClear=openSearch,clearSearch
+    search:Hide();clearSearch:Hide()
     search:SetScript("OnTextChanged",function(self)
         searchWords={}
         local query=self:GetText() or ""
+        searchOpen=query~=""
+        if not searchOpen then self:ClearFocus() end
         for token in lowerSearch(query):gmatch("%S+") do searchWords[#searchWords+1]=token end
         popupOpen,dungeonOpen=false,false
         if hud.scroll then hud.scroll:SetVerticalScroll(0);arrange() end
