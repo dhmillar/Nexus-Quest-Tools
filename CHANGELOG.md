@@ -1,8 +1,8 @@
 # Changelog
 
-Source previews on the main branch are separate from the tagged GitHub releases that WowUp installs.
+WowUp installs the Forever ZIP attached to tagged GitHub releases.
 
-## 1.5.95-preview — 2026-11-25
+## 1.5.95 — 2026-11-25
 
 ### Added
 - **Dungeons** replaces the Dungeon Position tab. With dungeon docking enabled, the normal **M** map shows the live minimap without its menu buttons or zone heading. Supports the stock minimap and SexyMap. Ctrl-left-drag saves a separate dock position.
