@@ -1,4 +1,4 @@
-# Rankor Tools 1.5.36
+# Nexus Quest Tools 1.5.38
 For World of Warcraft: Forever 1.60.1 (interface 16001). Uses the Blizzard quest tracker and a native character-specific action-bar macro. Optional compatibility with Questie.
 
 ## Install or update
@@ -54,7 +54,7 @@ When the optional Polestar 0.4.2.2+ (0.4.x) navigation engine is already loaded 
 
 
 ## Optional Smart Target key
-In WoW Options > Keybindings > Rankor Tools, bind Smart Target (out of combat) to a regular key. No key is changed automatically. A plain press learns a different selected mob; a repeat with the saved mob marked makes a fresh name search using the same key. With markers off, a matching live target is enough to search again. The Smart Target key is a separate optional binding. WoW chooses which match is selected; a failed search can leave you with no target. If the binding isn't listed after /reload, restart WoW.
+In WoW Options > Keybindings > Nexus Quest Tools, bind Smart Target (out of combat) to a regular key. No key is changed automatically. A plain press learns a different selected mob; a repeat with the saved mob marked makes a fresh name search using the same key. With markers off, a matching live target is enough to search again. The Smart Target key is a separate optional binding. WoW chooses which match is selected; a failed search can leave you with no target. If the binding isn't listed after /reload, restart WoW.
 
 
 ### Full map route
@@ -141,4 +141,7 @@ In Rank Quest, click a ready quest's left tracking circle in Completed to pin it
 - Dungeon Position can draw on Dungeon Journal's live map view when the selected dungeon and visible floor match verified native tiles. It only shows locations the game makes available; opening the map from Dungeon Position settings reports when live positions are unavailable.
 
 ### 1.5.36
-- Auto Track is now Rankor Tools. Keep the AutoTrack folder in place so existing settings, slash commands, action-bar macros, and keybinds continue working.
+- Auto Track was renamed to Rankor Tools. Keep the AutoTrack folder in place so existing settings, slash commands, action-bar macros, and keybinds continue working.
+
+### 1.5.38
+- The addon now displays as Nexus Quest Tools. Install folder, saved settings, and keybinds are unchanged.

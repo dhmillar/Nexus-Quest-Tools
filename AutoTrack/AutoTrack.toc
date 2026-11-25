@@ -1,8 +1,8 @@
 ## Interface: 16001
-## Title: Rankor Tools
+## Title: Nexus Quest Tools
 ## Notes: Sticky nearby quest tracking and a reusable named-target macro.
 ## Author: Dennis
-## Version: 1.5.36
+## Version: 1.5.38
 ## SavedVariables: AutoTrackDB
 ## SavedVariablesPerCharacter: AutoTrackCharDB
 ## OptionalDeps: Questie, ShortestPathForever, ForeverDungeonJournal

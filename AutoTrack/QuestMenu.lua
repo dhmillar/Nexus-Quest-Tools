@@ -9,8 +9,8 @@ local function validID(id)
 end
 
 local function textFor(id)
-    if AT.IsQuestExcluded(id) then return "Rankor Tools: Include quest again" end
-    return "Rankor Tools: Exclude this quest"
+    if AT.IsQuestExcluded(id) then return "Nexus Quest Tools: Include quest again" end
+    return "Nexus Quest Tools: Exclude this quest"
 end
 
 local function readFrame(frame, key)

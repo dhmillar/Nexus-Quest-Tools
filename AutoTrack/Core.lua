@@ -27,7 +27,7 @@ local defaults = {
 
 function AT.Say(message)
     if DEFAULT_CHAT_FRAME then
-        DEFAULT_CHAT_FRAME:AddMessage("|cff39dcceRankor Tools:|r " .. tostring(message))
+        DEFAULT_CHAT_FRAME:AddMessage("|cff39dcceNexus Quest Tools:|r " .. tostring(message))
     end
 end
 

@@ -1,7 +1,7 @@
 local _, AT = ...
 local NAME = "AutoTrackSmartTargetButton"
 local BINDING = "CLICK " .. NAME .. ":LeftButton"
-BINDING_HEADER_AUTOTRACK = "Rankor Tools"
+BINDING_HEADER_AUTOTRACK = "Nexus Quest Tools"
 _G["BINDING_NAME_" .. BINDING] = "Smart Target (out of combat)"
 
 local INERT = "/stopmacro"
