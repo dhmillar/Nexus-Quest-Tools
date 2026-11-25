@@ -350,6 +350,10 @@ function AT.InitOptions()
             end
         elseif panel:IsShown() then panel:Hide() else panel:Show() end
     end
+    SLASH_NEXUSQUESTTOOLSETTINGS1 = "/nqt"
+    SlashCmdList.NEXUSQUESTTOOLSETTINGS = function()
+        if not panel:IsShown() then panel:Show() end
+    end
     AT.RefreshOptions = refreshPanel
     C_Timer.NewTicker(1.5, refreshPanel)
 end
