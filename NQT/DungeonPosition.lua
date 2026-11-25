@@ -1012,16 +1012,24 @@ end
 -- parent; use its public anchor API rather than fighting its hooks.
 local updateMinimapLayer
 do
-    local saved,failed
+    local saved,failed,lastDockStatus
     local strata={BACKGROUND=1,LOW=2,MEDIUM=3,HIGH=4,DIALOG=5,FULLSCREEN=6,FULLSCREEN_DIALOG=7,TOOLTIP=8}
-    local function points(m)
+    local function points(m,api)
         local n=safe(m.GetNumPoints,m)
         if not num(n) or n<1 or n>8 then return end
         local result={}
         for i=1,n do
             local ok,a,b,c,x,y=pcall(m.GetPoint,m,i)
-            if not ok or not usable(a,"string") or not ordinary(b) or not usable(c,"string")
-                or not num(x) or not num(y) then return end
+            if not ok or not usable(a,"string") or not ordinary(b) or not ordinary(c)
+                or not ordinary(x) or not ordinary(y) then return end
+            if not api then
+                -- The stock Minimap XML uses a bare CENTER anchor inside
+                -- MinimapContainer. Accept omitted fields, not restricted values.
+                if c==nil then c=a end
+                if x==nil then x=0 end
+                if y==nil then y=0 end
+            end
+            if not usable(c,"string") or not num(x) or not num(y) then return end
             result[i]={a,b,c,x,y}
         end
         return result
@@ -1087,6 +1095,11 @@ do
             "SexyMapPingFrame","AutoTrackMinimapButton",
         }) do mute(_G[name]) end
         local m,c=s.frame,_G.MinimapCluster
+        if not s.api then
+            -- These are controls on the default UI; leave the terrain and
+            -- native player arrow alone, and let Blizzard keep the parent.
+            mute(m.ZoomHitArea)
+        end
         for _,k in ipairs({"ZoomIn","ZoomOut","Tracking","IndicatorFrame","BorderTop","ZoneText","ZoneTextButton"}) do mute(m[k]);if c then mute(c[k]) end end
         if type(m.GetChildren)=="function" then
             local list={pcall(m.GetChildren,m)}
@@ -1177,7 +1190,7 @@ do
         s.holderX,s.holderY,s.holderScale=x,y,scale
         if s.spot~=spot then
             if not anchor(s.frame,s.api,{{"BOTTOMLEFT",spot,"BOTTOMLEFT",0,0}}) then return false end
-            local p=points(s.frame)
+            local p=points(s.frame,s.api)
             if not (p and p[1][2]==spot) then return false end
             s.spot=spot
         end
@@ -1305,6 +1318,7 @@ do
         s.settled=sampleRender()
     end
     AT.CheckDungeonMinimapRender=function()
+        if not saved and lastDockStatus then return lastDockStatus end
         local s=saved or lastRender
         if not s then
             if AT.char and type(AT.char.lastDungeonMinimapRender)=="string" then return AT.char.lastDungeonMinimapRender end
@@ -1321,13 +1335,17 @@ do
         stopDrag(s)
         if safe(s.frame.IsProtected,s.frame)~=false then return false end
         local a=anchor(s.frame,s.api,s.points)
-        local actual=a and points(s.frame)
+        local actual=a and points(s.frame,s.api)
         if actual and #actual==#s.points then
             for i,want in ipairs(s.points) do
                 for k=1,5 do
-                    local got=actual[i][k]
-                    if (type(want[k])=="number" and (not num(got) or math.abs(got-want[k])>.05))
-                        or (type(want[k])~="number" and got~=want[k]) then a=false end
+                    local expected,got=want[k],actual[i][k]
+                    if not s.api and k==2 and (expected==nil or got==nil) then
+                        local parent=safe(s.frame.GetParent,s.frame)
+                        expected,got=expected or parent,got or parent
+                    end
+                    if (type(expected)=="number" and (not num(got) or math.abs(got-expected)>.05))
+                        or (type(expected)~="number" and got~=expected) then a=false end
                 end
             end
         else a=false end
@@ -1378,7 +1396,10 @@ do
         end
         if failed==holder or safe(InCombatLockdown)==true then return end
         local m=_G.Minimap
-        if not m or safe(m.IsVisible,m)~=true or safe(m.IsProtected,m)~=false then return end
+        if not m or safe(m.IsVisible,m)~=true or safe(m.IsProtected,m)~=false then
+            lastDockStatus="The minimap is hidden, unavailable, or protected."
+            return
+        end
         local layer,world,map=safe(m.GetFrameStrata,m),safe(watchedMap.GetFrameStrata,watchedMap),safe(holder.GetFrameStrata,holder)
         if not (usable(layer,"string") and usable(world,"string") and strata[layer] and strata[world]) then return end
         local top=math.max(strata[world],usable(map,"string") and strata[map] or 0)
@@ -1389,8 +1410,11 @@ do
             if safe(C_AddOns and C_AddOns.IsAddOnLoaded or IsAddOnLoaded,"SexyMap")==true then return end
             api=nil
         end
-        local before=points(m)
-        if not before or (api and #before~=1) then return end
+        local before=points(m,api)
+        if not before or (api and #before~=1) then
+            lastDockStatus=(api and "SexyMap" or "Stock minimap")..": could not save the current anchor."
+            return
+        end
         saved={frame=m,api=api,points=before,layer=layer,fixed=safe(m.HasFixedFrameStrata,m),holder=holder,chrome={},hidden={}}
         local _,id=instance()
         saved.instance=id
@@ -1410,13 +1434,14 @@ do
                 applied=place(saved,u or (w>0 and math.max(0,1-16/w) or 0),v or (h>0 and math.min(1,28/h) or 0))
             else
                 applied=anchor(m,api,{{"BOTTOMRIGHT",holder,"BOTTOMRIGHT",-24,36}})
-                local now=applied and points(m)
+                local now=applied and points(m,api)
                 applied=now and #now==1 and now[1][2]==holder
             end
         end
         if not applied then
-            saved.rollback=true;failed=holder;restore()
+            lastDockStatus=(api and "SexyMap" or "Stock minimap")..": could not dock; reverting its layout.";saved.rollback=true;failed=holder;restore()
         else
+            lastDockStatus=nil
             showGrip(saved)
             hideChrome(saved)
             refreshTerrain(m)
@@ -1643,7 +1668,10 @@ function AT.InitDungeonPosition()
             if dungeonView then
                 local own,frame=journalOwnsWorldMap()
                 if own and journalArmed and not preferGame then holder=frame.dungeonMapPanel
-                elseif panel:IsShown() and panel.hasArt then holder=panel end
+                elseif panel:IsVisible() and (panel.hasArt or not _G.SexyMap) then
+                    -- Even a verified dungeon without overview art can show its live stock minimap.
+                    holder=panel
+                end
             end
             updateMinimapLayer(holder)
         end

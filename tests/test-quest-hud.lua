@@ -43,7 +43,7 @@ local function object()
         if self.kind=="EditBox" and self.scripts.OnTextChanged then self.scripts.OnTextChanged(self) end
     end
     function o:GetText() return self.text end
-    function o:SetPoint(...) self.anchor={...} end
+    function o:SetPoint(...) self.anchor={...}; self.points=self.points or {}; self.points[self.anchor[1]]=self.anchor end
     function o:SetTexture(v) self.texture=v end
     function o:SetFrameLevel(v) self.level=v end
     function o:GetFrameLevel() return self.level or 2 end
@@ -77,7 +77,18 @@ UIParent=object()
 function CreateFrame(kind,_,parent,template)
  local o=object(); o.kind=kind;o.parent=parent;o.template=template;objs[#objs+1]=o;return o
 end
+local header
+local function clickHeader()
+    header.scripts.OnMouseDown(header,"LeftButton")
+    header.scripts.OnMouseUp(header,"LeftButton")
+end
+local toolbarLabels={Map=true,Minimal=true,["In Progress"]=true,Completed=true,Dungeons=true,Zones=true,["+"]=true,["-"]=true}
 local function find(value)
+ if header and toolbarLabels[value] then
+    for _,o in ipairs(objs) do
+        if o.parent==header.parent and o.label and o.label.text==value and not o.shown then clickHeader();break end
+    end
+ end
  for _,o in ipairs(objs) do for _,label in ipairs(o.child) do if label.text==value and o.shown then return o end end end
 end
 local queued,selected,excluded,ctrl,opened
@@ -117,6 +128,62 @@ end
 local areaTick
 C_Timer={NewTicker=function(_,fn) areaTick=fn end}
 AT.InitQuestHUD()
+for _,o in ipairs(objs) do if o.scripts.OnDragStart and o.scripts.OnMouseUp then header=o;break end end
+do
+    AT.RefreshQuestHUD()
+    local body=assert(header).parent
+    local panel=body.parent
+    local watcher,search,glass,widgets,party=nil,nil,nil,{},nil
+    for _,o in ipairs(objs) do
+        if o.scripts.OnEvent then watcher=o end
+        if o.parent==body and o.kind=="EditBox" then search=o end
+        if o.parent==body and o.icon and o.icon.texture and o.icon.texture:find("PartyPerson",1,true) then party=o end
+        if o.parent==body and o.icon and o.points and o.points.TOPRIGHT and o.points.TOPRIGHT[5]==-35 then glass=o end
+        if o.parent==body and o.label and (toolbarLabels[o.label.text] or (o.points and o.points.TOPRIGHT and o.points.TOPRIGHT[2]==-10)) then widgets[#widgets+1]=o end
+    end
+    assert(watcher and search and glass and party and #widgets>=6)
+    local oldTheme,oldFont=AT.db.questHUDTheme,AT.db.questHUDFontOffset
+    local title=header.child[1]
+    local function state(open)
+        assert(title:GetText()=="Rank Quest")
+        assert(title.appliedFont[2]==(open and 10 or 18)+AT.db.questHUDFontOffset)
+        for _,o in ipairs(widgets) do assert(o.shown==open) end
+        assert(party.shown==open)
+        assert(search.points.TOPLEFT[5]==(open and -82 or -60))
+    end
+    local function mouse(target)
+        GetMouseFoci=function() return {target} end
+        watcher.scripts.OnEvent(watcher,"GLOBAL_MOUSE_DOWN","LeftButton")
+    end
+    panel.IsMouseOver=function() return false end
+    for _,theme in ipairs({1,2}) do
+        AT.db.questHUDTheme=theme;AT.db.questHUDFontOffset=5;AT.RefreshQuestHUD()
+        state(false)
+        clickHeader(); state(true)
+        mouse(widgets[1]); state(true)
+        mouse(find("Acquired in Stranglethorn"));state(true)
+        glass.scripts.OnClick(glass)
+        search:SetText("dusk")
+        mouse(CreateFrame("Button",nil,UIParent))
+        state(false)
+        assert(search.shown and not search.focused and search:GetText()=="dusk")
+        search.scripts.OnEscapePressed(search)
+        assert(glass.shown and not search.shown)
+        clickHeader(); state(true); mouse(nil); state(false)
+        clickHeader(); state(true); clickHeader(); state(false)
+        AT.db.rankQuestLocked=true
+        header.scripts.OnMouseDown(header,"LeftButton")
+        header.scripts.OnDragStart(header)
+        header.scripts.OnMouseUp(header,"LeftButton")
+        state(false)
+        AT.db.rankQuestLocked=nil
+    end
+    GetMouseFoci=nil
+    panel.IsMouseOver=function() return true end
+    AT.db.questHUDTheme,AT.db.questHUDFontOffset=oldTheme,oldFont
+    AT.RefreshQuestHUD()
+    print("PASS compact title and toolbar in both themes, title click, click inside, outside/world dismissal, drag and search preservation")
+end
 do
     local getObjectives=C_QuestLog.GetQuestObjectives
     local modules={
@@ -423,7 +490,9 @@ print("PASS All Zones sits below Current Zone, shows deduplicated cross-zone and
 do
     local search
     for _,o in ipairs(objs) do if o.kind=="EditBox" then search=o;break end end
-    assert(search and search.anchor[5]==-57 and search.w==216)
+    find("Zones")
+    assert(search and search.points.TOPLEFT[4]==13 and search.points.TOPRIGHT[4]==-13)
+    assert(search.points.TOPLEFT[5]==-82 and search.points.TOPRIGHT[5]==-82)
     local oldTheme,oldFont=AT.db.questHUDTheme,AT.db.questHUDFontOffset
     local wasEnabled=AT.db.questHUDEnabled;AT.db.questHUDEnabled=true
     GameFontNormalLarge={GetFont=function() return "Test Map Font",16,"" end}
@@ -434,7 +503,7 @@ do
             AT.db.questHUDTheme=theme;AT.db.questHUDFontOffset=offset;AT.RefreshQuestHUD()
             local points=(theme==1 and 16 or 12)+offset
             assert(search.appliedFont[2]==points and search.child[1].appliedFont[2]==points,table.concat({theme,offset,points,search.appliedFont[2],search.child[1].appliedFont[2],tostring(AT.db.questHUDCollapsed),AT.db.questHUDTheme,AT.db.questHUDFontOffset,search.autoTrackFontStyle,tostring(AT.db.questHUDEnabled),tostring(AT.db.enabled)},","))
-            assert(search.h>=28 and search.h>=points+12 and 57+search.h<102)
+            assert(search.h>=28 and search.h>=points+12)
         end
     end
     GameFontNormalLarge=nil
@@ -444,12 +513,55 @@ do
     -- while matching multiple keywords across the title and the zone bucket.
     AT.BrowseQuestHUD(nil)
     local nav=C_SuperTrack.GetSuperTrackedQuestID()
+    find("Zones")
     local toggle,clear
     for _,o in ipairs(objs) do
         if o.icon and o.anchor and o.anchor[5]==-57 then toggle=o end
         if o.kind=="Button" and o.parent==search then clear=o end
     end
     assert(toggle and clear and toggle.shown and not search.shown and not clear.shown)
+    local heading=find("Stranglethorn Vale")
+    local title; for _, f in ipairs(assert(heading).child) do if f:GetText()=="Stranglethorn Vale" then title=f end end; assert(title)
+    local body=search.parent
+    local panel=body.parent
+    local count,scroll
+    for _,o in ipairs(objs) do
+        if o.parent==body then
+            for _,f in ipairs(o.child) do
+                if f.points and f.points.TOPLEFT and f.points.TOPLEFT[5]==-82 then count=f end
+            end
+            if o.kind=="ScrollFrame" and o.points and o.points.TOPLEFT and o.points.TOPLEFT[5]==-102 then scroll=o end
+        end
+    end
+    -- The count itself is a font string created on the body.
+    for _,f in ipairs(body.child) do
+        if f.points and f.points.TOPLEFT and f.points.TOPLEFT[5]==-82 then count=f end
+    end
+    assert(count and scroll)
+    local originalEnabled=AT.db.questHUDEnabled; AT.db.questHUDEnabled=true
+    local originalWidth,originalTheme,originalFont=panel:GetWidth(),AT.db.questHUDTheme,AT.db.questHUDFontOffset
+    for _,theme in ipairs({1,2}) do
+        AT.db.questHUDTheme=theme
+        AT.db.questHUDFontOffset=5
+        for _,width in ipairs({358,414,630}) do
+            panel:SetWidth(width); AT.RefreshQuestHUD()
+            assert(title:GetWidth()==width-26-toggle:GetWidth()-6)
+            assert(13+title:GetWidth()+6==width-13-toggle:GetWidth())
+            assert(title:GetUnboundedStringWidth()<=title:GetWidth(),"Stranglethorn Vale must fit at minimum width and largest test font")
+            toggle.scripts.OnClick(toggle)
+            assert(search.shown and search.focused and not toggle.shown and not clear.shown)
+            assert(title:GetText()=="Stranglethorn Vale" and title:GetWidth()==width-26)
+            assert(82+search:GetHeight()+6 == -count.points.TOPLEFT[5])
+            assert(-scroll.points.TOPLEFT[5] == 102+search:GetHeight()+6)
+            search.scripts.OnEscapePressed(search)
+            assert(not search.shown and toggle.shown and count.points.TOPLEFT[5]==-82 and scroll.points.TOPLEFT[5]==-102)
+        end
+    end
+    panel:SetWidth(originalWidth)
+    AT.db.questHUDTheme,AT.db.questHUDFontOffset=originalTheme,originalFont
+    AT.RefreshQuestHUD()
+    AT.db.questHUDEnabled=originalEnabled
+    print("PASS area heading uses available width; search and quest rows never overlap at minimum, default, or maximum HUD width")
     toggle.scripts.OnClick(toggle)
     assert(search.shown and search.focused and not toggle.shown and not clear.shown)
     search:SetText("dusk")
@@ -486,7 +598,35 @@ do
     watch.scripts.OnEvent(watch,"GLOBAL_MOUSE_DOWN","LeftButton")
     assert(not search.focused and not search.shown and toggle.shown,"click-away collapses only empty search")
     GetMouseFoci=nil
-    print("PASS search click-away in game world and list, inside/clear child, refocus, text preservation and no-query collapse")
+    -- Some clicks remove focus before the global mouse event arrives.
+    toggle.scripts.OnClick(toggle)
+    search.focused=false
+    GetMouseFoci=function() return {} end
+    watch.scripts.OnEvent(watch,"GLOBAL_MOUSE_DOWN","LeftButton")
+    assert(not search.shown and toggle.shown,"outside click must close even when focus has already gone")
+    GetMouseFoci=nil
+    toggle.scripts.OnClick(toggle)
+    GetMouseFocus=function() return search end
+    watch.scripts.OnEvent(watch,"GLOBAL_MOUSE_DOWN","LeftButton")
+    assert(search.shown and search.focused,"legacy focus API preserves clicks in the box")
+    GetMouseFocus=function() return toggle end
+    watch.scripts.OnEvent(watch,"GLOBAL_MOUSE_DOWN","LeftButton")
+    assert(not search.shown and toggle.shown,"legacy focus API detects outside clicks")
+    GetMouseFocus=nil
+    toggle.scripts.OnClick(toggle)
+    search.focused=false
+    search.scripts.OnEditFocusLost(search)
+    assert(not search.shown and toggle.shown,"native focus loss must close empty search")
+    toggle.scripts.OnClick(toggle)
+    search:SetText("dusk")
+    search.focused=false
+    search.scripts.OnEditFocusLost(search)
+    assert(search.shown and search:GetText()=="dusk" and find("Search Results"),"native focus loss must preserve the query")
+    clear.scripts.OnClick(clear)
+    toggle.scripts.OnClick(toggle)
+    search.scripts.OnEnterPressed(search)
+    assert(not search.shown and toggle.shown,"Enter on a blank field also closes it")
+    print("PASS search click-away (before/after blur, modern/legacy), native focus loss, text preservation, inside/clear child and refocus")
     toggle.scripts.OnClick(toggle)
     search:SetText("dUsK")
     assert(find("Search Results") and find("Only in Duskwood"))

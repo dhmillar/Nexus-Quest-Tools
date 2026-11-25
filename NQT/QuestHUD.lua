@@ -2,7 +2,7 @@ local _, AT = ...
 local Q,M=C_QuestLog,C_Map
 local hud, refreshPending, currentZone, currentDungeon, viewedZone, model
 local ALL_ZONES,ALL_DUNGEONS={},{}
-local popupOpen,completedView=false,false
+local popupOpen,completedView,toolbarOpen=false,false,false
 local preferredCompleted,resolveStatusOnSelection=false,false
 local selectedDungeon,dungeonOpen
 local searchWords,searchOpen={},false
@@ -863,10 +863,10 @@ local function fontOffset()
     if not is(n,"number") or n~=n then return 0 end
     return math.max(-2,math.min(5,math.floor(n)))
 end
-local function applyTypography(region,theme,size,template)
+local function applyTypography(region,theme,size,template,useRequestedSize)
     if not region or not region.SetFont then return end
     local offset=fontOffset()
-    local style=(theme.questie and "Questie" or template)..":"..size..":"..offset
+    local style=(theme.questie and "Questie" or template)..":"..size..":"..offset..(useRequestedSize and ":fixed" or "")
     if region.autoTrackFontStyle==style then return end
     local file,flags
     local base=_G[template]
@@ -874,7 +874,7 @@ local function applyTypography(region,theme,size,template)
     elseif base and base.GetFont then
         local name,points,outline=base:GetFont()
         file,flags=name,outline
-        if is(points,"number") and points>0 then size=points end
+        if not useRequestedSize and is(points,"number") and points>0 then size=points end
     end
     region:SetFont(file or STANDARD_TEXT_FONT or "Fonts/FRIZQT__.TTF",math.max(8,size+offset),flags or "")
     region.autoTrackFontStyle=style
@@ -1294,7 +1294,21 @@ local function arrange()
     hud.searchToggle.icon:SetVertexColor(r,g,b)
     color(hud.searchToggle.fill,a.map and .22 or .10,a.map and .14 or .15,a.map and .075 or .18,.96)
     color(hud.searchClear.fill,a.map and .22 or .10,a.map and .14 or .15,a.map and .075 or .18,.96)
-    hud.zoneName:SetWidth(math.max(1,hud:GetWidth()-249))
+    -- The label owns the header row. The expanded input gets its own row below.
+    local searchSpace=searchOpen and (hud.search:GetHeight()+6) or 0
+    local headerSpace=toolbarOpen and 0 or 22
+    local contentShift=headerSpace-searchSpace
+    local titleGutter=searchOpen and 0 or hud.searchToggle:GetWidth()+6
+    hud.zoneName:SetWidth(math.max(1,hud:GetWidth()-26-titleGutter))
+    hud.zoneName:ClearAllPoints()
+    hud.zoneName:SetPoint("TOPLEFT",hud.body,"TOPLEFT",13,-58+headerSpace)
+    hud.searchToggle:ClearAllPoints()
+    hud.searchToggle:SetPoint("TOPRIGHT",hud.body,"TOPRIGHT",-13,-57+headerSpace)
+    hud.search:ClearAllPoints()
+    hud.search:SetPoint("TOPLEFT",hud.body,"TOPLEFT",13,-82+headerSpace)
+    hud.search:SetPoint("TOPRIGHT",hud.body,"TOPRIGHT",-13,-82+headerSpace)
+    hud.count:ClearAllPoints()
+    hud.count:SetPoint("TOPLEFT",hud.body,"TOPLEFT",13,-82+contentShift)
     color(hud.searchBack,a.map and .10 or .045,a.map and .065 or .055,a.map and .035 or .065,.94)
     for _,control in ipairs({hud.palette,hud.statusFilter,hud.collapse,hud.smaller,hud.larger,hud.zoneButton,hud.dungeonButton,hud.tab,hud.drawer}) do
         applyTypography(control.label,a,10,"GameFontHighlightSmall")
@@ -1305,18 +1319,21 @@ local function arrange()
     local minimum=82+offset*4
     hud.statusFilter:SetWidth(is(statusWidth,"number") and math.max(minimum,math.ceil(statusWidth+14)) or minimum)
     local partyEnabled=not AT.db or AT.db.questPartyProgress~=false
-    hud.partyToggle:SetShown(partyEnabled)
+    for _,control in ipairs({hud.collapse,hud.palette,hud.statusFilter,hud.smaller,hud.larger,hud.zoneButton,hud.dungeonButton}) do
+        control:SetShown(toolbarOpen)
+    end
+    hud.partyToggle:SetShown(toolbarOpen and partyEnabled)
     local titleWidth=hud:GetWidth()-13-10-24-8-hud.palette:GetWidth()-hud.statusFilter:GetWidth()
         -(partyEnabled and (hud.partyToggle:GetWidth()+4) or 0)-6
-    hud.eyebrow:SetWidth(math.max(1,titleWidth))
+    hud.eyebrow:SetWidth(math.max(1,toolbarOpen and titleWidth or hud:GetWidth()-26))
     color(hud.partyToggle.fill,inlineParty and .095 or .11,inlineParty and .45 or .17,inlineParty and .39 or .21,.96)
     hud.partyToggle.icon:SetAlpha(inlineParty and 1 or .67)
-    applyTypography(hud.eyebrow,a,10,"GameFontHighlightSmall")
+    applyTypography(hud.eyebrow,a,toolbarOpen and 10 or 18,toolbarOpen and "GameFontHighlightSmall" or a.font,not toolbarOpen)
     applyTypography(hud.count,a,10,"GameFontDisableSmall")
     applyTypography(hud.empty,a,10,"GameFontHighlightSmall")
     applyTypography(hud.localTab.label,a,10,"GameFontHighlightSmall")
     applyTypography(hud.allTab.label,a,10,"GameFontHighlightSmall")
-    hud.zoneButton:Show()
+
     hud.dungeonButton.label:SetText("Dungeons")
     color(hud.dungeonButton.fill,selectedDungeon and .19 or .11, selectedDungeon and .28 or .17,.21,.9)
     hud.drawer:SetShown(not a.questie)
@@ -1324,7 +1341,7 @@ local function arrange()
     hud.railFrame:SetShown(expanded or (a.questie and popupOpen))
     hud.drawer.label:SetText(expanded and "<" or ">")
     hud.scroll:ClearAllPoints()
-    hud.scroll:SetPoint("TOPLEFT",hud.body,"TOPLEFT",expanded and 144 or (a.questie and 13 or 31),-102)
+    hud.scroll:SetPoint("TOPLEFT",hud.body,"TOPLEFT",expanded and 144 or (a.questie and 13 or 31),-102+contentShift)
     hud.scroll:SetPoint("BOTTOMRIGHT",hud.body,"BOTTOMRIGHT",-13,15)
     local entries,others={},{}
     if itemSearchQuestID then
@@ -1364,7 +1381,10 @@ local function arrange()
         hud.railFrame:SetHeight(math.min(245,82+#others*railGap))
         color(hud.railBack,.035,.035,.042,.96)
     else
-        hud.railFrame:SetPoint("TOPLEFT",hud.body,"TOPLEFT",20,-94)
+        hud.railFrame:SetPoint("TOPLEFT",hud.body,"TOPLEFT",20,-94+contentShift)
+        hud.drawer:ClearAllPoints()
+        hud.drawer:SetPoint("TOPLEFT",hud.body,"TOPLEFT",0,-94+contentShift)
+        hud.drawer:SetPoint("BOTTOMLEFT",hud.body,"BOTTOMLEFT",0,3)
         hud.railFrame:SetPoint("BOTTOMLEFT",hud.body,"BOTTOMLEFT",20,3)
     end
     hud.railContent:SetWidth(buttonWidth)
@@ -1690,7 +1710,7 @@ function AT.RefreshQuestHUD()
     if not AT.db or not AT.db.enabled or not AT.db.questHUDEnabled then
         if AT.SetRankQuestItemTargets then AT.SetRankQuestItemTargets() end
         hud.search:ClearFocus()
-        popupOpen=false; selectedDungeon,dungeonOpen=nil,false; hud:Hide(); observedObjectives,highlights,partyRetained,partyTurnedIn={},{},{},{}; stopQuestHover(); AT.SyncBlizzardQuestHUD(); return
+        popupOpen,toolbarOpen=false,false; selectedDungeon,dungeonOpen=nil,false; hud:Hide(); observedObjectives,highlights,partyRetained,partyTurnedIn={},{},{},{}; stopQuestHover(); AT.SyncBlizzardQuestHUD(); return
     end
     hud:Show()
     local pos,name=playerZone()
@@ -1714,7 +1734,7 @@ function AT.RefreshQuestHUD()
     end
     if not AT.db.questHUDCollapsed then arrange() else
         if AT.SetRankQuestItemTargets then AT.SetRankQuestItemTargets() end
-        popupOpen,dungeonOpen=false,false;stopQuestHover()
+        popupOpen,dungeonOpen,toolbarOpen=false,false,false;stopQuestHover()
     end
     AT.SyncBlizzardQuestHUD()
 end
@@ -1741,29 +1761,39 @@ function AT.SearchRankQuestItem(qid)
     return true
 end
 
-local function releaseSearchOnOutsideClick()
-    local search=hud and hud.search
-    if not search or call(search.HasFocus,search)~=true then return end
-    -- As in the Forever client menu system, use the top mouse focus rather
-    -- than geometry alone: a different frame may overlap this edit box.
-    local foci=call(GetMouseFoci)
-    if is(foci,"table") then
-        local target=field(foci,1)
-        for _=1,12 do
-            if not target then break end
-            if target==search then return end
-            if not is(target,"table") then break end
-            local parent=call(target.GetParent,target)
-            if not is(parent,"table") or parent==target then break end
-            target=parent
-        end
-    elseif call(search.IsMouseOver,search)==true then
-        return
+local function dismissEmptySearch(search)
+    if not searchOpen or (search:GetText() or "")~="" then return end
+    searchOpen=false
+    arrange()
+end
+
+local function containsMouse(parent,target,known)
+    if not known then return call(parent.IsMouseOver,parent)==true end
+    for _=1,16 do
+        if target==parent then return true end
+        if not is(target,"table") then break end
+        local nextParent=call(target.GetParent,target)
+        if nextParent==target then break end
+        target=nextParent
     end
-    search:ClearFocus()
-    if (search:GetText() or "")=="" then
-        searchOpen=false
+    return false
+end
+
+local function releaseOnOutsideClick()
+    if not hud or not (toolbarOpen or searchOpen) then return end
+    -- Use the top mouse focus so controls covering the HUD still count as outside.
+    local foci=call(GetMouseFoci)
+    local target,known
+    if is(foci,"table") then target,known=field(foci,1),true
+    elseif type(GetMouseFocus)=="function" then target,known=call(GetMouseFocus),true end
+    if toolbarOpen and not containsMouse(hud,target,known and target~=nil) then
+        toolbarOpen,popupOpen,dungeonOpen=false,false,false
         arrange()
+    end
+    local search=hud.search
+    if searchOpen and not containsMouse(search,target,known) then
+        if call(search.HasFocus,search)==true then search:ClearFocus() end
+        dismissEmptySearch(search)
     end
 end
 
@@ -1784,14 +1814,26 @@ function AT.InitQuestHUD()
     hud.mapTrim=box(body,"ARTWORK");hud.mapTrim:SetPoint("TOP",body,"TOP",0,3)
     hud.rule=box(body,"ARTWORK");hud.rule:SetPoint("TOPLEFT");hud.rule:SetPoint("TOPRIGHT");hud.rule:SetHeight(2)
     local header=CreateFrame("Frame",nil,body)
-    header:SetPoint("TOPLEFT",body,"TOPLEFT",0,0);header:SetPoint("TOPRIGHT",body,"TOPRIGHT",-157,0)
-    header:SetHeight(97);header:EnableMouse(true);header:RegisterForDrag("LeftButton")
+    header:SetPoint("TOPLEFT",body,"TOPLEFT",0,0);header:SetPoint("TOPRIGHT",body,"TOPRIGHT",0,0)
+    header:SetHeight(34);header:EnableMouse(true);header:RegisterForDrag("LeftButton")
+    local dragged,moving
+    header:SetScript("OnMouseDown",function() dragged=false end)
+    header:SetScript("OnMouseUp",function(_,mouseButton)
+        if mouseButton~="LeftButton" or dragged or call(header.IsMouseOver,header)~=true then return end
+        toolbarOpen=not toolbarOpen
+        if not toolbarOpen then popupOpen,dungeonOpen=false,false end
+        arrange()
+    end)
     header:SetScript("OnDragStart",function()
+        dragged=true
         if AT.db.rankQuestLocked then return end
         if AT.SuspendRankQuestItems then AT.SuspendRankQuestItems(true) end
+        moving=true
         hud:StartMoving()
     end)
     header:SetScript("OnDragStop",function()
+        if not moving then return end
+        moving=false
         hud:StopMovingOrSizing()
         if AT.SuspendRankQuestItems then AT.SuspendRankQuestItems(false) end
         local left,top=hud:GetRight(),hud:GetTop()
@@ -1801,7 +1843,9 @@ function AT.InitQuestHUD()
     end)
     hud.eyebrow=text(header,"GameFontHighlightSmall");hud.eyebrow:SetPoint("TOPLEFT",13,-10);hud.eyebrow:SetText("Rank Quest")
     local search=CreateFrame("EditBox",nil,body)
-    search:SetSize(216,28);search:SetPoint("TOPRIGHT",body,"TOPRIGHT",-13,-57)
+    search:SetHeight(28)
+    search:SetPoint("TOPLEFT",body,"TOPLEFT",13,-82)
+    search:SetPoint("TOPRIGHT",body,"TOPRIGHT",-13,-82)
     search:SetAutoFocus(false);search:SetMaxLetters(128)
     search:SetFontObject(GameFontNormalLarge);search:SetTextInsets(8,37,0,0)
     if search.SetFrameLevel and header.GetFrameLevel then search:SetFrameLevel(header:GetFrameLevel()+2) end
@@ -1812,6 +1856,7 @@ function AT.InitQuestHUD()
     local openSearch=button(body,"",0,0,30,28,function(self)
         if GameTooltip and GameTooltip.IsOwned and GameTooltip:IsOwned(self) then GameTooltip:Hide() end
         searchOpen=true
+        popupOpen,dungeonOpen=false,false
         arrange()
         search:SetFocus()
     end)
@@ -1848,8 +1893,11 @@ function AT.InitQuestHUD()
         popupOpen,dungeonOpen=false,false
         if hud.scroll then hud.scroll:SetVerticalScroll(0);arrange() end
     end)
-    search:SetScript("OnEscapePressed",function(self) self:SetText("");self:ClearFocus() end)
-    search:SetScript("OnEnterPressed",function(self) self:ClearFocus() end)
+    search:SetScript("OnEditFocusLost",dismissEmptySearch)
+    search:SetScript("OnEscapePressed",function(self)
+        self:SetText("");self:ClearFocus();dismissEmptySearch(self)
+    end)
+    search:SetScript("OnEnterPressed",function(self) self:ClearFocus();dismissEmptySearch(self) end)
     hud.zoneName=text(header,"GameFontNormalLarge");hud.zoneName:SetPoint("TOPLEFT",13,-58)
     hud.zoneName:SetWordWrap(false)
     hud.count=text(body,"GameFontDisableSmall");hud.count:SetPoint("TOPLEFT",13,-82)
@@ -2003,7 +2051,7 @@ function AT.InitQuestHUD()
         pcall(watcher.RegisterEvent,watcher,event)
     end
     watcher:SetScript("OnEvent",function(_,event,first,second)
-        if event=="GLOBAL_MOUSE_DOWN" then releaseSearchOnOutsideClick();return end
+        if event=="GLOBAL_MOUSE_DOWN" then releaseOnOutsideClick();return end
         if not AT.char then return end
         if event=="QUEST_ACCEPTED" or event=="QUEST_REMOVED" or event=="QUEST_TURNED_IN" then logDirty=true end
         if (event=="QUEST_REMOVED" or event=="QUEST_TURNED_IN") and id(first) then

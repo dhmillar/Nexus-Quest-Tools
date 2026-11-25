@@ -2,6 +2,18 @@
 
 WowUp installs the Forever ZIP attached to tagged GitHub releases.
 
+## 1.5.99 — 2026-11-25
+
+### Changes
+- Rank Quest starts with a larger title and hidden toolbar. Click the title bar to show the controls; click outside the log to tuck them away.
+- Longer area names use the width up to the search icon. Opening search puts the input on its own row.
+
+### Hotfixes
+- Clicking away from an empty search restores the magnifying glass. Typed queries and results stay in place.
+- Dungeon minimap docking accepts the default Blizzard minimap anchor without SexyMap and restores its normal position and controls on close. The stock minimap can also dock on the dungeon panel when overview artwork is unavailable.
+
+Both UI regression suites passed. The stock minimap change still needs confirmation in the game client.
+
 ## 1.5.95 — 2026-11-25
 
 ### Added

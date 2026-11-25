@@ -739,6 +739,41 @@ assert(not animated.shown and not alreadyHidden.shown,"no flash between ticks wh
 assert(zoom==2 and #zseq==2 and zseq[1]==1 and zseq[2]==2 and blips==1,"redraw without changing zoom")
 WorldMapFrame:Hide();restored()
 assert(button.alpha==.85 and MinimapZoneText.alpha==.7 and zoom==2 and animated.shown and not alreadyHidden.shown)
+-- Reproduce the stock XML's bare CENTER anchor (no SexyMap, parent is the
+-- native container). This is different from the fully expanded addon anchor.
+local stockContainer=object()
+local nativeSetPoint=Minimap.SetPoint
+Minimap.GetParent=function() return stockContainer end
+Minimap.SetPoint=function(self,a,b,c,x,y)
+    -- Native bindings may return the actual parent after SetPoint used nil.
+    return nativeSetPoint(self,a,b or stockContainer,c,x,y)
+end
+Minimap.ZoomHitArea=frameChrome(true)
+Minimap.fixed=true
+local function nativeAnchor() Minimap.points={{"CENTER"}} end
+local function nativeRestored()
+    local a,b,c,x,y=Minimap:GetPoint(1)
+    assert(a=="CENTER" and b==stockContainer and c=="CENTER" and x==0 and y==0)
+    assert(Minimap:GetParent()==stockContainer and Minimap.strata=="LOW" and Minimap.fixed)
+    assert(Minimap.ZoomHitArea.shown and zoom==2,"restore stock mouse controls and zoom")
+end
+nativeAnchor()
+WorldMapFrame:Show()
+panel.hasArt=false
+tick()
+assert(Minimap.points[1][2]==panel and not Minimap.ZoomHitArea.shown and nativeArrow.alpha==1,
+    "standalone live stock minimap still works if there is no overview art")
+WorldMapFrame:Hide();nativeRestored()
+nativeAnchor()
+ForeverDungeonJournalFrame=jf
+journal:Show()
+WorldMapFrame:Show();tick()
+assert(Minimap.points[1][2]==journal and Minimap:GetParent()==stockContainer and not Minimap.ZoomHitArea.shown,
+    "stock default CENTER anchors also dock on the Journal map")
+WorldMapFrame:Hide();nativeRestored()
+Minimap.ZoomHitArea=nil; Minimap.GetParent=nil; Minimap.SetPoint=nativeSetPoint
+Minimap.points={{"BOTTOM",baseAnchor,"BOTTOM",-230.729,22.586}}
+print("PASS real stock XML anchor, parent verification, stock zoom hit area, dock without overview art and on Journal")
 Minimap.fixed=true
 Minimap.SetPoint=function() error("SexyMap would override native SetPoint") end
 SexyMap={SetPoint=function(_,...) calls=calls+1;Minimap.points={{...}} end}
