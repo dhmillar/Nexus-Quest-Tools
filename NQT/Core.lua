@@ -13,9 +13,13 @@ local defaults = {
     questHUDEnabled = false,
     dungeonPositionEnabled = true,
     dungeonPositionAutoOpen = true,
+    dungeonMapMinimap = true,
     dungeonPositionShowSelf = true,
     dungeonPositionShowParty = true,
+    bossAutoMark = false,
+    bossMarkPing = false,
     questPartyProgress = true,
+    rankQuestDropRates = true,
     questLeftoverMarks = false,
     questHUDCollapsed = false,
     questHUDRailOpen = false,
@@ -60,7 +64,9 @@ loader:SetScript("OnEvent", function(self, event, arg)
         safeInit("Minimap guidance", AT.InitQuestRoute)
         safeInit("Rank Quest", AT.InitQuestHUD)
         safeInit("Quest leftover bag marks", AT.InitQuestLeftovers)
-        safeInit("Dungeon Position", AT.InitDungeonPosition)
+        safeInit("Bag quest links", AT.InitBagQuestLink)
+        safeInit("Dungeons", AT.InitDungeonPosition)
+        safeInit("Boss Target Marking", AT.InitBossTargetMarking)
         safeInit("Settings", AT.InitOptions)
     end
 end)

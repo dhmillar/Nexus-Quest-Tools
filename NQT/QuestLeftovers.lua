@@ -23,12 +23,41 @@ local function questieDB()
     end
 end
 local function add(set,v) if id(v) then set[v]=true end end
+local function nativeObjectiveIDs(qid,set)
+    local objectives=call(C_QuestLog and C_QuestLog.GetQuestObjectives,qid)
+    if not isa(objectives,"table") then return false end
+    for _,o in pairs(objectives) do
+        if isa(o,"table") and field(o,"type")=="item" then
+            add(set,field(o,"itemID"))
+            local label=field(o,"text")
+            if isa(label,"string") then
+                for linked in label:gmatch("|Hitem:(%d+)") do add(set,tonumber(linked)) end
+            end
+        end
+    end
+end
+local function eachCustomBagButton(fn)
+    local q=_G.EnhanceQoL
+    local bags=q and q.Bags
+    local states=bags and bags.variables and bags.variables.state
+    local grid=states and states.itemButtonsByBag
+    if type(grid)~="table" then return end
+    for bag=0,(NUM_BAG_SLOTS or 4) do
+        if type(grid[bag])=="table" then
+            for slot,button in pairs(grid[bag]) do
+                -- Match EnhanceQoL's owned button to its real carried bag.
+                if id(slot) and button and call(button.GetBagID,button)==bag and call(button.GetID,button)==slot then fn(button) end
+            end
+        end
+    end
+end
 local function objectiveIDs(qid,index,db)
     local set={}
     if id(index) then
         local special=call(GetQuestLogSpecialItemInfo,index)
         if isa(special,"string") then add(set,tonumber(special:match("|Hitem:(%d+)"))) end
     end
+    if index~=nil then nativeObjectiveIDs(qid,set) end
     local q=db and call(db.GetQuest,qid)
     local objectives=field(q,"ObjectiveData")
     if not isa(objectives,"table") then return set,false end
@@ -54,17 +83,38 @@ local function scan()
     local shown,total=call(C_QuestLog.GetNumQuestLogEntries)
     if not isa(shown,"number") or shown<0 or shown>1000 or not isa(total,"number") or total<0 or total>1000 then return end
     local count,covered,db=0,true,questieDB()
+    local seen={}
     local observed={}
     for i=1,shown do
         local row=call(C_QuestLog.GetInfo,i)
         if not isa(row,"table") then covered=false end
         local qid=field(row,"questID")
         if id(qid) and field(row,"isHeader")==false then
-            count=count+1
+            count=count+1;seen[qid]=true
             local items,known=objectiveIDs(qid,i,db)
             observed[qid]=items
             if not known then covered=false end
             for item in pairs(items) do active[item]=true end
+        end
+    end
+    -- Use only loaded, client-confirmed accepted quests to fill collapsed
+    -- headers without changing anyone's quest-log expansion.
+    if count<total and db and QuestieLoader then
+        local aq=call(QuestieLoader.ImportModule,QuestieLoader,"ActiveQuests")
+        local all=aq and call(aq.GetAll)
+        if isa(all,"table") then
+            for qid in pairs(all) do
+                local on=call(C_QuestLog.IsOnQuest,qid)
+                if id(qid) and not seen[qid] and clean(on) and on==true then
+                    count=count+1;seen[qid]=true
+                    local index=call(C_QuestLog.GetLogIndexForQuestID,qid)
+                    if not id(index) or field(call(C_QuestLog.GetInfo,index),"questID")~=qid then index=false end
+                    local items,known=objectiveIDs(qid,index,db)
+                    observed[qid]=items
+                    if not known then covered=false end
+                    for item in pairs(items) do active[item]=true end
+                end
+            end
         end
     end
     -- Count mismatch includes collapsed/hidden quests. Never expand, guess,
@@ -102,7 +152,7 @@ function AT.GetLeftoverQuestBagHint(bag,slot)
     local info=call(C_Container.GetContainerItemQuestInfo,bag,slot)
     if not isa(info,"table") then return end
     local starter=info.questID
-    if not clean(starter) or starter~=nil or field(info,"isActive")~=false then return end
+    if not clean(starter) or (starter~=nil and starter~=0) or field(info,"isActive")~=false then return end
     local ledger=AT.char.leftoverQuestTurnins
     local quest=isa(ledger,"table") and ledger[item]
     local db=questieDB()
@@ -138,11 +188,51 @@ function AT.GetLeftoverQuestBagHint(bag,slot)
     if not clean(class) or class~=questClass then return end
     return quest,item
 end
+-- Verified item relationship only. Do not feed this into the trash classifier:
+-- a provided quest item is not evidence that every later use is known.
+local verifiedQuestRefs={
+    [5505]={[1023]="Raene's Cleansing"},
+}
+local bagQuestLinks
 local function hint(tip,bag,slot)
+    if not tip or not tip.AddLine or not AT.db or AT.db.enabled==false or not C_Container
+        or not isa(bag,"number") or bag<0 or bag>(NUM_BAG_SLOTS or 4) or bag%1~=0 or not id(slot) then return end
     local quest=AT.GetLeftoverQuestBagHint(bag,slot)
-    if not quest or not tip or not tip.AddLine then return end
-    tip:AddLine("Rank Quest: leftover quest item",1,.74,.32)
-    tip:AddLine("Its recorded quest was turned in; no current quest in the checked log uses it. A future quest may still need it.",.9,.89,.86,true)
+    if quest then
+        tip:AddLine("Rank Quest: leftover quest item",1,.74,.32)
+        tip:AddLine("Its recorded quest was turned in; no current quest in the checked log uses it. A future quest may still need it.",.9,.89,.86,true)
+    end
+    if bagQuestLinks then
+        local selected,refs,item=bagQuestLinks(bag,slot)
+        if refs and next(refs) then
+            tip:AddLine("Nexus Quest Tools: quest links",.40,.91,.83)
+            local order={}
+            for qid in pairs(refs) do order[#order+1]=qid end
+            table.sort(order)
+            for _,qid in ipairs(order) do
+                local on=call(C_QuestLog.IsOnQuest,qid)
+                local done=call(C_QuestLog.IsQuestFlaggedCompleted,qid)
+                local status
+                if not clean(on) then status="Status not available"
+                elseif on==true then status="In your quest log"
+                elseif on~=false or not clean(done) then status="Status not available"
+                elseif done==true then status="Turned in"
+                elseif done==false then status="Not in your quest log"
+                else status="Status not available" end
+                local title=call(C_QuestLog.GetTitleForQuestID,qid)
+                if not isa(title,"string") or title=="" then
+                    title=verifiedQuestRefs[item] and verifiedQuestRefs[item][qid] or ("Quest #"..qid)
+                end
+                tip:AddLine(title.." (#"..qid.."): "..status,.88,.92,.93,true)
+            end
+            if selected and AT.SearchRankQuestItem then tip:AddLine("Ctrl-click to find this quest in Rank Quest.",.67,.85,.83,true) end
+        elseif item then
+            local info=call(C_Container.GetContainerItemQuestInfo,bag,slot)
+            if field(info,"isQuestItem")==true then
+                tip:AddLine("Nexus Quest Tools: quest link not verified",.68,.76,.78,true)
+            end
+        end
+    end
 end
 local function paint(button)
     if not button then return end
@@ -172,6 +262,7 @@ local function refreshButtons()
             if item then paint(item) end
         end end
     end
+    eachCustomBagButton(paint)
     each(_G.ContainerFrameCombinedBags)
     for i=1,(NUM_CONTAINER_FRAMES or 13) do each(_G["ContainerFrame"..i]) end
 end
@@ -208,7 +299,22 @@ end
 function AT.RefreshQuestLeftovers()
     scan();installHooks();refreshButtons()
 end
+function AT.GetQuestBagMarkStatus()
+    local shown=0
+    for button,mark in pairs(painted) do
+        if call(button.IsVisible,button)==true and call(mark.IsShown,mark)==true then shown=shown+1 end
+    end
+    local covered=completeLog and "quest-log coverage verified" or "quest-log coverage not verified"
+    return "Bag marks: "..(enabled() and "enabled" or "disabled").."; "..covered.."; "..shown.." visible badges."
+end
 function AT.InitQuestLeftovers()
+    if type(SlashCmdList)=="table" then
+        SLASH_NEXUSQUESTBAGDIAGNOSTICS1="/nqtbag"
+        SlashCmdList.NEXUSQUESTBAGDIAGNOSTICS=function()
+            AT.RefreshQuestLeftovers()
+            if AT.Say then AT.Say(AT.GetQuestBagMarkStatus()) end
+        end
+    end
     local frame=CreateFrame("Frame")
     for _,event in ipairs({"QUEST_LOG_UPDATE","QUEST_ACCEPTED","QUEST_REMOVED","QUEST_TURNED_IN","BAG_UPDATE_DELAYED",
         "BAG_OPEN","PLAYER_REGEN_ENABLED","PLAYER_ENTERING_WORLD","ADDON_LOADED"}) do pcall(frame.RegisterEvent,frame,event) end
@@ -224,4 +330,152 @@ function AT.InitQuestLeftovers()
         if C_Timer and C_Timer.After then C_Timer.After(0,refresh) else refresh() end
     end)
     AT.RefreshQuestLeftovers()
+end
+
+-- Ctrl-click quest links for stock bags.
+do
+local _,AT=...
+local function clean(v) return not issecretvalue or not issecretvalue(v) end
+local function kind(v,t) return clean(v) and type(v)==t end
+local function id(v) return kind(v,"number") and v>0 and v%1==0 end
+local function field(t,k)
+    if not kind(t,"table") then return end
+    local v=t[k]
+    if clean(v) then return v end
+end
+local function call(fn,...)
+    if type(fn)~="function" then return end
+    local ok,a,b=pcall(fn,...)
+    if ok and clean(a) then return a,clean(b) and b or nil end
+end
+local function questieDB()
+    if Questie and Questie.IsForever and Questie.API and Questie.API.isReady and QuestieLoader then
+        return call(QuestieLoader.ImportModule,QuestieLoader,"QuestieDB")
+    end
+end
+local function matchQuestie(q,item)
+    if field(q,"sourceItemId")==item then return true end
+    local required=field(q,"requiredSourceItems")
+    if kind(required,"table") then
+        for _,v in pairs(required) do if clean(v) and v==item then return true end end
+    end
+    local list=field(q,"ObjectiveData")
+    if kind(list,"table") then
+        for _,obj in pairs(list) do
+            if field(obj,"Type")=="item" and field(obj,"Id")==item then return true end
+        end
+    end
+end
+
+local function associatedQuest(bag,slot)
+    if not C_Container or not C_QuestLog or not kind(bag,"number") or bag%1~=0 or bag<0
+        or bag>(NUM_BAG_SLOTS or 4) or not id(slot) then return end
+    local item=call(C_Container.GetContainerItemID,bag,slot)
+    if not id(item) then return end
+    local db=questieDB()
+    local matched,ambiguous,seen=nil,false,{}
+    local refs={}
+    local function register(qid)
+        refs[qid]=true
+        if matched and matched~=qid then ambiguous=true end
+        matched=qid
+    end
+    local function inspect(qid,index)
+        if not id(qid) or seen[qid] or call(C_QuestLog.IsOnQuest,qid)~=true then return end
+        seen[qid]=true
+        if not id(index) then index=call(C_QuestLog.GetLogIndexForQuestID,qid) end
+        if id(index) and field(call(C_QuestLog.GetInfo,index),"questID")==qid then
+            local link=call(GetQuestLogSpecialItemInfo,index)
+            if kind(link,"string") and tonumber(link:match("|Hitem:(%d+)"))==item then register(qid) end
+        end
+        local native={}
+        nativeObjectiveIDs(qid,native)
+        if native[item] then register(qid) end
+        if db and matchQuestie(call(db.GetQuest,qid),item) then register(qid) end
+    end
+    local shown=call(C_QuestLog.GetNumQuestLogEntries)
+    if not kind(shown,"number") or shown<0 or shown>1000 then shown=0 end
+    for i=1,shown do
+        local row=call(C_QuestLog.GetInfo,i)
+        if field(row,"isHeader")==false and field(row,"isHidden")~=true then inspect(field(row,"questID"),i) end
+    end
+    if db and QuestieLoader then
+        local aq=call(QuestieLoader.ImportModule,QuestieLoader,"ActiveQuests")
+        local loaded=aq and call(aq.GetAll)
+        if kind(loaded,"table") then for qid in pairs(loaded) do inspect(qid) end end
+    end
+    -- Exact backlinks also let us inspect held quests beneath collapsed headings.
+    -- A backlink alone (especially a starter/reward) never authorizes opening.
+    local related=field(db and call(db.GetItem,db,item),"relatedQuests")
+    if kind(related,"table") then
+        for _,qid in pairs(related) do
+            if id(qid) and db and matchQuestie(call(db.GetQuest,qid),item) then refs[qid]=true end
+            inspect(qid)
+        end
+    end
+    for qid in pairs(verifiedQuestRefs[item] or {}) do
+        refs[qid]=true
+        if call(C_QuestLog.IsOnQuest,qid)==true then register(qid) end
+    end
+    if ambiguous then return nil,refs,item end
+    return matched,refs,item
+end
+
+bagQuestLinks=associatedQuest
+local hookedButtons=setmetatable({},{__mode="k"})
+local hookedFrames=setmetatable({},{__mode="k"})
+local function onClick(button,mouse,down)
+    if mouse~="LeftButton" or down==true or not AT.db or AT.db.enabled==false
+        or call(IsControlKeyDown)~=true or call(IsShiftKeyDown)==true or call(IsAltKeyDown)==true
+        or call(IsModifiedClick)~=true or call(InCombatLockdown)==true
+        or call(CursorHasItem)==true or call(SpellIsTargeting)==true then return end
+    local bag,slot=call(button.GetBagID,button),call(button.GetID,button)
+    local quest=associatedQuest(bag,slot)
+    if quest and AT.SearchRankQuestItem then AT.SearchRankQuestItem(quest) end
+end
+local function installButton(button)
+    if not button or hookedButtons[button] or type(button.HookScript)~="function"
+        or type(button.GetBagID)~="function" or type(button.GetID)~="function" then return end
+    if pcall(button.HookScript,button,"OnClick",onClick) then hookedButtons[button]=true end
+end
+local function refreshFrame(frame)
+    if not frame or call(InCombatLockdown)==true then return end
+    if type(frame.EnumerateValidItems)=="function" then
+        for _,button in frame:EnumerateValidItems() do installButton(button) end
+    end
+    local name=call(frame.GetName,frame)
+    if kind(name,"string") then
+        for i=1,160 do
+            local button=_G[name.."Item"..i]
+            if button then installButton(button) end
+        end
+    end
+end
+local function installFrame(frame)
+    if not frame then return end
+    if not hookedFrames[frame] then
+        local hook=function() refreshFrame(frame) end
+        local post=type(frame.HookScript)=="function" and pcall(frame.HookScript,frame,"OnShow",hook)
+        if hooksecurefunc and type(frame.UpdateItems)=="function" then
+            post=pcall(hooksecurefunc,frame,"UpdateItems",hook) or post
+        end
+        if post then hookedFrames[frame]=true end
+    end
+    refreshFrame(frame)
+end
+local function refresh()
+    if call(InCombatLockdown)==true then return end
+    eachCustomBagButton(installButton)
+    installFrame(_G.ContainerFrameCombinedBags)
+    for i=1,(NUM_CONTAINER_FRAMES or 13) do installFrame(_G["ContainerFrame"..i]) end
+end
+function AT.InitBagQuestLink()
+    local frame=CreateFrame("Frame")
+    for _,event in ipairs({"ADDON_LOADED","BAG_OPEN","BAG_UPDATE_DELAYED","PLAYER_REGEN_ENABLED","PLAYER_ENTERING_WORLD"}) do
+        pcall(frame.RegisterEvent,frame,event)
+    end
+    frame:SetScript("OnEvent",refresh)
+    refresh()
+end
+
 end

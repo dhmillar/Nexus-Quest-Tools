@@ -1,4 +1,4 @@
-# Nexus Quest Tools 1.5.38
+# Nexus Quest Tools 1.5.39-preview
 For World of Warcraft: Forever 1.60.1 (interface 16001). Uses the Blizzard quest tracker and a native character-specific action-bar macro. Optional compatibility with Questie.
 
 ## Install or update
@@ -143,5 +143,75 @@ In Rank Quest, click a ready quest's left tracking circle in Completed to pin it
 ### 1.5.36
 - Auto Track was renamed to Rankor Tools. Keep the AutoTrack folder in place so existing settings, slash commands, action-bar macros, and keybinds continue working.
 
-### 1.5.38
+### 1.5.37-preview
+- Local only. Tries native WoW pins on matching verified art where permitted; the Open Dungeon Map button can report a game-provided area label when the coordinates are unavailable.
+
+### 1.5.39-preview
 - The addon now displays as Nexus Quest Tools. Install folder, saved settings, and keybinds are unchanged.
+
+### 1.5.48-preview
+- Ctrl-left-click a recognized quest item in the default bags to open its quest details without changing tracked quests. Items with more than one matching active quest are left alone.
+- Dungeon Position can show an approximate room on verified native artwork for the Mast Room and Ironclad Cove in Deadmines. This is not a step-by-step location. If Dungeon Journal has another floor open, choose the corresponding Journal floor or use Game floor map.
+- Selected room geometry and native tile IDs adapted from [Forever Dungeon Routes](https://github.com/Checkov23/ForeverDungeonRoutes), copyright (c) 2026 Checkov23, [MIT license](https://github.com/Checkov23/ForeverDungeonRoutes/blob/main/LICENSE). Dungeon map art is read from the client, not included.
+
+### 1.5.49-preview
+- Dungeon Position now also recognizes Dungeon Journal's standalone window. It still requires matching artwork and either an exact client position or a verified room anchor, and does not show a marker over unrelated dungeon art.
+- /nqtdungeon reports which map window is open and the public area labels, so an unavailable position can be distinguished from a missing calibration.
+- Ctrl-left-click now opens the native quest details without opening the map. Exact item associations and leftover badges work with stock bags and EnhanceQoL Bags. /nqtbag reports whether the badge setting is enabled, active-quest coverage is verified, and how many badges are visible.
+
+### 1.5.50-preview
+- Dungeon Position > Boss Target Marking lets the existing Smart Target key use Skull, then X, on living detected bosses in dungeons or raids where you have marking permission. It uses exact distance if the client reports it for all candidates, then available range checks, then a stable detected unit; it cannot scan undisclosed bosses. Enemy nameplates expand the visible candidates; target and mouseover also work.
+- The optional Attack ping uses the same press. The stored mob and the standard character macro are unchanged. Boss marking is opt-in, only on genuine out-of-combat Smart Target presses, and is never attempted automatically or by reading game memory.
+
+### 1.5.51-preview
+- Boss Target Marking uses the original Auto Track action-bar macro as well as the Smart Target key. It now selects the boss by exact name before applying the marker and optional ping. The Stockade boss creature IDs are built in so they work even without Journal. Enemy nameplates or a manually selected boss are still required when the game does not expose a boss unit.
+
+### 1.5.52-preview
+- Recognizes visible dungeon bosses by verified NPC ID or exact known name even when a nameplate's identity is partly restricted. Stockade can also search known boss names on the existing press, starting with Targorr the Dread and Hamhock, then advancing after a miss. The default macro remains unchanged outside supported instances.
+- An unreadable mark state no longer prevents target selection. The macro will skip changing raid icons when it cannot verify which icons are free.
+
+### 1.5.53-preview
+- Ctrl-left-click a bag item tied to one verified active quest to search for that exact quest in the Rank Quest floating log. A collapsed panel opens without capturing the keyboard, opening the stock quest window, or changing quest tracking.
+- Boss marking reserves existing Skull/X assignments even when the first boss moves off-screen, and uses the selected boss explicitly for Attack pings. Built-in roster: 292 boss records across 35 dungeon/wing lists, checked against DungeonJournal 2.1.5, plus client boss units and the installed Journal's additional data when available.
+- Nexus shows its own verified quest link and character status in the bag tooltip. Teronis' Journal (item 5505) links to Raene's Cleansing (quest 1023). This is not a deletion recommendation.
+
+### 1.5.54-preview
+- Boss Target Marking now uses all eight raid icons: Skull, X, Square, Moon, Triangle, Diamond, Circle, Star. It skips occupied icons, stops assigning icons when all eight are in use, and can free an icon when its boss is confirmed dead.
+
+### 1.5.55-preview
+- Boss icon priority: Skull, X, Triangle, Square, Diamond, Star, Moon, Circle. Recheck from Skull on every press and reuse a confirmed deceased owner's icon.
+- An unreadable copy of a known or reserved owner no longer prevents marking the next boss. If a different unit's marker cannot be checked, leave marks untouched rather than risk overwriting. /nqtboss reports the prepared mark or why it is unavailable.
+
+### 1.5.56-preview
+- A confirmed mark removed from the boss you currently target now frees its old icon. The next press can apply the highest free icon to that boss again. Off-screen or unreadable state still does not clear a reservation.
+
+### 1.5.57-preview
+- Refresh the action-bar macro on WoW's actual marker-change event. A previously confirmed mark no longer has an extra half-second lock after being cleared on the selected boss; a positive read on a nameplate is valid confirmation too. Unknown or conflicting reads will not release another boss's mark.
+
+### 1.5.58-preview
+- Reconcile manual marker removals on visible bosses even when no boss is selected, using the same observable unit identity and marker-change event. If a selected boss's first mark was never confirmed, retry its own reserved icon instead of getting stuck. The macro no longer issues its extra dead-target clear command. /nqtboss also reports available verification for the last attempt.
+
+### 1.5.59-preview
+- Prevent the boss action-bar macro from rewriting itself during its active press, including if WoW reports a raid-icon change mid-macro. Removed the optional last-target restore line; a missed exact target no longer tries to restore a different target.
+
+### 1.5.60-preview
+- Do not reserve a second icon when the game reports a different existing mark on the acquired boss. Do not create untrackable anonymous reservations.
+- Retry release/recovery follows raid icon priority, not Lua table iteration order. /nqtboss distinguishes a press with no marker command from a mark attempt and shows a recent game error if available. Targeting and pings remain unchanged.
+
+### 1.5.61-preview
+- Keep uncertain marks on their original owners. A missing icon read does not let Skull move to another living boss.
+- Carry the exact native search name into the result when WoW hides the name and GUID from Lua. This keeps repeated presses advancing Skull, X, Triangle without changing the targeting or ping commands.
+
+### 1.5.62-preview
+- Smart Target keybind can try multiple unmarked boss names on one hardware press when the client hides its nearby units. Keep pressing to mark one additional boss per press in the usual icon order. The 255-byte macro limit can still require another press for later names. The regular action-bar macro retains its verified behavior.
+- Stockade: try the official player-point API on the verified single floor even when the client doesn't report the current map ID, without overriding explicit icon rules. When no live position is available, Dungeon Journal can show a short-lived, clearly labeled last-known landmark for portal entry and uniquely mapped boss pulls. Reloads and roaming Targorr are not position signals.
+
+### 1.5.63-preview
+- On the Smart Target binding, try the full Stockade roster using the native secure macrotext action rather than the stored macro's shorter 255-byte format. If no unmarked boss responds, reacquire and ping the last reachable boss without moving its marker.
+- The action-bar macro stays at 255 bytes and still probes one new hidden name per press, but now re-finds the last successful boss after a miss whenever the fallback fits.
+
+### 1.5.64-preview
+- Match Stockade floor 225 using the verified legacy game tiles or Dungeon Journal's matching map copy, even when Forever returns no map-art metadata. Render the live player point only if WoW provides one. The diagnostic now separates raw coordinate availability from artwork matching. Boss logic unchanged.
+
+### 1.5.65-preview
+- Use the fire-cat artwork when the owned Auto Track action-bar macro would show WoW's question mark. Leave a linked mob portrait or manually chosen icon alone.

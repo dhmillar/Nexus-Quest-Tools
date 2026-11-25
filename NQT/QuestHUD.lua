@@ -6,6 +6,7 @@ local popupOpen,completedView=false,false
 local preferredCompleted,resolveStatusOnSelection=false,false
 local selectedDungeon,dungeonOpen
 local searchWords,searchOpen={},false
+local itemSearchQuestID,settingItemSearch,itemSearchCollapsed
 local observedObjectives, highlights={},{}
 local partyRetained,partyTurnedIn={},{}
 local removedQuests={}
@@ -878,6 +879,72 @@ local function applyTypography(region,theme,size,template)
     region:SetFont(file or STANDARD_TEXT_FONT or "Fonts/FRIZQT__.TTF",math.max(8,size+offset),flags or "")
     region.autoTrackFontStyle=style
 end
+local function dropName(text)
+    if not is(text,"string") then return end
+    text=text:gsub("|c%x%x%x%x%x%x%x%x",""):gsub("|r","")
+    text=text:gsub("^%s*%d+%s*/%s*%d+%s+",""):gsub("%s*[(:]?%s*%d+%s*/%s*%d+%)?%s*$","")
+    return text:match("^%s*(.-)%s*$")
+end
+local function objectiveDropItem(db,qid,objective,label)
+    if field(objective,"type")~="item" then return end
+    local exact=field(objective,"itemID")
+    if id(exact) then return exact end
+    local linked
+    for raw in label:gmatch("|Hitem:(%d+)") do
+        local item=tonumber(raw)
+        if linked and linked~=item then return end
+        linked=item
+    end
+    if id(linked) then return linked end
+    -- The native objective often only exposes localized text. Never assume
+    -- Questie item ordering matches the quest log; compare exact item names.
+    local wanted=dropName(label)
+    if not wanted or wanted=="" then return end
+    local objectives=field(call(db.GetQuest,qid),"ObjectiveData")
+    if not is(objectives,"table") then return end
+    local match
+    for _,entry in pairs(objectives) do
+        local item=field(entry,"Id")
+        if field(entry,"Type")=="item" and id(item) then
+            local name=call(C_Item and C_Item.GetItemNameByID,item)
+            if not is(name,"string") or name=="" then name=field(call(db.GetItem,db,item),"name") end
+            if is(name,"string") and name==wanted then
+                if match and match~=item then return end
+                match=item
+            end
+        end
+    end
+    return match
+end
+local function fmtDrop(value)
+    if value<.001 then return "<0.001%" end
+    return (string.format("%.3f",value):gsub("0+$",""):gsub("%.$","")).."%"
+end
+local function objectiveDropSuffix(db,qid,objective,label)
+    local item=objectiveDropItem(db,qid,objective,label)
+    if not id(item) then return "" end
+    -- Questie returns {percentage, source}; only actual NPC drop records
+    -- for this item qualify, not vendors, objects, or estimates.
+    local npcDrops=field(call(db.GetItem,db,item),"npcDrops")
+    if not is(npcDrops,"table") then return "" end
+    local lo,hi,seen=nil,nil,{}
+    for _,npc in pairs(npcDrops) do
+        if id(npc) and not seen[npc] then
+            seen[npc]=true
+            local rate=field(call(db.GetItemDroprate,item,npc),1)
+            if is(rate,"number") and rate>0 and rate<=100 then
+                lo=not lo and rate or math.min(lo,rate)
+                hi=not hi and rate or math.max(hi,rate)
+
+            end
+        end
+    end
+    if not lo then return "" end
+    local a,b=fmtDrop(lo),fmtDrop(hi)
+    local range=a==b and a or (a.."\226\128\147"..b)
+    return " ("..range..")"
+end
+
 local function renderObjectives(b,row,width,theme,hasItem,hasDetail)
     local ready=row.complete and not row.partyOnly
     local list=not ready and not row.partyOnly and call(Q.GetQuestObjectives,row.id)
@@ -933,9 +1000,11 @@ local function renderObjectives(b,row,width,theme,hasItem,hasDetail)
         partyLine("Your objectives",0)
     end
     if is(list,"table") then
+        local db=AT.db.rankQuestDropRates~=false and module("QuestieDB")
         for _,o in ipairs(list) do
             local label=field(o,"text")
             if is(label,"string") and label~="" then
+                if db then label=label..objectiveDropSuffix(db,row.id,o,label) end
                 local done=field(o,"finished")==true
                 local bullet=theme.questie and " - " or (done and "|cff8bd1a2+|r " or "|cffb4bbbd- |r")
                 if done then add(bullet..label,0,.64,.78,.68) else add(bullet..label,0) end
@@ -1157,7 +1226,7 @@ local function arrange()
     local a=themes[AT.db.questHUDTheme] or themes[2]
 
     local offset=math.max(0,fontOffset())
-    local searching=#searchWords>0
+    local searching=itemSearchQuestID~=nil or #searchWords>0
     local nativeArt=false
     if a.map then
         -- Same client atlases as the actual Forever world-map quest-log pane.
@@ -1258,7 +1327,10 @@ local function arrange()
     hud.scroll:SetPoint("TOPLEFT",hud.body,"TOPLEFT",expanded and 144 or (a.questie and 13 or 31),-102)
     hud.scroll:SetPoint("BOTTOMRIGHT",hud.body,"BOTTOMRIGHT",-13,15)
     local entries,others={},{}
-    if searching then
+    if itemSearchQuestID then
+        local row=model.rows[itemSearchQuestID]
+        if row then entries[1]={row=row,kind="unassigned"} end
+    elseif searching then
         for qid,haystack in pairs(questSearchIndex(model)) do
             if matchesSearch(haystack) then entries[#entries+1]={row=model.rows[qid],kind="unassigned"} end
         end
@@ -1340,8 +1412,10 @@ local function arrange()
         local closed=AT.char and AT.char.rankQuestClosedBranches
         for _,g in ipairs(groupQuestEntries(model,entries,groupScope)) do
             local key=groupScope..":"..g.key
-            visual[#visual+1]={group=g,stateKey=key,closed=is(closed,"table") and closed[key]==true}
-            if not (is(closed,"table") and closed[key]==true) then
+            local isClosed=(itemSearchQuestID and itemSearchCollapsed==true)
+                or (not itemSearchQuestID and is(closed,"table") and closed[key]==true)
+            visual[#visual+1]={group=g,stateKey=key,closed=isClosed}
+            if not isClosed then
                 for _,e in ipairs(g.entries) do visual[#visual+1]=e end
             end
         end
@@ -1354,7 +1428,14 @@ local function arrange()
             local branch=hud.branches[shownGroups]
             if not branch then
                 branch=button(hud.content,"",0,0,outerWidth,23,function(self)
-                    if not self.branchKey or not AT.char then return end
+                    if not self.branchKey then return end
+                    if itemSearchQuestID then
+                        itemSearchCollapsed=not itemSearchCollapsed
+                        stopQuestHover()
+                        arrange()
+                        return
+                    end
+                    if not AT.char then return end
                     if not is(AT.char.rankQuestClosedBranches,"table") then AT.char.rankQuestClosedBranches={} end
                     local state=AT.char.rankQuestClosedBranches
                     state[self.branchKey]=not state[self.branchKey] or nil
@@ -1638,6 +1719,28 @@ function AT.RefreshQuestHUD()
     AT.SyncBlizzardQuestHUD()
 end
 
+function AT.SearchRankQuestItem(qid)
+    if not (hud and AT.db and AT.db.enabled~=false and AT.db.questHUDEnabled
+        and is(qid,"number") and qid>0 and qid%1==0) then return false end
+    local title=call(Q and Q.GetTitleForQuestID,qid)
+    if not is(title,"string") or title=="" then
+        local row=model and model.rows[qid]
+        title=row and row.title
+    end
+    if not is(title,"string") or title=="" then return false end
+    local search=hud.search
+    AT.db.questHUDCollapsed=false
+    itemSearchQuestID,settingItemSearch,itemSearchCollapsed=qid,true,false
+    search:SetText(title)
+    settingItemSearch=nil
+    search:ClearFocus()
+    searchOpen=true
+    popupOpen,dungeonOpen=false,false
+    hud.scroll:SetVerticalScroll(0)
+    AT.RefreshQuestHUD()
+    return true
+end
+
 local function releaseSearchOnOutsideClick()
     local search=hud and hud.search
     if not search or call(search.HasFocus,search)~=true then return end
@@ -1736,6 +1839,7 @@ function AT.InitQuestHUD()
     hud.searchToggle,hud.searchClear=openSearch,clearSearch
     search:Hide();clearSearch:Hide()
     search:SetScript("OnTextChanged",function(self)
+        if not settingItemSearch then itemSearchQuestID=nil end
         searchWords={}
         local query=self:GetText() or ""
         searchOpen=query~=""

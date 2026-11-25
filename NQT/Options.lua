@@ -6,8 +6,9 @@ local function refreshPanel()
     if not panel or not panel:IsShown() then return end
     for key, check in pairs(checks) do
         check:SetChecked(AT.db[key])
-        local subDungeon = key == "dungeonPositionAutoOpen" or key == "dungeonPositionShowSelf" or key == "dungeonPositionShowParty"
-        check:SetEnabled(key == "enabled" or AT.db.enabled and (not subDungeon or AT.db.dungeonPositionEnabled == true))
+        local subDungeon = key == "dungeonMapMinimap" or key == "dungeonPositionAutoOpen" or key == "dungeonPositionShowSelf" or key == "dungeonPositionShowParty"
+        check:SetEnabled(key == "enabled" or AT.db.enabled and (not subDungeon or AT.db.dungeonPositionEnabled == true)
+            and (key ~= "bossMarkPing" or AT.db.bossAutoMark == true))
     end
     local id = AT.GetFocusedQuestID and AT.GetFocusedQuestID()
     local title = id and C_QuestLog and C_QuestLog.GetTitleForQuestID and C_QuestLog.GetTitleForQuestID(id)
@@ -127,7 +128,7 @@ local function buildPanel()
     local desc = makeText(panel, "GameFontHighlightSmall", -44, "QUEST FOCUS  /  NAMED TARGET")
     desc:SetTextColor(0.70, 0.79, 0.82)
     checks = {}
-    local names = {"General", "Auto Macro", "Rank Quest", "Dungeon Position"}
+    local names = {"General", "Auto Macro", "Rank Quest", "Dungeons"}
     local widths = {76, 91, 91, 108}
     local pages, tabs = {}, {}
     local function showPage(which)
@@ -197,16 +198,28 @@ local function buildPanel()
     option(rank, "questHUDEnabled", "Enable Rank Quest", -2, "Show the movable, zone-organized Rank Quest panel and hide the stock quest display.")
     option(rank, "questPartyProgress", "Quest Party Progress", -30, "Show the party progress Blizzard reports on hover, and keep shared quests visible while a party member still needs objectives.")
     option(rank, "questLeftoverMarks", "Mark leftover quest items in bags", -58, "Adds a trash badge only when a turned-in quest can be verified and no current known objective uses that item. Never deletes anything.")
-    makeText(rank, "GameFontHighlightSmall", -101, "Right-click a quest to exclude it from automatic tracking.")
-    makeText(rank, "GameFontDisableSmall", -123, "Ctrl-click quest titles to number them. /at order lists them.")
+    option(rank, "rankQuestDropRates", "Show Questie item drop rates", -86, "Shows available Questie NPC drop percentages beside Rank Quest item objectives. Unknown rates are hidden.")
+    makeText(rank, "GameFontHighlightSmall", -123, "Right-click a quest to exclude it from automatic tracking.")
+    makeText(rank, "GameFontDisableSmall", -145, "Ctrl-click quest titles to number them. /at order lists them.")
 
-    option(dungeon, "dungeonPositionEnabled", "Enable Dungeon Position", -2)
+    option(dungeon, "dungeonPositionEnabled", "Enable dungeon maps", -2)
     option(dungeon, "dungeonPositionAutoOpen", "Open automatically in a dungeon", -30)
     option(dungeon, "dungeonPositionShowSelf", "Show my position", -58)
     option(dungeon, "dungeonPositionShowParty", "Show party positions", -86, "Only shows positions that the game makes available.")
-    setupButton(dungeon, "Open Dungeon Map", 166, 18, -128, function()
+    option(dungeon, "dungeonMapMinimap", "Show minimap on dungeon map", -114,
+        "When you open the dungeon map with your normal map key, dock the real minimap. Ctrl-drag it to save a different spot. Closing the map restores your regular minimap.")
+    setupButton(dungeon, "Open Dungeon Map", 166, 18, -151, function()
         if AT.OpenDungeonPositionMap then AT.OpenDungeonPositionMap() end
     end)
+    local function showMinimapCheck()
+        AT.Say(AT.CheckDungeonMinimapRender and AT.CheckDungeonMinimapRender() or "Dungeon minimap check is not loaded.")
+    end
+    setupButton(dungeon, "Minimap check", 140, 196, -151, showMinimapCheck)
+    option(dungeon, "bossAutoMark", "Boss Target Marking", -190,
+        "Inside an instance, your Auto Track action-bar macro or Smart Target key selects and marks a detected boss out of combat. Uses all eight marks in order, starting with Skull and X; does not replace the saved mob.")
+    option(dungeon, "bossMarkPing", "Also ping the boss", -218,
+        "Include an Attack ping on the same macro press when the client allows it.")
+    makeText(dungeon, "GameFontHighlightSmall", -249, "Uses your existing macro. Enemy nameplates help.")
     setupButton(macro, "Place on action bar", 151, 18, -192, function()
         if InCombatLockdown() then AT.Say("Leave combat before setting up the target macro."); return end
         if AT.PickupTargetMacro then
@@ -353,7 +366,11 @@ function AT.InitOptions()
         elseif panel:IsShown() then panel:Hide() else panel:Show() end
     end
     SLASH_NEXUSQUESTTOOLSETTINGS1 = "/nqt"
-    SlashCmdList.NEXUSQUESTTOOLSETTINGS = function()
+    SlashCmdList.NEXUSQUESTTOOLSETTINGS = function(arg)
+        if type(arg)=="string" and arg:match("^%s*minimap%s*$") then
+            AT.Say(AT.CheckDungeonMinimapRender and AT.CheckDungeonMinimapRender() or "Dungeon minimap check is not loaded.")
+            return
+        end
         if not panel:IsShown() then panel:Show() end
     end
     AT.RefreshOptions = refreshPanel

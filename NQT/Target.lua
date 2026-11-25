@@ -139,7 +139,17 @@ local function targetBody(name, compact)
     return table.concat(lines,"\n")
 end
 
+local bossMacroUntil,bossRefreshQueued=0,false
 local function macroBody(name)
+    if AT.GetBossTargetMacro then
+        local active,body=AT.GetBossTargetMacro(true)
+        if active then
+            if body then body=body:gsub("^/stopmacro %[combat%]\n","",1) end
+            local out=marker.."\n/atmob [btn:2]e;h\n/stopmacro [btn:2][combat]\n"..(body or "/atmob b")
+            if #out<=255 then return out end
+            return marker.."\n/atmob [btn:2]e;b"
+        end
+    end
     return targetBody(name,false) or targetBody(name,true) or targetBody(nil,true)
 end
 function AT.GetMarkerPingNotice()
@@ -181,6 +191,16 @@ end
 
 local function syncMacro(create)
     if InCombatLockdown() then return false, "The target macro can only be edited out of combat." end
+    if not create and GetTime and GetTime()<bossMacroUntil then
+        if not bossRefreshQueued and C_Timer and C_Timer.After then
+            bossRefreshQueued=true
+            C_Timer.After(math.max(.01,bossMacroUntil-GetTime()),function()
+                bossRefreshQueued=false
+                if AT.RefreshBossActionBar then AT.RefreshBossActionBar() end
+            end)
+        end
+        return true
+    end
     if not GetMacroInfo or not CreateMacro or not EditMacro then
         return false, "This client does not expose the macro editor."
     end
@@ -209,6 +229,9 @@ end
 
 function AT.EnsureTargetMacro()
     return syncMacro(true)
+end
+function AT.RefreshBossActionBar()
+    if not InCombatLockdown() then return syncMacro(false) end
 end
 
 function AT.PickupTargetMacro()
@@ -556,6 +579,26 @@ function AT.InitTarget()
         if command == "q" and enabled() then muteTargetSounds(); return end
         if command == "m" and enabled() then warnIfTagged(AT.GetTargetName()); return end
         if command == "edit" or command == "e" then AT.OpenTargetEditor(); return end
+        if command=="h" then
+            if GetTime and AT.db and AT.db.bossAutoMark then bossMacroUntil=GetTime()+.09 end
+            return
+        end
+        local recovery=command:match("^v(%d+)$")
+        if recovery and AT.RememberBossRecovery then AT.RememberBossRecovery(tonumber(recovery)); return end
+        local step=command:match("^p(%d+)$")
+        if step and AT.ObserveBossSearch then AT.ObserveBossSearch(tonumber(step)); return end
+        local finish,slot=command:match("^j([0-8]):(%d+)$")
+        if finish and AT.FinishBossSearch then AT.FinishBossSearch(tonumber(finish),tonumber(slot)); return end
+        if AT.ReserveBossMark then
+            local index,plan=command:match("^k([0-8]):(%d+)$")
+            if index then AT.ReserveBossMark(tonumber(index),tonumber(plan)); return end
+            if command:match("^k[0-8]$") then AT.ReserveBossMark(tonumber(command:sub(2))); return end
+        end
+        if command == "f" and AT.AdvanceBossSearch then AT.AdvanceBossSearch(); return end
+        if command == "b" then
+            say("Boss mode: target an unmarked boss or turn on enemy nameplates, then press again.")
+            return
+        end
         if command == "a" then
             if enabled() and not InCombatLockdown() and AT.ShowNextMobHint then pcall(AT.ShowNextMobHint, AT.GetTargetName()) end
             return

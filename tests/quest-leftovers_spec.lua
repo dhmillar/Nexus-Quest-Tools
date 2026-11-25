@@ -47,7 +47,7 @@ AT.InitQuestLeftovers()
 assert(buttons[1].mark.shown and buttons[2].mark.shown and buttons[1].mark.path:match("LeftoverTrash.tga"))
 for i=3,10 do assert(not buttons[i].mark,"must not mark unverified or protected slot "..i) end
 tipHook(GameTooltip,0,1);assert(GameTooltip.text:find("future quest",1,true))
-GameTooltip.text=nil;tipHook(GameTooltip,0,3);assert(not GameTooltip.text)
+GameTooltip.text=nil;tipHook(GameTooltip,0,3);assert(not GameTooltip.text or not GameTooltip.text:find("leftover quest item",1,true))
 log={8};watcher.event(nil,"QUEST_ACCEPTED",8);assert(not buttons[1].mark.shown);deferred();assert(not buttons[1].mark.shown)
 log={};total=2;AT.RefreshQuestLeftovers();assert(not buttons[1].mark.shown,"hidden or collapsed rows block marking")
 total=nil;log={234};AT.RefreshQuestLeftovers();assert(not buttons[1].mark.shown,"unknown active data blocks marking")

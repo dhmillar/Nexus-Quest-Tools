@@ -117,6 +117,58 @@ end
 local areaTick
 C_Timer={NewTicker=function(_,fn) areaTick=fn end}
 AT.InitQuestHUD()
+do
+    local getObjectives=C_QuestLog.GetQuestObjectives
+    local modules={
+        QuestieDB={
+            GetQuest=function(q) if q==12 then return {ObjectiveData={
+                {Type="item",Id=70},{Type="item",Id=71},{Type="item",Id=72},{Type="item",Id=73}
+            }} end end,
+            GetItem=function(_,item)
+                local items={[70]={name="Evidence",npcDrops={20,21,21,22}},
+                    [71]={name="Cloth",npcDrops={23}},[72]={name="Duplicate",npcDrops={24}},
+                    [73]={name="Duplicate",npcDrops={25}}}
+                return items[item]
+            end,
+            GetItemDroprate=function(item,npc)
+                local rates={[20]=12.5,[21]=30,[23]=100,[24]=48,[25]=59}
+                return rates[npc] and {rates[npc],"questie"} or nil
+            end,
+        },
+    }
+    Questie={IsForever=true,API={isReady=true}}
+    QuestieLoader={ImportModule=function(_,name) return modules[name] end}
+    C_QuestLog.GetQuestObjectives=function(q)
+        if q==12 then return {
+            {type="item",text="Evidence: 2/5"},
+            {type="item",text="Gather |Hitem:71:0|h[Cloth]|h 1/5"},
+            {type="item",text="Duplicate: 0/2"},
+            {type="monster",text="Evidence: 0/1"},
+            {type="item",itemID=700,text="Unknown: 0/1"},
+        } end
+        return getObjectives(q)
+    end
+    for style=1,2 do
+        AT.db.questHUDTheme=style
+        AT.db.rankQuestDropRates=nil
+        AT.RefreshQuestHUD()
+        local row=assert(find("Acquired in Stranglethorn"))
+        assert(row.objectives[1].text:find("12.5%\226\128\14730%",1,true))
+        assert(row.objectives[2].text:find("(100%)",1,true))
+        for i=3,5 do assert(not row.objectives[i].text:find("%%%)")) end
+        AT.db.rankQuestDropRates=false;AT.RefreshQuestHUD()
+        assert(not row.objectives[1].text:find("%%%)"))
+        AT.db.rankQuestDropRates=true;AT.RefreshQuestHUD()
+        assert(row.objectives[1].text:find("%%%)"))
+    end
+    Questie=nil;QuestieLoader=nil
+    AT.RefreshQuestHUD()
+    assert(not find("Acquired in Stranglethorn").objectives[1].text:find("%%%)"))
+    C_QuestLog.GetQuestObjectives=getObjectives
+    AT.db.questHUDTheme=1;AT.db.rankQuestDropRates=nil;AT.RefreshQuestHUD()
+    local testRow=find("Acquired in Stranglethorn"); for i=#testRow.objectives,3,-1 do testRow.objectives[i]=nil end
+    print("PASS actual Rank Quest rows both themes, current amount kept, optional Questie, range/partial coverage, exact linked item, ambiguous/non-item/absent excluded, toggle")
+end
 local hud=objs[1]
 assert(hud.shown and find("Acquired in Stranglethorn") and find("A flight to Duskwood") and not find("Only in Duskwood"))
 local row=find("Acquired in Stranglethorn")
@@ -454,6 +506,25 @@ do
     assert(not find("Search Results") and not find("Only in Duskwood"))
     assert(C_SuperTrack.GetSuperTrackedQuestID()==nav)
     print("PASS live whole-log search: partial words, case, tokens, remote quests, empty state, Escape and no tracking changes")
+    AT.db.questHUDEnabled=true
+    AT.db.questHUDCollapsed=true
+    AT.RefreshQuestHUD()
+    assert(AT.SearchRankQuestItem(13))
+    assert(search:GetText()=="Only in Duskwood" and search.shown and not search.focused)
+    assert(not AT.db.questHUDCollapsed and find("Only in Duskwood") and not find("A flight to Duskwood"))
+    local exactBranch=assert(find("-  Duskwood"))
+    exactBranch.scripts.OnClick(exactBranch)
+    assert(not find("Only in Duskwood") and find("+  Duskwood"))
+    assert(AT.SearchRankQuestItem(13) and find("Only in Duskwood"))
+    search:SetText("dusk")
+    assert(find("A flight to Duskwood"),"typing replaces the exact bag-item filter")
+    clear.scripts.OnClick(clear)
+    assert(not search.shown and C_SuperTrack.GetSuperTrackedQuestID()==nav)
+    AT.db.questHUDEnabled=false
+    assert(not AT.SearchRankQuestItem(13),"never enable a disabled HUD")
+    AT.db.questHUDEnabled=true
+    AT.RefreshQuestHUD()
+    print("PASS item lookup expands Rank Quest, filters exact quest across zones, releases focus and allows normal search afterward")
 end
 
 AT.db.questHUDEnabled=true

@@ -35,6 +35,13 @@ end
 -- Unknown identity/marker state never arms a destructive clear.
 local function prepare()
     if not AT.db or AT.db.enabled==false then return end
+    if AT.GetBossTargetMacro then
+        local active,body,note=AT.GetBossTargetMacro(nil,true)
+        if active then
+            if note and AT.Say then AT.Say(note) end
+            return body
+        end
+    end
     local exists=UnitExists("target")
     if not readable(exists) then return end
     if not exists then return recall(AT.GetTargetName(),false) end
