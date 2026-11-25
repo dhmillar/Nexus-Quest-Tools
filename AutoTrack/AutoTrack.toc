@@ -1,5 +1,6 @@
 ## Interface: 16001
 ## Title: Nexus Quest Tools
+## IconTexture: Interface\AddOns\AutoTrack\MinimapAT.tga
 ## Notes: Sticky nearby quest tracking and a reusable named-target macro.
 ## Author: Dennis
 ## Version: 1.5.38

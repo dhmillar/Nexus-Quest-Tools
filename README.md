@@ -1,5 +1,7 @@
 # Nexus Quest Tools for WoW Forever
 
+<img src="assets/nexus-fire-cat.png" alt="Nexus Quest Tools fire-cat icon" width="112">
+
 Formerly Rankor Tools and Auto Track. Nexus Quest Tools adds automatic quest tracking, a reusable named-target macro, Rank Quest, and an optional dungeon map view for World of Warcraft: Forever.
 
 ## Install and update
