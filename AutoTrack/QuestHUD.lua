@@ -1638,6 +1638,32 @@ function AT.RefreshQuestHUD()
     AT.SyncBlizzardQuestHUD()
 end
 
+local function releaseSearchOnOutsideClick()
+    local search=hud and hud.search
+    if not search or call(search.HasFocus,search)~=true then return end
+    -- As in the Forever client menu system, use the top mouse focus rather
+    -- than geometry alone: a different frame may overlap this edit box.
+    local foci=call(GetMouseFoci)
+    if is(foci,"table") then
+        local target=field(foci,1)
+        for _=1,12 do
+            if not target then break end
+            if target==search then return end
+            if not is(target,"table") then break end
+            local parent=call(target.GetParent,target)
+            if not is(parent,"table") or parent==target then break end
+            target=parent
+        end
+    elseif call(search.IsMouseOver,search)==true then
+        return
+    end
+    search:ClearFocus()
+    if (search:GetText() or "")=="" then
+        searchOpen=false
+        arrange()
+    end
+end
+
 function AT.InitQuestHUD()
     if hud or not CreateFrame or not UIParent then return end
     AT.NormalizeQuestHUDTheme(AT.db)
@@ -1869,10 +1895,11 @@ function AT.InitQuestHUD()
     hud:SetScript("OnSizeChanged",pushRefresh)
     local watcher=CreateFrame("Frame")
     for _,event in ipairs({"PLAYER_ENTERING_WORLD","QUEST_ACCEPTED","QUEST_REMOVED","QUEST_COMPLETE","QUEST_TURNED_IN","QUEST_LOG_UPDATE",
-        "QUEST_WATCH_UPDATE","GROUP_ROSTER_UPDATE","QUEST_DATA_LOAD_RESULT","PLAYER_REGEN_ENABLED","PLAYER_LEVEL_UP","PLAYER_MAP_CHANGED","ZONE_CHANGED","ZONE_CHANGED_INDOORS","ZONE_CHANGED_NEW_AREA","SUPER_TRACKING_CHANGED"}) do
+        "QUEST_WATCH_UPDATE","GROUP_ROSTER_UPDATE","QUEST_DATA_LOAD_RESULT","PLAYER_REGEN_ENABLED","PLAYER_LEVEL_UP","PLAYER_MAP_CHANGED","ZONE_CHANGED","ZONE_CHANGED_INDOORS","ZONE_CHANGED_NEW_AREA","SUPER_TRACKING_CHANGED","GLOBAL_MOUSE_DOWN"}) do
         pcall(watcher.RegisterEvent,watcher,event)
     end
     watcher:SetScript("OnEvent",function(_,event,first,second)
+        if event=="GLOBAL_MOUSE_DOWN" then releaseSearchOnOutsideClick();return end
         if not AT.char then return end
         if event=="QUEST_ACCEPTED" or event=="QUEST_REMOVED" or event=="QUEST_TURNED_IN" then logDirty=true end
         if (event=="QUEST_REMOVED" or event=="QUEST_TURNED_IN") and id(first) then

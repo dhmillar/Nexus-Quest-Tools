@@ -1,0 +1,1485 @@
+local AT={db={enabled=true,questHUDEnabled=true,questHUDWidth=414,questHUDHeight=395,
+    questHUDX=-276,questHUDY=-255,questHUDTheme=1,questHUDRailOpen=false},char={zoneQuestOrigins={ [12]=1 }}}
+local entries={
+ {isHeader=true,title="Stranglethorn Vale"},
+ {questID=11,title="A flight to Duskwood"}, {questID=15,title="No NPC metadata"},
+ {isHeader=true,title="Trade Skills"},
+ {questID=12,title="Acquired in Stranglethorn"},{questID=13,title="Only in Duskwood"},
+ {questID=14,title="Uncertain"},{questID=16,title="Only local POI"},{questID=17,title="Hidden",isHidden=true}
+}
+local dest={[11]=2,[12]=2,[13]=2,[17]=1}
+local map=1
+local names={"Stranglethorn Vale","Duskwood"}
+C_Map={
+ GetBestMapForUnit=function() return map end,
+ GetMapInfo=function(i)
+    if names[i] then return {mapType=3,name=names[i]} end
+    if i==88 then return {mapType=5,parentMapID=1,name="Cave floor"} end
+ end
+}
+C_QuestLog={
+ GetNumQuestLogEntries=function() return #entries end,GetInfo=function(i) return entries[i] end,
+ ReadyForTurnIn=function(q) return q==16 end,
+ GetNextWaypoint=function(q) return dest[q],.5,.5 end,
+ GetQuestsOnMap=function(z) return z==1 and {{questID=16,x=.3,y=.4}} or {} end,
+ GetQuestObjectives=function(q)
+   if q==12 then return {{text="Collect evidence: 2/5",finished=false},{text="Defias slain: 3/3",finished=true}} end
+   return {{text="Collect evidence: 2/5",finished=false}}
+ end,
+}
+function GetQuestLogSpecialItemInfo(index)
+ if entries[index].questID==12 then return "|Hitem:123|h[Quest Flare]|h",987,3 end
+end
+function AT.GetQuestOrderPosition(q) if q==12 then return 1 end end
+local objs,textures={},{}
+local function object()
+    local o={shown=true,w=250,h=100,child={},scripts={}}
+    function o:Show() self.shown=true end
+    function o:Hide() self.shown=false end
+    function o:SetShown(v) self.shown=v end
+    function o:SetScript(k,v) self.scripts[k]=v end
+    function o:SetText(v)
+        self.text=v
+        if self.kind=="EditBox" and self.scripts.OnTextChanged then self.scripts.OnTextChanged(self) end
+    end
+    function o:GetText() return self.text end
+    function o:SetPoint(...) self.anchor={...} end
+    function o:SetTexture(v) self.texture=v end
+    function o:SetFrameLevel(v) self.level=v end
+    function o:GetFrameLevel() return self.level or 2 end
+    function o:SetTextColor(...) self.textColor={...} end
+    function o:SetFont(...) self.appliedFont={...} end
+    function o:SetSize(w,h) self.w,self.h=w,h end
+    function o:GetWidth() return self.w end
+    function o:SetWidth(w) self.w=w end
+    function o:GetUnboundedStringWidth() return #(self.text or "")*((self.appliedFont and self.appliedFont[2]) or 10)*.57 end
+    function o:GetHeight() return self.h end
+    function o:SetHeight(h) self.h=h end
+    function o:GetFont() return unpack(self.appliedFont or {}) end
+    function o:SetVerticalScroll(v) self.scroll=v end
+    function o:GetVerticalScroll() return self.scroll or 0 end
+    function o:EnableMouseWheel(v) self.wheel=v end
+    local noop=function() end
+    for _,k in ipairs({"SetAllPoints","SetFrameStrata","SetMovable","SetResizable","SetClampedToScreen","SetResizeBounds",
+       "RegisterForClicks","RegisterForDrag","RegisterEvent","EnableMouse","SetColorTexture","SetJustifyH",
+       "SetWordWrap","ClearAllPoints","SetAlpha","SetScrollChild","SetAutoFocus","SetMaxLetters","SetFontObject","SetTextInsets","SetVertexColor"}) do o[k]=noop end
+    function o:ClearFocus() self.focused=false end
+    function o:HasFocus() return self.focused==true end
+    function o:GetParent() return self.parent end
+    function o:IsMouseOver() return true end
+    function o:SetFocus() self.focused=true end
+    function o:CreateTexture() local a=object();textures[#textures+1]=a;return a end
+    function o:SetAtlas(atlas) self.atlas=atlas end
+    function o:CreateFontString() local f=object();self.child[#self.child+1]=f;return f end
+    return o
+end
+UIParent=object()
+function CreateFrame(kind,_,parent,template)
+ local o=object(); o.kind=kind;o.parent=parent;o.template=template;objs[#objs+1]=o;return o
+end
+local function find(value)
+ for _,o in ipairs(objs) do for _,label in ipairs(o.child) do if label.text==value and o.shown then return o end end end
+end
+local queued,selected,excluded,ctrl,opened
+function AT.ToggleQuestTrackingOrder(q) queued=q;return true end
+function AT.ToggleQuestExcluded(q) excluded=q;return true end
+C_SuperTrack={SetSuperTrackedQuestID=function(q) selected=q end,GetSuperTrackedQuestID=function() return selected end}
+function QuestMapFrame_OpenToQuestDetails(q) opened=q end
+function IsControlKeyDown() return ctrl end
+assert(loadfile("AutoTrack/DungeonCatalog.lua"))("AutoTrack",AT)
+assert(loadfile("AutoTrack/QuestHUD.lua"))("AutoTrack",AT)
+do
+    local fresh,savedMap,invalid={},{questHUDTheme=1,questHUDThemeSchema=2},{questHUDTheme=99,questHUDThemeSchema=2}
+    AT.NormalizeQuestHUDTheme(fresh);AT.NormalizeQuestHUDTheme(savedMap);AT.NormalizeQuestHUDTheme(invalid)
+    assert(fresh.questHUDTheme==2 and fresh.questHUDThemeSchema==2 and savedMap.questHUDTheme==1 and invalid.questHUDTheme==2)
+end
+for i=1,6 do
+    local migrated={questHUDTheme=i}
+    AT.NormalizeQuestHUDTheme(migrated)
+    assert(migrated.questHUDTheme==(i==6 and 2 or 1) and migrated.questHUDThemeSchema==2)
+    migrated.questHUDTheme=2
+    AT.NormalizeQuestHUDTheme(migrated)
+    assert(migrated.questHUDTheme==2,"new Questie preference must persist")
+end
+local result=AT.BuildQuestHUDModel(1,names[1])
+assert(result.zones[1].rows[11].kind=="category" and result.zones[1].rows[12].kind=="recorded")
+assert(result.zones[1].rows[15] and result.zones[1].rows[16] and not result.zones[1].rows[13])
+assert(result.zones[2].rows[11] and result.zones[2].rows[12] and result.zones[2].rows[13])
+assert(not result.rows[17] and not result.zones[1].rows[14])
+local copiedTargets,verifiedLink
+AT.SetRankQuestItemTargets=function(rows,scroll,verification)
+    copiedTargets=rows
+    if rows and find("Acquired in Stranglethorn") then
+        local row=find("Acquired in Stranglethorn")
+        if row.item.link then verifiedLink=verification(row.qid,row.item.rankQuestIndex) end
+    end
+end
+local areaTick
+C_Timer={NewTicker=function(_,fn) areaTick=fn end}
+AT.InitQuestHUD()
+local hud=objs[1]
+assert(hud.shown and find("Acquired in Stranglethorn") and find("A flight to Duskwood") and not find("Only in Duskwood"))
+local row=find("Acquired in Stranglethorn")
+row.titleHit.scripts.OnClick(row.titleHit,"LeftButton"); assert(opened==12 and not selected)
+ctrl=true;row.titleHit.scripts.OnClick(row.titleHit,"LeftButton"); assert(queued==12)
+
+do
+    local function node()
+        local n={entries={}}
+        function n:CreateButton(label,click)
+            local b=node();b.click=click
+            self.entries[label]=b
+            return b
+        end
+        function n:CreateTitle(t) self.title=t end
+        function n:CreateDivider() end
+        function n:SetEnabled(v) self.enabled=v end
+        return n
+    end
+    local openedMenu,owner,popup
+    MenuUtil={CreateContextMenu=function(o,build) owner=o;openedMenu=node();build(o,openedMenu) end}
+    StaticPopupDialogs={}
+    StaticPopup_Show=function(key,arg1,_,data)
+        popup={key=key,name=arg1,data=data,def=StaticPopupDialogs[key]}
+        return popup
+    end
+    StaticPopup_Hide=function() popup=nil end
+    local offered,inCombat,prior,staged=12,false,13,13
+    local blockedStage,abandoned,shared,chat,excludedValue,order,pin
+    InCombatLockdown=function() return inCombat end
+    IsInGroup=function() return true end
+    C_QuestLog.GetLogIndexForQuestID=function(id)
+        for i,info in ipairs(entries) do if info.questID==id then return i end end
+    end
+    C_QuestLog.IsOnQuest=function(id) return id==12 or id==13 end
+    C_QuestLog.IsPushableQuest=function(id) return id==12 end
+    C_QuestLog.GetQuestLink=function(id) return "quest:"..id end
+    C_QuestLog.CanAbandonQuest=function(id) return offered==id end
+    C_QuestLog.GetSelectedQuest=function() return prior end
+    C_QuestLog.SetSelectedQuest=function(id) prior=id end
+    C_QuestLog.GetAbandonQuest=function() return staged end
+    C_QuestLog.SetAbandonQuest=function() if not blockedStage then staged=prior end end
+    C_QuestLog.AbandonQuest=function() abandoned=staged end
+    QuestLogPushQuest=function() shared=prior end
+    ChatFrame_OpenChat=function(value) chat=value end
+    AT.GetTrackingOrderCount=function() return order and 1 or 0 end
+    AT.IsQuestExcluded=function() return excludedValue end
+    local orderPos=AT.GetQuestOrderPosition
+    AT.GetQuestOrderPosition=function(id) return id==12 and order and 1 or nil end
+    AT.ToggleQuestTrackingOrder=function(id) assert(id==12);order=not order;return true,order and "added" or "removed",1 end
+    AT.ResetTrackingOrder=function() order=nil end
+    AT.ToggleQuestExcluded=function(id) excluded=id;excludedValue=not excludedValue end
+    AT.GetQuestHUDManualFocus=function() return pin end
+    AT.ToggleQuestHUDManualFocus=function(id) if pin==id then pin=nil else pin=id end end
+    assert(loadfile("AutoTrack/QuestMenu.lua"))("AutoTrack",AT)
+    local function menu()
+        row=find("Acquired in Stranglethorn")
+        row.scripts.OnClick(row,"RightButton")
+        assert(owner==row and openedMenu.title and openedMenu.entries)
+        return openedMenu.entries
+    end
+    local m=menu()
+    assert(not excluded and not popup and prior==13 and staged==13)
+    m["Focus Quest"].click();assert(pin==12)
+    menu()["Unfocus"].click();assert(not pin)
+    menu()["Minimize Quest"].click();assert(AT.char.rankQuestMinimized[12])
+    menu()["Maximize Quest"].click();assert(not AT.char.rankQuestMinimized[12])
+    menu()["Lock Tracker"].click();assert(AT.db.rankQuestLocked)
+    menu()["Unlock Tracker"].click();assert(not AT.db.rankQuestLocked)
+    menu()["Link Quest to chat"].click();assert(chat=="quest:12")
+    menu()["Share Quest"].click();assert(shared==12 and prior==13)
+    menu()["Add to Tracking Order"].click()
+    assert(menu()["Remove from Tracking Order"])
+    menu()["Reset Tracking Order"].click();assert(not order)
+    menu()["Nexus Quest Tools: Exclude this quest"].click();assert(excluded==12 and excludedValue)
+    menu()["Nexus Quest Tools: Include quest again"].click();assert(not excludedValue)
+
+    menu()["Abandon Quest"].click()
+    assert(popup.name=="Acquired in Stranglethorn" and popup.data.id==12 and not abandoned and staged==13)
+    popup.def.OnCancel(nil,popup.data);popup.def.OnAccept(nil,popup.data);assert(not abandoned)
+    menu()["Abandon Quest"].click()
+    local removed=popup
+    AT.InvalidateRankQuestAbandon(12)
+    removed.def.OnAccept(nil,removed.data);assert(not abandoned)
+    menu()["Abandon Quest"].click();inCombat=true
+    popup.def.OnAccept(nil,popup.data);assert(not abandoned)
+    assert(menu()["Abandon Quest"].enabled==false)
+    inCombat=false
+    menu()["Abandon Quest"].click()
+    blockedStage=true;popup.def.OnAccept(nil,popup.data);assert(not abandoned and prior==13 and staged==13)
+    blockedStage=false
+    menu()["Abandon Quest"].click()
+    popup.def.OnAccept(nil,popup.data);assert(abandoned==12 and prior==13)
+    offered=false;assert(not menu()["Abandon Quest"])
+    AT.db.questHUDTheme=2;AT.RefreshQuestHUD()
+    local minimal=menu()
+    assert(minimal["Add to Tracking Order"] and minimal["Untrack Quest"])
+    minimal["Untrack Quest"].click();assert(excludedValue)
+    menu()["Nexus Quest Tools: Include quest again"].click();assert(not excludedValue)
+    AT.db.questHUDTheme=1;AT.RefreshQuestHUD()
+
+    local standard,ignored
+    local l10n=setmetatable({},{__call=function(_,key) return key=="Objectives" and "Ziele" or key end})
+    local tracker={GetMenuForQuest=function(_,record)
+        assert(record.Id==12)
+        return {{isTitle=true,text="Questie heading"},{text="Ziele",menuList={{text="Kills",menuList={{text="Show on Map",func=function() standard=true end}}}}},
+            {text="Hide Icons",func=function() standard=true end},{text="Abandon Quest",func=function() ignored=true end}}
+    end}
+    Questie={API={isReady=true}}
+    QuestieLoader={ImportModule=function(_,key)
+        return ({TrackerData={GetQuest=function() return {Id=12} end},TrackerMenu=tracker,l10n=l10n})[key]
+    end}
+    local before=menu()
+    assert(openedMenu.title=="Questie heading" and before["Hide Icons"] and not before["Abandon Quest"])
+    before.Ziele.entries.Kills.entries["Show on Map"].click();assert(standard and not ignored)
+    standard=nil
+    C_QuestLog.IsOnQuest=function() return false end
+    before["Hide Icons"].click();assert(not standard,"stale menu cannot act on a removed quest")
+    row.partyOnly=true;openedMenu=nil
+    row.scripts.OnClick(row,"RightButton");assert(not openedMenu)
+    row.partyOnly=false
+    AT.GetQuestOrderPosition=orderPos
+    AT.ToggleQuestTrackingOrder=function(q) queued=q;return true end
+    AT.ToggleQuestExcluded=function(q) excluded=q;return true end
+    AT.GetQuestHUDManualFocus=nil;AT.ToggleQuestHUDManualFocus=nil
+    C_QuestLog.GetLogIndexForQuestID=nil;C_QuestLog.IsOnQuest=nil
+    C_QuestLog.IsPushableQuest=nil;C_QuestLog.GetQuestLink=nil
+    C_QuestLog.CanAbandonQuest=nil;C_QuestLog.GetSelectedQuest=nil;C_QuestLog.SetSelectedQuest=nil
+    C_QuestLog.GetAbandonQuest=nil;C_QuestLog.SetAbandonQuest=nil;C_QuestLog.AbandonQuest=nil
+    InCombatLockdown=nil;IsInGroup=nil;QuestLogPushQuest=nil;ChatFrame_OpenChat=nil
+    MenuUtil=nil;Questie=nil;QuestieLoader=nil
+    AT.RefreshQuestHUD(); row=find("Acquired in Stranglethorn")
+    print("PASS Rank Quest right-click: native actions, localized Questie submenu, ordering, explicit confirmation, stale target, combat and party-only safety")
+end
+
+local closed=find(">"); assert(closed and closed.anchor[1]=="BOTTOMLEFT")
+closed.scripts.OnClick(closed);assert(AT.db.questHUDRailOpen)
+local rail=find("Duskwood"); assert(rail and rail.kind=="Button")
+assert(verifiedLink and verifiedLink:match("item:123") and copiedTargets)
+assert(row.item.shown and row.item.link:match("item:123") and row.item.icon.texture==987 and row.item.count.text=="3")
+assert(#row.objectives==2 and row.objectives[1].text:find("2/5",1,true) and row.objectives[2].text:find("3/3",1,true))
+
+rail.scripts.OnClick(rail)
+assert(find("Only in Duskwood"))
+map=88;AT.RefreshQuestHUD()
+assert(find("Only in Duskwood"),"same parent zone preserves browse")
+map=2; AT.RefreshQuestHUD()
+assert(find("Only in Duskwood"))
+local stv=find("Stranglethorn Vale")
+assert(stv and stv.kind=="Button");stv.scripts.OnClick(stv)
+assert(not find("Only in Duskwood"))
+map=1;AT.RefreshQuestHUD(); assert(not find("Only in Duskwood"))
+AT.db.questHUDFontOffset=0
+local plus,minus=find("+"),find("-");assert(plus and minus)
+local qrow=find("Acquired in Stranglethorn")
+local before=qrow.h
+plus.scripts.OnClick(plus)
+assert(AT.db.questHUDFontOffset==1 and qrow.child[1].appliedFont[2]==11 and qrow.item.count.appliedFont[2]==11 and qrow.objectives[2].appliedFont[2]==11)
+assert(qrow.h>before and plus.label.appliedFont[2]==11)
+minus.scripts.OnClick(minus)
+assert(AT.db.questHUDFontOffset==0 and qrow.child[1].appliedFont[2]==10)
+local watch
+for _,o in ipairs(objs) do if o.scripts.OnEvent then watch=o end end
+assert(watch);watch.scripts.OnEvent(watch,"QUEST_ACCEPTED",90);assert(AT.char.zoneQuestOrigins[90]==1)
+watch.scripts.OnEvent(watch,"QUEST_TURNED_IN",90);assert(not AT.char.zoneQuestOrigins[90])
+local color=find("Map"); assert(color)
+entries[5].level=26
+function GetQuestDifficultyColor(n) assert(n==26);return {r=1,g=.82,b=.05} end
+Enum={RelativeContentDifficulty={Difficult=3}}
+C_PlayerInfo={GetContentDifficultyQuestForPlayer=function(q) assert(q==12);return 3 end}
+function HaveQuestData(q) return q==12 end
+AT.RefreshQuestHUD()
+for i,theme in ipairs({"Map","Minimal"}) do
+    assert(AT.db.questHUDTheme==i and find(theme)==color)
+    assert(find("Rank Quest"),"both themes must say Rank Quest")
+    local leveled=find("[26] Acquired in Stranglethorn")
+    assert(leveled and leveled.child[1].textColor[2]==.49)
+    assert(leveled.badge.text=="#1" and leveled.badge.anchor[1]=="TOPLEFT"
+        and leveled.badge.anchor[2]<leveled.title.anchor[2],"order must appear left of title on both themes")
+    local atlas={}
+    for _,tex in ipairs(textures) do if tex.shown and tex.atlas and tex.atlas~="common-search-magnifyingglass" then atlas[tex.atlas]=true end end
+    if theme=="Map" then
+        assert(atlas["QuestLog-main-background"] and atlas["questlog-frame"] and atlas["questlog-frame-filigree"])
+    else
+        assert(not next(atlas),"Questie uses its transparent look, not the native atlas")
+      assert(leveled.child[1].appliedFont[2]==10 and not closed.shown)
+      local menu=find("Zones");assert(menu)
+      local railFrame=rail.parent.parent.parent
+      assert(not railFrame.shown)
+      menu.scripts.OnClick(menu)
+      assert(railFrame.shown and railFrame.anchor[2]==menu,"popup must originate at top Zones button")
+      rail.scripts.OnClick(rail)
+      assert(not railFrame.shown and find("Only in Duskwood"))
+      AT.BrowseQuestHUD(nil)
+    end
+    color.scripts.OnClick(color)
+end
+assert(AT.db.questHUDTheme==1)
+function HaveQuestData() return false end
+AT.RefreshQuestHUD()
+assert(find("[26] Acquired in Stranglethorn").child[1].textColor[2]==.82,"fallback is only used without native cached quest difficulty")
+local status=find("In Progress");assert(status and not find("Roomy") and not find("Compact"))
+local compactHeight=row.h
+AT.db.questHUDCompact=false;AT.RefreshQuestHUD()
+assert(row.h==compactHeight,"legacy Roomy setting cannot change density")
+row=find("[26] Acquired in Stranglethorn");assert(row.objectives[2].shown)
+closed.scripts.OnClick(closed);assert(not AT.db.questHUDRailOpen)
+
+AT.db.questHUDEnabled=false;AT.RefreshQuestHUD();assert(not hud.shown)
+watch.scripts.OnEvent(watch,"QUEST_ACCEPTED",91);assert(not AT.char.zoneQuestOrigins[91])
+print("PASS HUD model and real entry points: local/origin/outgoing/destination/POI/unknown, tabs, zone reset, submap, clicks, theme/density, opt-out")
+
+
+-- All Zones is a real rail control in both themes and reads unique quest IDs.
+AT.db.questHUDEnabled=true
+AT.RefreshQuestHUD()
+local oldReady=C_QuestLog.ReadyForTurnIn
+C_QuestLog.ReadyForTurnIn=function(id) return id==13 or oldReady(id) end
+AT.RefreshQuestHUD()
+local navBefore=AT.GetQuestNavigationID and AT.GetQuestNavigationID()
+for _,style in ipairs({"Map","Minimal"}) do
+    if style=="Map" then closed.scripts.OnClick(closed)
+    else
+        local zonesControl=find("Zones");zonesControl.scripts.OnClick(zonesControl)
+    end
+    local here,all=find("CURRENT ZONE"),find("ALL ZONES")
+    assert(here and all and here.parent==all.parent and here.anchor[5]-all.anchor[5]==26)
+    assert(all.parent.shown)
+    all.scripts.OnClick(all)
+    assert(find("All Zones") and find("Uncertain") and not find("Only in Duskwood") and not find("Hidden"),style.." title:"..tostring((find("All Zones"))).." uncertain:"..tostring((find("Uncertain"))).." dusk:"..tostring((find("Only in Duskwood"))).." hidden:"..tostring((find("Hidden"))))
+    local duplicates=0
+    for _,o in ipairs(objs) do if o.shown and o.qid==11 then duplicates=duplicates+1 end end
+    assert(duplicates==1,"one quest across multiple zones must render once")
+    local status=find("In Progress");status.scripts.OnClick(status)
+    assert(find("Only in Duskwood") and not find("Uncertain"),"All Zones honors Completed")
+    status.scripts.OnClick(status)
+    map=2;AT.RefreshQuestHUD();assert(find("All Zones") and find("Uncertain"))
+    if style=="Minimal" then
+        local zonesControl=find("Zones");zonesControl.scripts.OnClick(zonesControl)
+    end
+    here.scripts.OnClick(here)
+    assert(not find("All Zones") and not find("Uncertain"))
+    map=1;AT.RefreshQuestHUD()
+    if style=="Map" then closed.scripts.OnClick(closed) end
+    local theme=find(style);theme.scripts.OnClick(theme)
+end
+C_QuestLog.ReadyForTurnIn=oldReady
+AT.RefreshQuestHUD()
+assert(not AT.GetQuestNavigationID or AT.GetQuestNavigationID()==navBefore)
+AT.db.questHUDEnabled=false;AT.RefreshQuestHUD()
+print("PASS All Zones sits below Current Zone, shows deduplicated cross-zone and unassigned rows, respects status and stays selected while traveling")
+do
+    local search
+    for _,o in ipairs(objs) do if o.kind=="EditBox" then search=o;break end end
+    assert(search and search.anchor[5]==-57 and search.w==216)
+    local oldTheme,oldFont=AT.db.questHUDTheme,AT.db.questHUDFontOffset
+    local wasEnabled=AT.db.questHUDEnabled;AT.db.questHUDEnabled=true
+    GameFontNormalLarge={GetFont=function() return "Test Map Font",16,"" end}
+    -- Force a different cached style before checking both themes.
+    AT.db.questHUDFontOffset=4;AT.RefreshQuestHUD()
+    for _,theme in ipairs({1,2}) do
+        for _,offset in ipairs({-2,0,5}) do
+            AT.db.questHUDTheme=theme;AT.db.questHUDFontOffset=offset;AT.RefreshQuestHUD()
+            local points=(theme==1 and 16 or 12)+offset
+            assert(search.appliedFont[2]==points and search.child[1].appliedFont[2]==points,table.concat({theme,offset,points,search.appliedFont[2],search.child[1].appliedFont[2],tostring(AT.db.questHUDCollapsed),AT.db.questHUDTheme,AT.db.questHUDFontOffset,search.autoTrackFontStyle,tostring(AT.db.questHUDEnabled),tostring(AT.db.enabled)},","))
+            assert(search.h>=28 and search.h>=points+12 and 57+search.h<102)
+        end
+    end
+    GameFontNormalLarge=nil
+    AT.db.questHUDTheme=oldTheme;AT.db.questHUDFontOffset=oldFont;AT.db.questHUDEnabled=wasEnabled;AT.RefreshQuestHUD()
+    print("PASS search field and hint match the section title in both themes across the font-size range")
+    -- Ensure a case-insensitive partial search can find remote/log-wide rows,
+    -- while matching multiple keywords across the title and the zone bucket.
+    AT.BrowseQuestHUD(nil)
+    local nav=C_SuperTrack.GetSuperTrackedQuestID()
+    local toggle,clear
+    for _,o in ipairs(objs) do
+        if o.icon and o.anchor and o.anchor[5]==-57 then toggle=o end
+        if o.kind=="Button" and o.parent==search then clear=o end
+    end
+    assert(toggle and clear and toggle.shown and not search.shown and not clear.shown)
+    toggle.scripts.OnClick(toggle)
+    assert(search.shown and search.focused and not toggle.shown and not clear.shown)
+    search:SetText("dusk")
+    assert(search.shown and clear.shown and find("Search Results"))
+    GetMouseFoci=function() return {search} end
+    watch.scripts.OnEvent(watch,"GLOBAL_MOUSE_DOWN","LeftButton")
+    assert(search.focused,"click on the search box must retain focus")
+    GetMouseFoci=function() return {clear} end
+    watch.scripts.OnEvent(watch,"GLOBAL_MOUSE_DOWN","LeftButton")
+    assert(search.focused,"click on the clear child is not an outside click (its own action clears)")
+    GetMouseFoci=function() return {find("Only in Duskwood")} end
+    watch.scripts.OnEvent(watch,"GLOBAL_MOUSE_DOWN","RightButton")
+    assert(not search.focused and search.shown and search:GetText()=="dusk" and find("Search Results"))
+    search:SetFocus()
+    GetMouseFoci=function() return {} end
+    watch.scripts.OnEvent(watch,"GLOBAL_MOUSE_DOWN","LeftButton")
+    assert(not search.focused and search.shown and search:GetText()=="dusk" and find("Search Results"),
+        "even a click on the world (no UI focus) releases the typing focus, not the filtered result")
+    search:SetFocus()
+    assert(search.focused and search:GetText()=="dusk","clicking back may refocus without replacing the query")
+    GetMouseFoci=nil
+    search.scripts.OnEnterPressed(search)
+    AT.RefreshQuestHUD()
+    assert(search.shown and not search.focused and clear.shown)
+    AT.BrowseQuestHUD(nil)
+    assert(search.shown and search:GetText()=="dusk" and find("Search Results"))
+    clear.scripts.OnClick(clear)
+    assert(not search.shown and toggle.shown and not clear.shown and not find("Search Results"))
+    toggle.scripts.OnClick(toggle)
+    search:SetText("d"); search:SetText("")
+    assert(not search.shown and toggle.shown and not clear.shown and not search.focused)
+    toggle.scripts.OnClick(toggle)
+    GetMouseFoci=function() return {} end
+    watch.scripts.OnEvent(watch,"GLOBAL_MOUSE_DOWN","LeftButton")
+    assert(not search.focused and not search.shown and toggle.shown,"click-away collapses only empty search")
+    GetMouseFoci=nil
+    print("PASS search click-away in game world and list, inside/clear child, refocus, text preservation and no-query collapse")
+    toggle.scripts.OnClick(toggle)
+    search:SetText("dUsK")
+    assert(find("Search Results") and find("Only in Duskwood"))
+    local dusk=assert(find("-  Duskwood"))
+    assert(tonumber(dusk.total.text)>=2,"search uses matching area for cross-zone quests")
+    dusk.scripts.OnClick(dusk)
+    assert(find("+  Duskwood") and not find("Only in Duskwood"))
+    AT.RefreshQuestHUD()
+    assert(find("+  Duskwood") and not find("A flight to Duskwood"),"collapse persists through refresh")
+    dusk.scripts.OnClick(dusk)
+    assert(find("-  Duskwood") and find("Only in Duskwood"))
+    search:SetText("duskwood ONLY")
+    assert(find("Only in Duskwood") and not find("A flight to Duskwood"))
+    search:SetText("Unknown phrase that is not held")
+    assert(find("No matching quests."))
+    search.scripts.OnEscapePressed(search)
+    assert(not find("Search Results") and not find("Only in Duskwood"))
+    assert(C_SuperTrack.GetSuperTrackedQuestID()==nav)
+    print("PASS live whole-log search: partial words, case, tokens, remote quests, empty state, Escape and no tracking changes")
+end
+
+AT.db.questHUDEnabled=true
+for i=1,18 do
+    entries[#entries+1]={questID=100+i,title="Overflow quest "..i}
+    dest[100+i]=1
+    entries[#entries+1]={questID=200+i,title="Remote quest "..i}
+    dest[200+i]=i+2
+    names[i+2]="Remote zone "..i
+end
+AT.RefreshQuestHUD()
+local qscroll,rscroll,dscroll
+for _,o in ipairs(objs) do
+    if o.kind=="ScrollFrame" then
+        assert(o.template==nil and o.wheel and o.scripts.OnMouseWheel and not o.ScrollBar)
+        if not dscroll then dscroll=o elseif not rscroll then rscroll=o else qscroll=o end
+    end
+end
+assert(qscroll and rscroll)
+local function checkWheel(scroll)
+    scroll.h=95
+    assert(scroll.contentHeight>scroll.h)
+    scroll.scripts.OnMouseWheel(scroll,-1)
+    assert(scroll:GetVerticalScroll()>0)
+    scroll.scripts.OnMouseWheel(scroll,-100)
+    assert(scroll:GetVerticalScroll()==scroll.contentHeight-scroll.h,"can reach the last row")
+    scroll.scripts.OnMouseWheel(scroll,100)
+    assert(scroll:GetVerticalScroll()==0)
+end
+checkWheel(qscroll)
+closed.scripts.OnClick(closed)
+checkWheel(rscroll)
+color.scripts.OnClick(color)
+local menu=find("Zones");menu.scripts.OnClick(menu)
+checkWheel(rscroll)
+qscroll.scripts.OnMouseWheel(qscroll,-100)
+for i=#entries,9,-1 do entries[i]=nil end
+AT.RefreshQuestHUD()
+assert(qscroll:GetVerticalScroll()==math.max(0,qscroll.contentHeight-qscroll.h))
+print("PASS scrollbar-free mousewheel through quest list, zone side drawer and Questie popup; edges and shrink clamp")
+-- Exercise the real tracker/HUD interaction, not a stubbed hide predicate.
+AT.db.autoFocus=false
+AT.db.hideCompleted=true
+AT.char.excludedQuests={}
+local ready,gameComplete={[16]=true},{}
+local nativeWatch={[16]=true,[12]=true,[11]=true}
+local removeCount={}
+C_QuestLog.ReadyForTurnIn=function(q) return ready[q] end
+C_QuestLog.IsComplete=function(q) return gameComplete[q] end
+C_QuestLog.IsOnQuest=function(q)
+    for _,entry in ipairs(entries) do if entry.questID==q then return true end end
+    return false
+end
+C_QuestLog.GetQuestWatchType=function(q) return nativeWatch[q] and 1 end
+C_QuestLog.GetNumQuestWatches=function()
+    local n=0;for _ in pairs(nativeWatch) do n=n+1 end;return n
+end
+C_QuestLog.GetQuestIDForQuestWatchIndex=function(index)
+    local ids={};for q in pairs(nativeWatch) do ids[#ids+1]=q end;table.sort(ids);return ids[index]
+end
+C_QuestLog.RemoveQuestWatch=function(q)
+    nativeWatch[q]=nil; removeCount[q]=(removeCount[q] or 0)+1
+end
+assert(loadfile("AutoTrack/Quests.lua"))("AutoTrack",AT)
+AT.RefreshQuests()
+AT.BrowseQuestHUD(nil)
+AT.RefreshQuestHUD()
+assert(not nativeWatch[16] and removeCount[16]==1,"stock watch filtered by native ReadyForTurnIn")
+assert(not find("Only local POI"),"ready-to-turn-in HUD row hidden even though it remains in quest log")
+assert(find("No NPC metadata") and not nativeWatch[15],"unfinished and unwatched quests still appear")
+ready[12]=true; AT.char.excludedQuests[12]=true
+gameComplete[11]=1
+AT.RefreshQuests()
+watch.scripts.OnEvent(watch,"QUEST_COMPLETE")
+assert(nativeWatch[12] and not find("[26] Acquired in Stranglethorn"),"completion exclusion keeps watch; status still separates rows")
+assert(not nativeWatch[11] and not find("A flight to Duskwood"),"legacy completion signal also hides outgoing quest")
+AT.db.hideCompleted=false;AT.RefreshQuestHUD()
+assert(not find("Only local POI") and not find("A flight to Duskwood"),"status view is independent of native watch suppression")
+status.scripts.OnClick(status)
+assert(find("Completed")==status and find("Only local POI") and find("A flight to Duskwood"))
+assert(find("[26] Acquired in Stranglethorn") and not find("No NPC metadata"))
+status.scripts.OnClick(status)
+print("PASS actual tracking/HUD completion: watch removed, HUD visibility, opt-out/exclusions and legacy completion; queue left")
+-- Mock the Forever stock per-module topology and its post-layout show.
+AT.db.enabled=true
+AT.db.questHUDEnabled=true
+AT.db.questHUDCollapsed=false
+local inCombat,inEdit=false,false
+function InCombatLockdown() return inCombat end
+EditModeManagerFrame={IsEditModeActive=function() return inEdit end}
+local function stock(height,shown)
+    local w={height=height,shown=shown,hooks={},alpha=.78}
+    function w:IsShown() return self.shown end
+    function w:GetAlpha() return self.alpha end
+    function w:SetAlpha(a) self.alpha=a end
+    function w:Hide() assert(not inCombat,"must defer in combat");self.shown=false end
+    function w:Show()
+        assert(not inCombat,"must defer in combat")
+        self.shown=true
+        if self.hooks.OnShow then self.hooks.OnShow() end
+    end
+    function w:GetContentsHeight() return self.height end
+    function w:HookScript(e,f) self.hooks[e]=f end
+    return w
+end
+local scheduled={}
+C_Timer={After=function(_,f) scheduled[#scheduled+1]=f end}
+local function drain()
+    local turns=0
+    while #scheduled>0 and turns<20 do local f=table.remove(scheduled,1);f();turns=turns+1 end
+    assert(#scheduled==0,"avoid native update loops")
+end
+function hooksecurefunc(o,key,fn)
+    local orig=o[key];o[key]=function(...) orig(...); fn(...) end
+end
+QuestObjectiveTracker=stock(140,true)
+ObjectiveTrackerFrame=stock(160,true)
+local achievement=stock(0,false)
+ObjectiveTrackerFrame.modules={QuestObjectiveTracker,achievement}
+function ObjectiveTrackerFrame:Update()
+    if QuestObjectiveTracker.height>0 then
+        QuestObjectiveTracker.shown=true
+        if QuestObjectiveTracker.hooks.OnShow then QuestObjectiveTracker.hooks.OnShow() end
+    end
+    self.shown=true
+    if self.hooks.OnShow then self.hooks.OnShow() end
+end
+local bQuestie=stock(200,true)
+AT.RefreshQuestHUD()
+assert(not ObjectiveTrackerFrame.shown and not QuestObjectiveTracker.shown and bQuestie.shown)
+assert(ObjectiveTrackerFrame:GetAlpha()==0 and QuestObjectiveTracker:GetAlpha()==0 and bQuestie:GetAlpha()==.78)
+ObjectiveTrackerFrame:Update()
+assert(QuestObjectiveTracker:GetAlpha()==0 and ObjectiveTrackerFrame:GetAlpha()==0,"the same layout frame must stay transparent before callbacks")
+QuestObjectiveTracker:SetAlpha(.57)
+assert(QuestObjectiveTracker:GetAlpha()==0,"native fade requests cannot reintroduce a flash")
+drain()
+ObjectiveTrackerFrame:Update();drain()
+assert(not ObjectiveTrackerFrame.shown and not QuestObjectiveTracker.shown)
+achievement.height=40
+ObjectiveTrackerFrame:Update();drain()
+assert(ObjectiveTrackerFrame.shown and not QuestObjectiveTracker.shown and ObjectiveTrackerFrame:GetAlpha()==.78,"other native content keeps its container")
+AT.db.questHUDCollapsed=true;AT.RefreshQuestHUD()
+assert(not QuestObjectiveTracker.shown,"collapsed AT HUD remains active")
+inCombat=true;AT.db.questHUDEnabled=false;AT.RefreshQuestHUD()
+assert(not QuestObjectiveTracker.shown)
+inCombat=false;watch.scripts.OnEvent(watch,"PLAYER_REGEN_ENABLED");drain()
+assert(QuestObjectiveTracker.shown and ObjectiveTrackerFrame.shown and QuestObjectiveTracker:GetAlpha()==.57,"turning HUD off restores only owned native visibility and latest native alpha")
+AT.db.questHUDEnabled=true;inEdit=true;AT.RefreshQuestHUD()
+assert(QuestObjectiveTracker.shown)
+inEdit=false;AT.RefreshQuestHUD()
+assert(not QuestObjectiveTracker.shown)
+AT.db.questHUDEnabled=false;QuestObjectiveTracker.height=0;AT.RefreshQuestHUD()
+assert(not QuestObjectiveTracker.shown,"do not force display of obsolete stock modules")
+print("PASS native quest HUD hide/restore: quest-only plus other objectives, relayout, collapse/combat/edit mode, no foreign changes")
+
+-- Repeated normal HUD Ctrl-clicks enqueue/dequeue three times while native
+-- layout shows the stock frame immediately (and before timer callbacks).
+AT.db.questHUDEnabled=true
+AT.db.questHUDCollapsed=false
+AT.db.hideCompleted=false
+QuestObjectiveTracker.height=140
+AT.RefreshQuestHUD()
+local base=AT.ToggleQuestTrackingOrder
+AT.ToggleQuestTrackingOrder=function(q)
+    local ok,reason=base(q)
+    ObjectiveTrackerFrame:Update()
+    assert(QuestObjectiveTracker:GetAlpha()==0,"native update triggered by Ctrl-click must not flash")
+    return ok,reason
+end
+for i=1,6 do
+    inCombat=i==3 or i==4
+    local click=find("No NPC metadata")
+    assert(click and click.qid==15)
+    click.titleHit.scripts.OnClick(click.titleHit,"LeftButton")
+    assert(AT.GetQuestOrderPosition(15)==(i%2==1 and 1 or nil), "real tracking order should alternate correctly")
+    assert(QuestObjectiveTracker:GetAlpha()==0 and ObjectiveTrackerFrame:GetAlpha()==.78)
+    if inCombat then
+        QuestObjectiveTracker:SetAlpha(1)
+        assert(QuestObjectiveTracker:GetAlpha()==0,"native alpha update during combat must not flash")
+    end
+    drain()
+end
+print("PASS repeated Ctrl-click tracking order, same-frame suppression before timers, combat alpha and unrelated wrapper visibility")
+AT.db.questHUDCollapsed=true;AT.RefreshQuestHUD()
+assert(find("Rank Quest  +"),"the closed tab must say Rank Quest")
+local src=assert(io.open("AutoTrack/Options.lua")):read("*all")
+assert(src:find("Enable Rank Quest",1,true) and not src:find("Enable Quest HUD",1,true))
+assert(AT.db.questHUDEnabled,"do not rename or reset saved variables")
+print("PASS Rank Quest labels in both layouts, collapsed tab and existing setting preservation")
+-- Progress and area highlights use real state, safe evidence, and ticker movement.
+AT.db.questHUDCollapsed=false
+AT.db.hideCompleted=false
+ready[15]=nil;gameComplete[11]=nil
+local distances={[15]=100,[11]=10000}; local task={}
+C_QuestLog.GetDistanceSqToQuest=function(q)
+    local v=distances[q]; return v and v*v or nil,v and true or nil
+end
+GetTaskInfo=function(q) return task[q] end
+local count=2
+C_QuestLog.GetQuestObjectives=function(q)
+    if q==15 then return {{text="Aged Troll Tooth: "..count.."/5",numFulfilled=count,numRequired=5,finished=false}} end
+    if q==11 then return {{text="Defias slain: 1/5",numFulfilled=1,numRequired=5,finished=false}} end
+end
+local ordering=AT.GetQuestOrderPosition(15)
+AT.db.questHUDEnabled=false;AT.RefreshQuestHUD()
+AT.db.questHUDEnabled=true;AT.RefreshQuestHUD()
+local area,progress=AT.GetRankQuestHighlight(15)
+assert(area=="near" and not progress,"initial objective read is not a progress update")
+assert(find("No NPC metadata").detail.text=="Near an objective")
+assert(not AT.GetRankQuestHighlight(11))
+task[11]=true;areaTick()
+assert(AT.GetRankQuestHighlight(11)=="inside" and find("A flight to Duskwood").detail.text=="In quest area")
+count=3; AT.RefreshQuestHUD()
+assert(select(2,AT.GetRankQuestHighlight(15)) and find("No NPC metadata").detail.text:match("Progress updated"))
+distances[15]=200;areaTick()
+assert(select(2,AT.GetRankQuestHighlight(15)),"nearby hysteresis preserves progress just beyond entry")
+distances[15]=nil;areaTick()
+assert(select(2,AT.GetRankQuestHighlight(15)),"brief unreadable location does not clear progress")
+distances[15]=240;areaTick()
+assert(not AT.GetRankQuestHighlight(15) and not select(2,AT.GetRankQuestHighlight(15)),"known departure clears highlight")
+distances[15]=110;areaTick()
+assert(AT.GetRankQuestHighlight(15)=="near" and not select(2,AT.GetRankQuestHighlight(15)),"re-entry restores area but not old progress")
+ready[15]=true;AT.RefreshQuestHUD()
+assert(not AT.GetRankQuestHighlight(15) and not find("No NPC metadata"),"objective-complete quest leaves In Progress immediately")
+status.scripts.OnClick(status)
+assert(find("No NPC metadata").detail.text=="Ready to turn in")
+status.scripts.OnClick(status)
+assert(AT.GetQuestOrderPosition(15)==ordering,"visual state never changes order")
+distances[11]=nil;task[11]=false;areaTick()
+assert(AT.GetRankQuestHighlight(11)=="inside","one lost native area flag is not confirmed departure")
+areaTick();assert(not AT.GetRankQuestHighlight(11),"repeated negative after native positive clears area")
+distances[11]=0;areaTick();assert(not AT.GetRankQuestHighlight(11),"unknown native zero is not area membership")
+print("PASS quest log highlights: true progress, overlapping verified quests, movement/uncertainty, departure/re-entry and completion; leaves queue untouched")
+-- The real same display controls in both themes must retain the browsed zone
+-- and show untracked objective-complete quests, not turned-in history.
+ready[15]=nil; gameComplete[11]=true; ready[12]=true; ready[16]=true
+AT.db.hideCompleted=true
+AT.ResetTrackingOrder()
+AT.RefreshQuests()
+AT.RefreshQuestHUD()
+local function clickButton(label)
+    local b=find(label);assert(b and b.kind=="Button",label);b.scripts.OnClick(b)
+end
+AT.db.questHUDTheme=1
+AT.db.questHUDFontOffset=5
+hud.w=358
+AT.RefreshQuestHUD()
+entries[3].suggestedGroup=3
+Enum.QuestTag={Group=1}
+C_QuestLog.GetQuestTagInfo=function(q) if q==11 then return {tagID=1} end end
+AT.RefreshQuestHUD()
+local selection=selected
+local watch16=removeCount[16]
+for _,theme in ipairs({"Map","Minimal"}) do
+    assert(find(theme))
+    local filter=find("In Progress")
+    assert(filter.w>=filter.label:GetUnboundedStringWidth()+14 and filter.label.appliedFont[2]==15)
+    assert(find("In Progress") and find("No NPC metadata") and not find("Only local POI"))
+    local areaQuest=find("No NPC metadata")
+    assert(areaQuest.groupIcon.shown and areaQuest.groupIcon.texture:match("_8$") and areaQuest.groupSize==3)
+    AT.ToggleQuestTrackingOrder(15);AT.RefreshQuestHUD()
+    areaQuest=find("No NPC metadata")
+    assert(areaQuest.badge.shown and areaQuest.badge.anchor[2]<areaQuest.groupIcon.anchor[4]
+        and areaQuest.groupIcon.anchor[4]<areaQuest.title.anchor[2],"group icon must not overwrite number")
+    AT.ToggleQuestTrackingOrder(15);AT.RefreshQuestHUD()
+    AT.BrowseQuestHUD(2)
+    assert(find("Only in Duskwood") and not find("Only local POI"))
+    clickButton("In Progress")
+    assert(filter.w>=filter.label:GetUnboundedStringWidth()+14)
+    assert(find("Completed") and find("A flight to Duskwood") and not find("Only local POI"))
+    assert(find("A flight to Duskwood").groupIcon.shown,"explicit group tag survives transition to Completed")
+    assert(not find("[26] Acquired in Stranglethorn").groupIcon.shown,"difficulty is not a group flag")
+    assert(find("2 QUESTS"),"count is scoped to completed rows in the browsed zone")
+    AT.BrowseQuestHUD(nil)
+    assert(find("Only local POI") and find("3 QUESTS"),"native-untracked completed row appears by origin zone")
+    clickButton("Completed")
+    assert(find("No NPC metadata"))
+    clickButton(theme)
+end
+assert(selected==selection and removeCount[16]==watch16)
+-- A turned-in quest is absent from both views.
+for i,entry in ipairs(entries) do if entry.questID==16 then table.remove(entries,i);break end end
+AT.RefreshQuestHUD(); clickButton("In Progress")
+assert(not find("Only local POI") and find("2 QUESTS"))
+print("PASS actual status toggle in Map/Minimal, selected zones/count, preserves spacing/watch selection, completed untracked and turned-in excluded")
+clickButton("Completed")
+gameComplete[11]=nil
+distances[15]=10000
+Questie={IsForever=true,API={isReady=true}}
+local starterDB={}
+function starterDB.GetQuest(q)
+    if q==11 or q==15 then return {Starts={NPC={77}}} end
+end
+function starterDB:GetNPC() return {spawns={[99]={{50,50}}}} end
+local zoneDB={GetUiMapIdByAreaId=function(_,area) return area==99 and 1 or nil end}
+QuestieLoader={ImportModule=function(_,name)
+    if name=="QuestieDB" then return starterDB elseif name=="ZoneDB" then return zoneDB end
+end}
+AT.db.questHUDTheme=1;AT.db.questHUDFontOffset=0
+AT.RefreshQuestHUD()
+for _,theme in ipairs({"Map","Minimal"}) do
+    assert(find(theme))
+    local localQuest=find("No NPC metadata")
+    assert(localQuest and not localQuest.detail.shown and localQuest.detail.text=="")
+    assert(localQuest.objectives[1].anchor[3]==-24,"objectives move up without an empty subtitle")
+    assert(find("A flight to Duskwood").detail.text=="Leads to Duskwood","cross-zone origin grouping and useful detail remain")
+    local remote=AT.BuildQuestHUDModel(2,"Duskwood")
+    assert(remote.zones[1].rows[15].kind=="origin","origin remains assigned to its zone")
+    clickButton(theme)
+end
+print("PASS Starts here removed and row reflowed in Map/Minimal, with original grouping and outgoing labels retained")
+distances[15]=100
+count=count+1
+AT.RefreshQuestHUD()
+assert(find("No NPC metadata").detail.text=="Progress updated","no trailing separator when origin subtitle removed")
+
+ready[12]=nil
+local originalObjectives=C_QuestLog.GetQuestObjectives
+C_QuestLog.GetQuestObjectives=function(q)
+    if q==12 then return {{text="Test objective: 1/2",numFulfilled=1,numRequired=2,finished=false}} end
+    return originalObjectives(q)
+end
+dest[12]=1
+AT.RefreshQuestHUD()
+for _,theme in ipairs({"Map","Minimal"}) do
+    assert(find(theme))
+    local localQuest=find("[26] Acquired in Stranglethorn")
+    assert(localQuest and not localQuest.detail.shown and localQuest.detail.text=="")
+    assert(localQuest.objectives[1].anchor[3]==-24,"recorded origin no longer adds an empty row")
+    local record=AT.BuildQuestHUDModel(2,"Duskwood")
+    assert(record.zones[1].rows[12].kind=="recorded","hide a label without losing recorded origin")
+    clickButton(theme)
+end
+dest[12]=2;AT.RefreshQuestHUD()
+assert(find("[26] Acquired in Stranglethorn").detail.text=="Leads to Duskwood","recorded origins still show relevant destination")
+print("PASS Accepted here removed with no blank line in Map/Minimal; recorded origins and departure text retained")
+
+-- Circle is a separate click target. Actual nav selection sticks over queue
+-- head without mutating queue numbering; plain title opens the map only.
+AT.ResetTrackingOrder()
+AT.db.questHUDEnabled=true;AT.db.hideCompleted=true
+gameComplete[11]=nil; ready[15]=nil;ready[12]=nil
+AT.char.excludedQuests={}
+local refreshedRoute
+AT.RefreshQuestRoute=function() refreshedRoute=AT.GetQuestNavigationID() end
+C_QuestLog.AddQuestWatch=function() return false end -- saturated native tracker
+assert(AT.ToggleQuestTrackingOrder(11))
+assert(AT.GetQuestNavigationID()==11 and AT.GetQuestOrderPosition(11)==1)
+AT.db.questHUDTheme=1
+for _,theme in ipairs({"Map","Minimal"}) do
+    AT.RefreshQuestHUD()
+    local qrow=find("No NPC metadata");assert(qrow and qrow.circle.available)
+    local priorOpen=opened
+    qrow.circle.scripts.OnClick(qrow.circle)
+    drain()
+    qrow=find("No NPC metadata")
+    local active,source=AT.GetQuestNavigationID()
+    assert(active==15 and source=="hud" and refreshedRoute==15 and qrow.circle.dot.shown)
+    assert(opened==priorOpen and AT.GetQuestOrderPosition(11)==1 and not AT.GetQuestOrderPosition(15))
+    AT.RefreshQuests();assert(AT.GetQuestNavigationID()==15)
+    ctrl=false
+    local queueRow=find("A flight to Duskwood")
+    queueRow.titleHit.scripts.OnClick(queueRow.titleHit,"LeftButton")
+    assert(opened==11 and AT.GetQuestNavigationID()==15 and not queueRow.circle.dot.shown)
+    assert(queueRow.circle.anchor[4]<queueRow.badge.anchor[2] and queueRow.badge.anchor[2]<queueRow.title.anchor[2])
+    ctrl=true;qrow.titleHit.scripts.OnClick(qrow.titleHit,"LeftButton");drain()
+    assert(AT.GetQuestOrderPosition(15)==2 and AT.GetQuestNavigationID()==15)
+    qrow=find("No NPC metadata");qrow.titleHit.scripts.OnClick(qrow.titleHit,"LeftButton");drain()
+    assert(not AT.GetQuestOrderPosition(15))
+    qrow=find("No NPC metadata");qrow.circle.scripts.OnClick(qrow.circle);drain()
+    assert(AT.GetQuestNavigationID()==11)
+    clickButton(theme)
+end
+local native=C_QuestLog.GetQuestsOnMap
+local showFinisher=true
+C_QuestLog.GetQuestsOnMap=function(m)
+    local rows=native(m) or {}
+    if m==1 then
+        rows[#rows+1]={questID=15,x=.12,y=.2,isQuestStart=true,inProgress=false}
+        rows[#rows+1]={questID=15,x=.32,y=.3,isQuestStart=false,inProgress=true}
+        if showFinisher then rows[#rows+1]={questID=15,x=.8,y=.6,isQuestStart=false,inProgress=false} end
+    end
+    return rows
+end
+local prevDest=C_QuestLog.GetNextWaypoint
+C_QuestLog.GetNextWaypoint=function(q) if q==15 then return 1,.32,.30 end return prevDest(q) end
+local qrow=find("No NPC metadata");qrow.circle.scripts.OnClick(qrow.circle);drain()
+ready[15]=true;AT.RefreshQuests();AT.RefreshQuestHUD()
+assert(AT.GetQuestHUDManualFocus()==15 and AT.GetQuestNavigationID()==15,"explicit pin persists across objective completion")
+local q,m,x,y=AT.GetFocusedQuestRoutePoint()
+assert(q==15 and m==1 and x==.8 and y==.6,"finished native POI beats stale objective waypoint and starter")
+local _,pins=AT.GetFocusedQuestRouteTargets(1);assert(#pins==1 and pins[1].x==.8)
+-- The Completed view resolves destinations without selecting the quest.
+do
+    local savedObjectives=C_QuestLog.GetQuestObjectives
+    C_QuestLog.GetQuestObjectives=function(q)
+        if q==15 then return {{text="Old finished checklist",finished=true}} end
+        return savedObjectives(q)
+    end
+    clickButton("In Progress")
+    qrow=find("No NPC metadata");qrow.circle.scripts.OnClick(qrow.circle);drain()
+    local previousNavigation=AT.GetQuestNavigationID()
+    for _,theme in ipairs({"Map","Minimal"}) do
+        local row=find("No NPC metadata")
+        assert(row and row.detail.text=="Ready to turn in", "plain ready status")
+        assert(row.objectives[1].shown and row.objectives[1].text:find("80.0, 60.0",1,true), "show native map coordinates even when not focused")
+        for _,line in ipairs(row.objectives) do
+            assert(not line.shown or not line.text:find("Old finished checklist",1,true))
+        end
+        assert(AT.GetQuestNavigationID()==previousNavigation and not AT.GetQuestHUDManualFocus())
+        clickButton(theme)
+    end
+    showFinisher=false;AT.RefreshQuestHUD()
+    local row=find("No NPC metadata")
+    assert(row.detail.text=="Ready to turn in" and (not row.objectives[1] or not row.objectives[1].shown),"missing data must not retain old coordinates or reuse objective coordinates")
+    showFinisher=true;AT.RefreshQuestHUD()
+    qrow=find("No NPC metadata");qrow.circle.scripts.OnClick(qrow.circle);drain()
+    clickButton("Completed")
+    C_QuestLog.GetQuestObjectives=savedObjectives
+    print("PASS completed view in both themes: no old checklist, uses exact native coordinates without altering tracking, and clears stale data")
+end
+showFinisher=false
+local _,unknown=AT.GetFocusedQuestRoutePoint();assert(not unknown,"without a known finisher do not reuse objective")
+local finisher={NPC={12345}}
+local modules={
+    QuestieDB={GetQuest=function(qid) if qid==15 then return {Finisher=finisher} end end},
+    DistanceUtils={GetNearestFinisherOrStarter=function(f) assert(f==finisher);return {76,58},101,"Finishing NPC" end},
+    ZoneDB={GetUiMapIdByAreaId=function(_,area) assert(area==101);return 1 end},
+}
+local oldQuestie,oldLoader=Questie,QuestieLoader
+Questie={IsForever=true,API={isReady=true}}
+QuestieLoader={ImportModule=function(_,key) return modules[key] end}
+local finisherMap,tx,ty,name=AT.GetQuestTurnInPoint(15)
+assert(finisherMap==1 and tx==.76 and ty==.58 and name=="Finishing NPC","confirmed Questie finisher fallback")
+do
+    clickButton("In Progress")
+    local savedMacroBuilder=AT.GetRankQuestNPCMacro
+    AT.GetRankQuestNPCMacro=function(n) return n=="Finishing NPC" and "native macro" end
+    AT.RefreshQuestHUD()
+    local named=find("No NPC metadata")
+    assert(named.objectives[1].shown and named.objectives[1].text=="Stranglethorn Vale  |  76.0, 58.0"
+        and named.objectives[2].shown and named.objectives[2].text=="Finishing NPC","area and coords above NPC name")
+    local lastOpened=opened
+    assert(named.turnInLabel==named.npcHit and named.turnInName=="Finishing NPC","secure binding uses a button, not a text region")
+    assert(named.npcHit.shown and named.npcHit.parent==named and named.npcHit.anchor[2]==named)
+    assert(named.titleHit.anchor[2]==named and named.npcHit.anchor[5]<named.titleHit.anchor[5])
+    named.npcHit.scripts.OnClick(named.npcHit,"LeftButton")
+    named.scripts.OnClick(named,"LeftButton")
+    assert(opened==lastOpened,"neither NPC nor row background may open map")
+    ctrl=false
+    named.titleHit.scripts.OnClick(named.titleHit,"LeftButton")
+    assert(opened==15,"title still opens quest")
+    opened=lastOpened
+    showFinisher=true;AT.RefreshQuestHUD()
+    named=find("No NPC metadata")
+    assert(not named.objectives[2].shown,"never attach a name to a different destination")
+    showFinisher=false
+    clickButton("Completed")
+    AT.GetRankQuestNPCMacro=savedMacroBuilder
+    print("PASS named finisher uses dedicated click hitbox and quest title still opens map")
+end
+Questie,QuestieLoader=oldQuestie,oldLoader
+showFinisher=true
+clickButton("In Progress")
+for _,theme in ipairs({"Map","Minimal"}) do
+    qrow=find("No NPC metadata");assert(qrow.circle.available and qrow.circle.dot.shown)
+    qrow.circle.scripts.OnClick(qrow.circle);drain()
+    assert(AT.GetQuestNavigationID()==11)
+    qrow=find("No NPC metadata");qrow.circle.scripts.OnClick(qrow.circle);drain()
+    assert(AT.GetQuestNavigationID()==15 and AT.IsQuestTurnInNavigation(15))
+    clickButton(theme)
+end
+local questEngineFrame
+local originalQuestTicker=C_Timer.NewTicker
+C_Timer.NewTicker=function() end
+AT.InitQuests()
+C_Timer.NewTicker=originalQuestTicker
+for i=#objs,1,-1 do if objs[i].scripts.OnEvent then questEngineFrame=objs[i];break end end
+questEngineFrame.scripts.OnEvent(questEngineFrame,"QUEST_TURNED_IN",15);drain()
+assert(not AT.GetQuestHUDManualFocus() and AT.GetQuestNavigationID()==11,"turn-in event unpins, returns to existing queue")
+
+-- A Blizzard-focused turn-in can forward to the already loaded Quest POI map.
+local savedOrder,savedSelected=AT.char.trackingOrder,selected
+local savedOnQuest=C_QuestLog.IsOnQuest
+local savedPOIMap=C_QuestLog.GetMapForQuestPOIs
+AT.char.trackingOrder={}
+selected=13;ready[13]=true
+C_QuestLog.IsOnQuest=function(q) if q==13 then return true end return savedOnQuest(q) end
+C_QuestLog.GetMapForQuestPOIs=function() return 2 end
+C_QuestLog.GetNextWaypoint=function(q) if q==13 then return 1,.3,.3 end return prevDest(q) end
+C_QuestLog.GetQuestsOnMap=function(m)
+    if m==2 then return {{questID=13,x=.45,y=.55,isQuestStart=false,inProgress=false}} end
+    return native(m)
+end
+local nativeQ,source=AT.GetQuestNavigationID()
+assert(nativeQ==13 and source=="turn-in" and AT.IsQuestTurnInNavigation(13))
+local nativeID,turnMap,turnX,turnY=AT.GetFocusedQuestRoutePoint()
+assert(nativeID==13 and turnMap==2 and turnX==.45 and turnY==.55,
+    "stale objective hint must not block the turn-in on the POI map")
+AT.char.trackingOrder,selected=savedOrder,savedSelected
+ready[13]=nil
+C_QuestLog.IsOnQuest=savedOnQuest
+C_QuestLog.GetMapForQuestPOIs=savedPOIMap
+print("PASS stock-focused ready quest resolves exact turn-in on the loaded POI map")
+C_QuestLog.GetQuestsOnMap=native;C_QuestLog.GetNextWaypoint=prevDest
+print("PASS sticky manual completed tracking both themes, finished native POI, Questie finisher, no guessed location, queue preserved, turn-in clears")
+clickButton("Completed")
+ready[15]=nil
+local baseMap=C_Map.GetMapInfo
+C_Map.GetMapInfo=function(i)
+    if i==1 or i==2 then local z=baseMap(i);z.parentMapID=999;return z end
+    if i==999 then return {mapID=999,mapType=1,name="World"} end
+    if i==500 then return {mapID=500,mapType=4,name="Deadmines",parentMapID=1} end
+    if i==501 then return {mapID=501,mapType=4,name="West Wing",parentMapID=500} end
+    if i==510 then return {mapID=510,mapType=4,name="Stockade",parentMapID=1} end
+    if i==520 then return {mapID=520,mapType=4,name="Raid Keep",parentMapID=2} end
+    if i==530 then return {mapID=530,mapType=4,name="Empty Dungeon",parentMapID=1} end
+    return baseMap(i)
+end
+C_Map.GetMapChildrenInfo=function(root,t,deep)
+    assert(root==999 and t==4 and deep)
+    local children={}
+    for _,i in ipairs({500,501,510,520,530}) do children[#children+1]=C_Map.GetMapInfo(i) end
+    return children
+end
+Enum.QuestTag.Raid=62;Enum.QuestTag.Dungeon=81
+C_QuestLog.GetQuestTagInfo=function(q)
+    if q==306 then return {tagID=62} end
+    if q==301 or q==302 or q==307 then return {tagID=81} end
+end
+entries[#entries+1]={isHeader=true,title="Deadmines"}
+entries[#entries+1]={questID=301,title="Quest categorized under dungeon"}
+dest[301]=1 -- turn-in or destination out of the instance
+entries[#entries+1]={isHeader=true,title="Travel"}
+entries[#entries+1]={questID=302,title="Quest inside dungeon subfloor"}
+dest[302]=501;ready[302]=true
+entries[#entries+1]={questID=303,title="Quest in the Stockade"}
+dest[303]=510
+entries[#entries+1]={questID=305,title="Outdoor elite group",suggestedGroup=5}
+dest[305]=1
+entries[#entries+1]={questID=306,title="Raid quest"}
+dest[306]=520
+entries[#entries+1]={questID=307,title="Dungeon with no known name"}
+dest[307]=1
+AT.RefreshQuestHUD()
+local model=AT.BuildQuestHUDModel(1,"Stranglethorn Vale")
+assert(model.dungeons.Deadmines.rows[301] and model.dungeons.Deadmines.rows[302])
+assert(model.dungeons.Stockade.rows[303] and not model.dungeons["Raid Keep"] and not model.dungeons["Empty Dungeon"])
+assert(not model.dungeons.Deadmines.rows[305] and not model.dungeons.Deadmines.rows[307])
+local prevNav=AT.GetQuestNavigationID();local priorOpening=opened
+for _,style in ipairs({"Map","Minimal"}) do
+    assert(find(style))
+    local dungeonMenu=find("Dungeons");local zoneButton=find("Zones")
+    assert(dungeonMenu.anchor[2]==zoneButton and dungeonMenu.anchor[3]=="LEFT")
+    local oldWidth,oldFont=hud:GetWidth(),AT.db.questHUDFontOffset
+    hud:SetWidth(358);AT.db.questHUDFontOffset=5;AT.RefreshQuestHUD()
+    assert(plus.anchor[1]=="RIGHT" and plus.anchor[2]==dungeonMenu and plus.anchor[3]=="LEFT" and plus.anchor[4]<0 and plus.anchor[5]==0)
+    assert(minus.anchor[1]=="RIGHT" and minus.anchor[2]==plus and minus.anchor[3]=="LEFT" and minus.anchor[4]<0 and minus.anchor[5]==0)
+    assert(dungeonMenu.anchor[1]=="RIGHT" and dungeonMenu.anchor[4]<0 and dungeonMenu.anchor[5]==0 and zoneButton.anchor[5]==-35)
+    for _,b in ipairs({minus,plus,dungeonMenu,zoneButton}) do
+        assert(b:GetFrameLevel()>2 and b.label:GetUnboundedStringWidth()<b:GetWidth())
+    end
+    assert(358-13-zoneButton.w-4-dungeonMenu.w-5-plus.w-4-minus.w>90,"count area stays clear")
+    minus.scripts.OnClick(minus);assert(AT.db.questHUDFontOffset==4)
+    plus.scripts.OnClick(plus);assert(AT.db.questHUDFontOffset==5)
+    hud:SetWidth(oldWidth);AT.db.questHUDFontOffset=oldFont;AT.RefreshQuestHUD()
+    clickButton("Dungeons")
+    local menu=find("Deadmines");assert(menu and menu.kind=="Button" and find("Stockade"))
+    assert(not find("Empty Dungeon") and not find("Raid Keep") and not find("West Wing"))
+    menu.scripts.OnClick(menu)
+    assert(find("Quest categorized under dungeon") and not find("Quest inside dungeon subfloor") and not find("Outdoor elite group"))
+    clickButton("In Progress")
+    assert(find("Quest inside dungeon subfloor") and not find("Quest categorized under dungeon"))
+    clickButton("Dungeons")
+    assert(not find("All zones"))
+    clickButton("All Dungeons")
+    assert(find("All Dungeons") and not menu.parent.parent.parent.shown and find("Quest inside dungeon subfloor"))
+    local branch=assert(find("-  Deadmines"));assert(branch.total.text=="1")
+    branch.scripts.OnClick(branch)
+    assert(find("+  Deadmines") and not find("Quest inside dungeon subfloor"))
+    branch.scripts.OnClick(branch)
+    assert(find("-  Deadmines") and find("Quest inside dungeon subfloor"))
+    assert(not find("Quest categorized under dungeon") and not find("Outdoor elite group"))
+    clickButton("Completed")
+    assert(find("Quest categorized under dungeon") and find("Quest in the Stockade") and not find("Outdoor elite group"))
+    local stockReady=ready[303]
+    ready[303]=true;AT.RefreshQuestHUD()
+    clickButton("Dungeons");clickButton("Stockade")
+    assert(find("Completed") and find("Quest in the Stockade") and not find("Quest inside dungeon subfloor"))
+    clickButton("Completed");AT.RefreshQuestHUD()
+    assert(find("In Progress") and not find("Quest in the Stockade"),"manual status remains even on refresh")
+    clickButton("Dungeons");clickButton("Deadmines")
+    assert(find("In Progress") and find("Quest categorized under dungeon"),"mixed dungeon stays in progress")
+    ready[303]=stockReady;AT.RefreshQuestHUD()
+    AT.BrowseQuestHUD(nil)
+    assert(find("Outdoor elite group"))
+    clickButton(style)
+end
+assert(AT.GetQuestNavigationID()==prevNav and opened==priorOpening,"filter only changes displayed rows")
+print("PASS both dungeon dropdowns: header and nested floor grouping, exact raid/group exclusions, held instances only, automatic status and All Dungeons")
+local savedPOI=C_QuestLog.GetQuestsOnMap
+entries[#entries+1]={questID=309,title="Dungeon POI without waypoint"}
+C_QuestLog.GetQuestsOnMap=function(query)
+    if query==500 then return {{questID=309,x=.4,y=.45}} end
+    return savedPOI(query)
+end
+map=500; IsInInstance=function() return true,"party" end
+assert(AT.BuildQuestHUDModel(1,"Stranglethorn Vale").dungeons.Deadmines.rows[309])
+IsInInstance=function() return true,"raid" end
+assert(not AT.BuildQuestHUDModel(1,"Stranglethorn Vale").dungeons.Deadmines.rows[309])
+print("PASS current instance quest POI classification does not treat raid position as dungeon")
+
+do
+    local baselineMap,baselineInstance,baselineInfo=map,IsInInstance,GetInstanceInfo
+    local function checkDungeon()
+        assert(find("Deadmines") and find("Quest categorized under dungeon") and find("Dungeon POI without waypoint"))
+        assert(not find("Quest in the Stockade") and not find("Outdoor elite group"))
+    end
+    for _,style in ipairs({"Map","Minimal"}) do
+        IsInInstance=function() return true,"party" end
+        map=500
+        AT.BrowseQuestHUD(nil);AT.RefreshQuestHUD()
+        checkDungeon()
+        clickButton("In Progress")
+        assert(find("Quest inside dungeon subfloor") and not find("Quest categorized under dungeon"))
+        clickButton("Completed")
+        map=501;AT.RefreshQuestHUD();checkDungeon()
+        local zonesButton=find("Zones")
+        local all=find("ALL ZONES")
+        if not all.parent.shown then zonesButton.scripts.OnClick(zonesButton) end
+        clickButton("ALL ZONES")
+        assert(find("All Zones") and find("Outdoor elite group") and find("Quest in the Stockade"))
+    local zoneBranch=assert(find("-  Stranglethorn Vale"))
+    zoneBranch.scripts.OnClick(zoneBranch)
+    assert(find("+  Stranglethorn Vale") and not find("Outdoor elite group"))
+    zoneBranch.scripts.OnClick(zoneBranch)
+    assert(find("-  Stranglethorn Vale") and find("Outdoor elite group"))
+        IsInInstance=function() return false,"none" end
+        map=1;AT.RefreshQuestHUD()
+        assert(find("All Zones"))
+        local here=find("CURRENT ZONE")
+        if not here.parent.shown then zonesButton.scripts.OnClick(zonesButton) end
+        clickButton("CURRENT ZONE")
+        assert(find("Stranglethorn Vale") and find("Outdoor elite group"))
+        clickButton(style)
+    end
+    map=1
+    IsInInstance=function() return true,"party" end
+    GetInstanceInfo=function() return "Deadmines" end
+    AT.RefreshQuestHUD()
+    assert(find("Quest categorized under dungeon") and not find("Outdoor elite group"),"exact instance name works before floor API")
+    GetInstanceInfo=function() return "No matching dungeon" end
+    AT.RefreshQuestHUD()
+    assert(find("No quests in progress for this dungeon.") and not find("Outdoor elite group"),"never fall through to outdoor quests")
+    map,IsInInstance,GetInstanceInfo=baselineMap,baselineInstance,baselineInfo
+    AT.RefreshQuestHUD()
+    print("PASS Current Zone tracks exact instanced dungeon and nested floors in both themes, keeps status and All Zones independent, and never leaks outdoor quests")
+end
+
+
+-- Reproduce fresh account: no loaded Questie, current map/quest log arrives
+-- after first render, native headers hide two held quests from visible rows.
+Questie=nil;QuestieLoader=nil;AT.char.zoneQuestOrigins={}
+IsInInstance=function() return false,"none" end
+AT.db.questHUDTheme=1;AT.db.questHUDEnabled=false;AT.RefreshQuestHUD()
+local sections={
+    {name="Elwynn Forest",key=100,collapsed=true,quests={{questID=5010,title="Forest hidden quest"}}},
+    {name="Hillsbrad Foothills",key=200,collapsed=true,quests={{questID=5030,title="Hillsbrad hidden quest"}}},
+    {name="Trade Skills",key=300,collapsed=false,quests={{questID=5020,title="Unknown held quest"}}}
+}
+local nativeReady=false
+local function getVisible()
+    local rows={}
+    if not nativeReady then return rows end
+    for _,sect in ipairs(sections) do
+        rows[#rows+1]={title=sect.name,isHeader=true,headerSortKey=sect.key,isCollapsed=sect.collapsed,questLogIndex=#rows+1,sect=sect}
+        if not sect.collapsed then for _,q in ipairs(sect.quests) do rows[#rows+1]=q end end
+    end
+    return rows
+end
+C_QuestLog.GetNumQuestLogEntries=function() return #getVisible(),nativeReady and 3 or 0 end
+C_QuestLog.GetInfo=function(n) return getVisible()[n] end
+C_QuestLog.IsOnQuest=function(q) return nativeReady and (q==5010 or q==5020 or q==5030) end
+C_QuestLog.GetNextWaypoint=function() end
+C_QuestLog.GetQuestsOnMap=function()return {} end
+ready[5030]=true
+local mapInfo=C_Map.GetMapInfo
+C_Map.GetMapInfo=function(i)
+    if i==611 then return {mapID=i,mapType=3,name="Elwynn Forest",parentMapID=999} end
+    if i==612 then return {mapID=i,mapType=3,name="Hillsbrad Foothills",parentMapID=999} end
+    return mapInfo(i)
+end
+C_Map.GetMapChildrenInfo=function(root,kind)
+    if kind==3 and root==999 then return {C_Map.GetMapInfo(611),C_Map.GetMapInfo(612)} end
+    return {}
+end
+local expands,collapses=0,0
+QuestMapFrame={ignoreQuestLogUpdate=false}
+function ExpandQuestHeader(i)
+    assert(not inCombat and QuestMapFrame.ignoreQuestLogUpdate)
+    local sect=getVisible()[i].sect;assert(sect.collapsed)
+    sect.collapsed=false;expands=expands+1
+    watch.scripts.OnEvent(watch,"QUEST_LOG_UPDATE")
+end
+function CollapseQuestHeader(i)
+    assert(not inCombat and QuestMapFrame.ignoreQuestLogUpdate)
+    local sect=getVisible()[i].sect;assert(not sect.collapsed)
+    sect.collapsed=true;collapses=collapses+1
+    watch.scripts.OnEvent(watch,"QUEST_LOG_UPDATE")
+end
+map=nil
+AT.db.questHUDEnabled=true;AT.RefreshQuestHUD()
+clickButton("Zones")
+assert(not find("Elwynn Forest") and not find("Forest hidden quest"))
+nativeReady=true;map=1;inCombat=true
+AT.RefreshQuestHUD()
+assert(expands==0 and collapses==0,"defer protected native collapse changes in combat")
+inCombat=false
+watch.scripts.OnEvent(watch,"PLAYER_REGEN_ENABLED");drain()
+assert(expands==2 and collapses==2 and not QuestMapFrame.ignoreQuestLogUpdate)
+assert(sections[1].collapsed and sections[2].collapsed and not sections[3].collapsed)
+local loaded=AT.BuildQuestHUDModel(1,"Stranglethorn Vale")
+assert(loaded.zones[611].rows[5010] and loaded.zones[612].rows[5030] and loaded.zones["at-other"].rows[5020])
+assert(expands==2,"opening/refreshing the Zones picker must reuse complete read and not create a refresh loop")
+for _,theme in ipairs({"Map","Minimal"}) do
+    assert(find(theme))
+    if theme=="Minimal" then clickButton("Zones") end
+    local other=find("Other quests");assert(other and other.kind=="Button");other.scripts.OnClick(other)
+    assert(find("Unknown held quest"))
+    if theme=="Minimal" then clickButton("Zones") end
+    local h=find("Hillsbrad Foothills");assert(h and h.kind=="Button");h.scripts.OnClick(h)
+    assert(find("Completed") and find("Hillsbrad hidden quest"),"completed-only named zone auto switches")
+    clickButton("Completed");AT.RefreshQuestHUD()
+    assert(find("In Progress") and not find("Hillsbrad hidden quest"),"manual status stays through refresh")
+    clickButton(theme)
+end
+assert(expands==2 and collapses==2 and sections[1].collapsed and sections[2].collapsed)
+print("PASS first-load held quests: no Questie or saved origin; collapsed native preserved, combat deferred, delayed map/fresh Zones, both themes and statuses, no mutation loop")
+
+do
+    local expected={
+        [3065]={"Hall of Thanes",{96393,96394,96395,96403,98423}},
+        [2999]={"Ruins of Lordaeron",{92401,92415,92421,92422,95189,95195,95204,95216,95250,97288}},
+        [2998]={"Excavation Site: Wetlands",{95646,95647,95682,95697,95772,95795,95809,98815,98823,98824}},
+        [2959]={"City of Dalaran",{92456,92457,92458,92489,96984,96986,96987,96988}},
+        [2970]={"The Drowned City",{95775,95776,95787,95788,95789,95791,95798,95799,96078,96774,97130}},
+        [3039]={"Krol'dok Stronghold",{94968,94972,94974,94975,94981,94982,94983,94984,94998,96771}},
+        [2994]={"Alcaz Prison",{95262,95263,95309,95454,95483,96332,96334,96335,96337,96376,96377,96381,96772}},
+        [2974]={"Blackmaw Hold",{92065,92066,92067,92069,92070,92343,92344,96246,97173,97198,97327,99187}},
+        [3001]={"Shaper's Terrace",{95790,95924,95925,95926,95928,97049}},
+    }
+    local getInfo,getCount,getOnQuest=C_QuestLog.GetInfo,C_QuestLog.GetNumQuestLogEntries,C_QuestLog.IsOnQuest
+    local getInstance,inInstance,savedMap=GetInstanceInfo,IsInInstance,map
+    local rows={{isHeader=true,title="Stranglethorn Vale"}}
+    local count=0
+    for _,ex in pairs(expected) do
+        for _,qid in ipairs(ex[2]) do
+            count=count+1
+            rows[#rows+1]={questID=qid,title="Audit quest "..qid}
+        end
+    end
+    rows[#rows+1]={questID=95770,title="Locating the Lost City"}
+    rows[#rows+1]={questID=95773,title="Enemies in the Water"}
+    C_QuestLog.GetInfo=function(i) return rows[i] end
+    C_QuestLog.GetNumQuestLogEntries=function() return #rows,#rows-1 end
+    C_QuestLog.IsOnQuest=function() return true end
+    map=1;IsInInstance=function() return false,"none" end
+    local outdoor=AT.BuildQuestHUDModel(1,"Stranglethorn Vale")
+    assert(count==85 and not outdoor.currentDungeon)
+    for instance,ex in pairs(expected) do
+        local name,ids=ex[1],ex[2]
+        local bucket=assert(outdoor.dungeons[name],name)
+        for _,qid in ipairs(ids) do assert(bucket.rows[qid] and bucket.rows[qid].row.id==qid) end
+        local members=0;for _ in pairs(bucket.rows) do members=members+1 end
+        assert(members==#ids)
+        IsInInstance=function() return true,"party" end
+        GetInstanceInfo=function() return "Localized client label","party",1,nil,5,nil,false,instance end
+        local inside=AT.BuildQuestHUDModel(1,"Stranglethorn Vale")
+        local here=assert(inside.currentDungeon)
+        assert(here.name==name and here.rows[ids[1]] and not here.rows[95770] and not here.rows[95773])
+    end
+    assert(AT.ForeverDungeonName(nil,"Drowned City")=="The Drowned City")
+    assert(AT.ForeverDungeonName(nil,"The Shaper's Terrace")=="Shaper's Terrace")
+    IsInInstance=function() return true,"raid" end
+    assert(not AT.BuildQuestHUDModel(1,"Stranglethorn Vale").currentDungeon)
+    IsInInstance=function() return false,"none" end
+    ready[95775]=true
+    AT.RefreshQuestHUD()
+    local search
+    for _,o in ipairs(objs) do if o.kind=="EditBox" then search=o;break end end
+    search:SetText("DROWNED city")
+    assert(find("Audit quest 95775") and find("Audit quest 95776") and not find("Audit quest 96393"))
+    local branch=assert(find("-  The Drowned City"));assert(branch.total.text=="11")
+    branch.scripts.OnClick(branch)
+    assert(find("+  The Drowned City") and not find("Audit quest 95775"))
+    branch.scripts.OnClick(branch)
+    assert(find("Audit quest 95775"))
+    assert(not find("Locating the Lost City"),"outdoor breadcrumb must not inherit the dungeon name")
+    search:SetText("drowned 95775")
+    assert(find("Audit quest 95775") and not find("Audit quest 95776"),"multi-keyword query and completed quest")
+    search.scripts.OnEscapePressed(search)
+    ready[95775]=nil
+    C_QuestLog.GetInfo,C_QuestLog.GetNumQuestLogEntries,C_QuestLog.IsOnQuest=getInfo,getCount,getOnQuest
+    GetInstanceInfo,IsInInstance,map=getInstance,inInstance,savedMap
+    AT.RefreshQuestHUD()
+    print("PASS 85 verified dungeon memberships across all nine Forever launch dungeons, exact instance ID scope, outdoor exclusion, log-wide active/completed search")
+end
+
+-- Forever native party tooltip data is grouped by public GUID, not names
+-- or guessed localized strings; actual required/fulfilled numbers drive status.
+local partyOn,memberCount=true,3
+local namesByUnit={party1="Kara-A",party2="Mira-B",party3="Kara-C"}
+local current={[1]=4,[3]=0}
+local offline={}
+local now=100
+local liveReport=true
+function IsInGroup() return partyOn end
+function IsInRaid() return false end
+function GetNumSubgroupMembers() return memberCount end
+function UnitGUID(u) return (namesByUnit[u] or u=="player") and "unit:"..u end
+function GetUnitName(u) return namesByUnit[u] end
+function UnitIsConnected(u) return not offline[u] end
+function UnitIsVisible(u) return u=="party2" end
+function GetTime() return now end
+C_QuestLog.IsUnitOnQuest=function(u,q) return q==5010 and u~="party2" end
+Enum.TooltipDataLineType={QuestTitle=10,QuestPlayer=11,QuestObjective=12}
+C_TooltipInfo={GetQuestPartyProgress=function(q,omit,ignore)
+    assert(omit==false and ignore==false)
+    if not liveReport or q~=5010 then return end
+    local lines={{type=10,id=q},{type=11,guid="unit:player"},{type=12,leftText="My credit 3/999"},
+        {type=11,guid="unit:party1"},{type=12,leftText="Wolves slain:",rightText="|cffaaaaaa"..current[1].."/7|r"},
+        {type=11,leftText="|cffffffffKara-C|r"},{type=12,leftText="Pelts collected ("..current[3].."/7)"},
+    }
+    if current[3]<7 then lines[#lines+1]={type=12,leftText="Unrelated date 1/2/77"} end
+    lines[#lines+1]={type=11,guid="outsider"}
+    lines[#lines+1]={type=12,leftText="Other",numFulfilled=0,numRequired=99}
+    return {lines=lines}
+end}
+assert(loadfile("AutoTrack/PartyProgress.lua"))("AutoTrack",AT)
+local originalFrame=CreateFrame
+local tooltip
+CreateFrame=function(kind,name,parent,template)
+    local f=originalFrame(kind,name,parent,template)
+    if kind=="GameTooltip" then
+        tooltip=f;f.lines={}
+        function f:SetOwner(o) self.owner=o end
+        function f:ClearLines() self.lines={} end
+        function f:AddLine(t) self.lines[#self.lines+1]=t end
+        function f:SetQuestPartyProgress(q,omit,ignore)
+            assert(q==5010 and omit==false and ignore==false)
+            if not liveReport then return false end
+            self:AddLine("Kara-A stock " .. current[1] .. "/7")
+            self:AddLine("Kara-C stock " .. current[3] .. "/7")
+            return true
+        end
+    end
+    return f
+end
+local tooltipTick
+C_Timer.NewTicker=function(period,fn)
+    assert(period==.55);tooltipTick=fn;return {Cancel=function() tooltipTick=nil end}
+end
+local stillHeld=true
+local oldIsOn=C_QuestLog.IsOnQuest
+C_QuestLog.IsOnQuest=function(q)
+    if q==5010 then return stillHeld end
+    return oldIsOn(q)
+end
+AT.db.questHUDTheme=1;AT.db.questPartyProgress=nil -- default-on semantics
+ready[5010]=true
+AT.BrowseQuestHUD(611)
+AT.RefreshQuestHUD()
+local function hasLine(part)
+    for _,line in ipairs(tooltip.lines) do if line:find(part,1,true) then return true end end
+    return false
+end
+for _,theme in ipairs({"Map","Minimal"}) do
+    local row=find("Forest hidden quest")
+    assert(row and row.detail.text=="Ready to turn in")
+    row.scripts.OnEnter(row)
+    assert(tooltip.shown and hasLine("4/7") and hasLine("0/7") and hasLine("Mira-B: Not on this quest") and not hasLine("99"))
+    current[1]=6;now=now+1;tooltipTick()
+    assert(hasLine("6/7") and not hasLine("4/7"),"hover refresh while pointer remains")
+    row.scripts.OnLeave(row)
+    assert(not tooltip.shown and not tooltipTick)
+    current[1]=4;now=now+1
+    clickButton("In Progress")
+    assert(find("Forest hidden quest"),"personally held objective-complete remains accessible from Completed")
+    clickButton("Completed")
+    clickButton(theme)
+end
+AT.db.questPartyProgress=false;AT.RefreshQuestHUD()
+assert(not find("Forest hidden quest"),"disable clears party retention and normal solo completion wins")
+AT.db.questPartyProgress=true;now=now+1;AT.RefreshQuestHUD()
+assert(find("Forest hidden quest"))
+sections[1].quests={}
+stillHeld=false
+watch.scripts.OnEvent(watch,"QUEST_TURNED_IN",5010);drain()
+local remote=find("Forest hidden quest")
+assert(remote and remote.partyOnly and not remote.circle.available and remote.detail.text:find("Turned in by you",1,true))
+local unchangedNav,lastOpen=AT.GetQuestNavigationID(),opened
+ctrl=false;remote.titleHit.scripts.OnClick(remote.titleHit,"LeftButton")
+assert(AT.GetQuestNavigationID()==unchangedNav and opened==lastOpen)
+remote.scripts.OnEnter(remote)
+assert(hasLine("4/7") and hasLine("3 remaining") and hasLine("0/7"))
+remote.scripts.OnLeave(remote)
+liveReport=false;now=now+1;AT.RefreshQuestHUD()
+remote=find("Forest hidden quest")
+assert(remote and remote.detail.text:find("last reported",1,true))
+remote.scripts.OnEnter(remote)
+assert(hasLine("Current progress unavailable; last reported:") and hasLine("4/7"))
+remote.scripts.OnLeave(remote)
+now=now+46;AT.RefreshQuestHUD()
+assert(not find("Forest hidden quest"),"expire data if native never returns after turn-in")
+print("PASS default-on native party hover, zero vs unavailable/not on quest, exact GUID data/live refresh, local ready+after turn-in retention with limits and no GPS")
+
+local function resetPartyQuest()
+    current[1],current[3]=4,0;liveReport=true
+    stillHeld=true;partyOn=true;memberCount=3;offline={}
+    sections[1].quests={{questID=5010,title="Forest hidden quest"}}
+    watch.scripts.OnEvent(watch,"QUEST_ACCEPTED",5010);drain()
+    assert(find("Forest hidden quest"))
+    stillHeld=false;sections[1].quests={}
+    watch.scripts.OnEvent(watch,"QUEST_TURNED_IN",5010);drain()
+    assert(find("Forest hidden quest").partyOnly)
+    now=now+1
+end
+resetPartyQuest()
+current[1]=7;AT.RefreshQuestHUD();assert(find("Forest hidden quest"),"other party member still needs credit")
+current[3]=7;now=now+1;AT.RefreshQuestHUD();assert(not find("Forest hidden quest"),"all reported members finished")
+resetPartyQuest()
+offline.party1=true;memberCount=2;AT.RefreshQuestHUD()
+assert(not find("Forest hidden quest"),"offline member and a departed member cannot retain a row")
+resetPartyQuest()
+partyOn=false;AT.RefreshQuestHUD()
+assert(not find("Forest hidden quest"),"leaving party clears the transient row")
+print("PASS retained party item clears after last member completes, roster leave/offline and entire party exit")
+local originalInlineObjectives=C_QuestLog.GetQuestObjectives
+C_QuestLog.GetQuestObjectives=function(q)
+    if q==5010 then return {{text="My wolves: 7/7",finished=true}} end
+    return originalInlineObjectives(q)
+end
+local function inlineText(row,part)
+    for _,label in ipairs(row.objectives) do
+        if label.shown and label.text and label.text:find(part,1,true) then return true end
+    end
+    return false
+end
+local person
+for _,thing in ipairs(objs) do if thing.icon and thing.icon.texture and tostring(thing.icon.texture):find("PartyPerson.tga",1,true) then person=thing end end
+assert(person:GetFrameLevel()>2,"icon must receive clicks above transparent title drag region")
+assert(person and person.shown and person.anchor[1]=="RIGHT" and person.anchor[2].child[1].text=="In Progress" and person.anchor[3]=="LEFT")
+partyOn=true;memberCount=3;offline={};liveReport=true
+current[1],current[3]=4,0;now=now+1
+sections[1].quests={{questID=5010,title="Forest hidden quest"}}
+stillHeld=true
+watch.scripts.OnEvent(watch,"QUEST_ACCEPTED",5010);drain()
+hud:SetWidth(358);AT.db.questHUDFontOffset=5;AT.RefreshQuestHUD()
+for _,name in ipairs({"Map","Minimal"}) do
+    local quest=find("Forest hidden quest")
+    assert(quest and quest.scripts.OnEnter)
+    assert(not inlineText(quest,"My wolves") and not inlineText(quest,"remaining"),"inline default is off")
+    local owner=person.parent
+    local title
+    for _,obj in ipairs(objs) do
+        if obj.parent==owner then for _,label in ipairs(obj.child) do if label.text=="Rank Quest" then title=label end end end
+    end
+    assert(title and title.w>=title:GetUnboundedStringWidth() and title.w+13+6+23+4+person.anchor[2].w+person.anchor[2].anchor[2].w+24+8+10<=358)
+    local scrollFrame
+    for _,obj in ipairs(objs) do if obj.kind=="ScrollFrame" and obj.parent==owner and not scrollFrame then scrollFrame=obj end end
+    scrollFrame:SetVerticalScroll(11)
+    person.scripts.OnClick(person)
+    assert(scrollFrame:GetVerticalScroll()==11,"toggling must not reset scroll")
+    assert(inlineText(quest,"Kara-A") and inlineText(quest,"3 remaining - Wolves slain:"))
+    assert(inlineText(quest,"Kara-C") and inlineText(quest,"7 remaining - Pelts collected"))
+    assert(quest.objectives[1].text=="Party objectives" and not inlineText(quest,"Your objectives")
+        and not inlineText(quest,"Unrelated date") and not inlineText(quest,"999"))
+    assert(not inlineText(quest,"Mira-B") and not inlineText(quest,"99"))
+    current[1]=6;current[3]=7;now=now+1;AT.RefreshQuestHUD()
+    assert((inlineText(quest,"Kara-A") and inlineText(quest,"1 remaining")) and not inlineText(quest,"Kara-C") and not inlineText(quest,"3 remaining"))
+    clickButton("In Progress")
+    assert(inlineText(find("Forest hidden quest"),"1 remaining"),"active toggle follows status views")
+    clickButton("Completed")
+    liveReport=false;now=now+1;AT.RefreshQuestHUD()
+    assert(inlineText(find("Forest hidden quest"),"Kara-A (last reported)") and inlineText(find("Forest hidden quest"),"1 remaining"))
+    AT.db.questPartyProgress=false;AT.RefreshQuestHUD()
+    assert(not person.shown and not find("Forest hidden quest"))
+    AT.db.questPartyProgress=true;liveReport=true;current[1],current[3]=4,0;now=now+1;AT.RefreshQuestHUD()
+    quest=find("Forest hidden quest")
+    person.scripts.OnClick(person)
+    assert(not inlineText(quest,"My wolves") and not inlineText(quest,"Kara"))
+    quest.scripts.OnEnter(quest)
+    assert(hasLine("4/7") and hasLine("0/7"),"turning off inline must not disable hover")
+    quest.scripts.OnLeave(quest)
+    clickButton(name)
+end
+print("PASS person toggle both themes, exact remaining and live/stale counts, master, hover, minimum width/+5 font and scroll position")
+
+-- An abandon removal must win over stale native/collapsed rows and party retention.
+do
+    current[1],current[3]=4,0;liveReport=true
+    stillHeld=true;partyOn=true;memberCount=3;offline={}
+    sections[1].quests={{questID=5010,title="Forest hidden quest"}}
+    ready[5010]=false
+    AT.db.questHUDTheme=2
+    watch.scripts.OnEvent(watch,"QUEST_ACCEPTED",5010);drain()
+    clickButton("Zones");clickButton("ALL ZONES")
+    assert(find("Forest hidden quest") and find("All Zones"))
+    local beforeOnQuest=C_QuestLog.IsOnQuest
+    C_QuestLog.IsOnQuest=function(id) if id==11 then return true end return beforeOnQuest(id) end
+    AT.char.trackingOrder={5010,11}
+    assert(AT.ToggleQuestHUDManualFocus(5010))
+    questEngineFrame.scripts.OnEvent(questEngineFrame,"QUEST_REMOVED",5010)
+    watch.scripts.OnEvent(watch,"QUEST_REMOVED",5010);drain()
+    assert(not find("Forest hidden quest"),"ignore stale visible data after confirmed removal")
+    assert(not AT.GetQuestOrderPosition(5010) and AT.GetQuestOrderPosition(11)==1 and not AT.GetQuestHUDManualFocus())
+    stillHeld=false;sections[1].quests={};AT.RefreshQuestHUD()
+    assert(not find("Forest hidden quest"),"party-only retention must not resurrect an abandoned quest")
+    sections[1].quests={{questID=5010,title="Forest hidden quest"}}
+    stillHeld=true
+    watch.scripts.OnEvent(watch,"QUEST_ACCEPTED",5010);drain()
+    assert(find("Forest hidden quest"),"accepting it again restores the row")
+    -- Rank Quest's own confirmation can reconcile an authoritative absent
+    -- response even if a separate quest-removed event has not arrived yet.
+    stillHeld=false
+    AT.RefreshRankQuestAfterAbandon(5010);drain()
+    assert(not find("Forest hidden quest"))
+    print("PASS confirmed abandon removes stale and party-retained rows, clears tracking, stays gone, then reaccept restores it")
+end
