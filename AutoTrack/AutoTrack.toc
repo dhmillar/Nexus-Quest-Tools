@@ -1,0 +1,34 @@
+## Interface: 16001
+## Title: Auto Track
+## Notes: Sticky nearby quest tracking and a reusable named-target macro.
+## Author: Dennis
+## Version: 1.5.33
+## SavedVariables: AutoTrackDB
+## SavedVariablesPerCharacter: AutoTrackCharDB
+## OptionalDeps: Questie, ShortestPathForever, ForeverDungeonJournal
+Core.lua
+Quests.lua
+QuestMenu.lua
+NextMob.lua
+Target.lua
+SmartTarget.lua
+Portrait.lua
+Roads.lua
+Walking.lua
+Route.lua
+WorldRoute.lua
+PartyProgress.lua
+QuestItems.lua
+DungeonCatalog.lua
+QuestHUD.lua
+DungeonPosition.lua
+Options.lua
+
+
+
+
+
+
+
+
+

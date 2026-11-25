@@ -1,0 +1,757 @@
+local _, AT = ...
+local frame, lines, caption, elapsed = nil, nil, nil, 0
+local refreshPeriod, enterAreaYards, leaveAreaYards = 0.18, 35, 52
+local previewYards, renderLimit, offPathYards = 90, 30, 24
+local currentPath, cursor, projected, arrival
+local scopeQuest, scopeTurnIn, scopeMap, positionLost, routeStatus, statusQuest
+local hud, meter, metadata, travelDetail, measure, mapRoute
+local bearing, bearingStatus, distanceSource, selectionSource, drawFailure
+
+local function ordinary(value)
+    return not issecretvalue or not issecretvalue(value)
+end
+
+local function finite(value)
+    return ordinary(value) and type(value) == "number" and value == value
+        and value > -math.huge and value < math.huge
+end
+
+local function frac(x, y)
+    return finite(x) and finite(y) and x >= 0 and x <= 1 and y >= 0 and y <= 1
+end
+
+local function hide()
+    if frame then frame:Hide() end
+    if bearing then bearing:Hide() end
+end
+
+local function rotateEnabled()
+    if C_Minimap and C_Minimap.IsRotateMinimapIgnored then
+        local ok,ignored=pcall(C_Minimap.IsRotateMinimapIgnored)
+        if ok and ordinary(ignored) and ignored==true then return false end
+    end
+    if C_CVar and C_CVar.GetCVarBool then return C_CVar.GetCVarBool("rotateMinimap") end
+    if GetCVarBool then return GetCVarBool("rotateMinimap") end
+    return false
+end
+
+local function data(quest)
+    local maps = C_Map
+    if not (maps and maps.GetBestMapForUnit and maps.GetPlayerMapPosition and maps.GetMapWorldSize
+        ) then return nil,"position" end
+    if not scopeTurnIn and type(GetTaskInfo) == "function" then
+        local ok, inside = pcall(GetTaskInfo, quest)
+        if ok and ordinary(inside) and inside == true then return {insideTaskArea=true} end
+    end
+    if not scopeTurnIn and C_Minimap and C_Minimap.IsInsideQuestBlob then
+        local ok,inside=pcall(C_Minimap.IsInsideQuestBlob,quest)
+        if ok and ordinary(inside) and inside==true then return {insideTaskArea=true} end
+    end
+    local playerMap = maps.GetBestMapForUnit("player")
+    if not finite(playerMap) or playerMap <= 0 then return nil,"position" end
+    if scopeMap and scopeMap ~= playerMap and AT.CancelQuestWalking then AT.CancelQuestWalking() end
+    scopeMap = playerMap
+    -- Both planners accept 2D quest POIs. Without a reliable objective floor,
+    -- avoid drawing outdoor routes through cave walls, dungeons, or floor maps.
+    if IsIndoors and IsIndoors() then return nil,"interior" end
+    local info = maps.GetMapInfo and maps.GetMapInfo(playerMap)
+    if info and type(info.mapType)=="number" then
+        local kinds=Enum and Enum.UIMapType
+        if info.mapType==(kinds and kinds.Dungeon or 4) or info.mapType==(kinds and kinds.Micro or 5) then return nil,"interior" end
+    end
+    local player = maps.GetPlayerMapPosition(playerMap, "player")
+    if not ordinary(player) or not player then return end
+    local px, py = player:GetXY()
+    local w, h = maps.GetMapWorldSize(playerMap)
+    if not (frac(px, py) and (px ~= 0 or py ~= 0) and finite(w) and finite(h) and w > 0 and h > 0) then return end
+    local rotating = rotateEnabled()
+    if not ordinary(rotating) then return end
+    local heading = 0
+    if rotating then
+        heading = GetPlayerFacing and GetPlayerFacing()
+        if not finite(heading) then return end
+    end
+    local origin = {map=playerMap, x=px, y=py}
+    local path, selected, why
+    if AT.GetFocusedQuestWalkingPath then path, selected, why = AT.GetFocusedQuestWalkingPath(quest, origin, w, h) end
+    return {quest=quest, origin=origin, w=w, h=h, cosine=math.cos(heading), sine=math.sin(heading),
+        path=path, selected=selected, reason=why}
+end
+
+local function place(line, x1, y1, x2, y2)
+    line:SetStartPoint("CENTER", frame, x1, y1)
+    line:SetEndPoint("CENTER", frame, x2, y2)
+    local glow=line.autoTrackGlow
+    glow:SetStartPoint("CENTER",frame,x1,y1)
+    glow:SetEndPoint("CENTER",frame,x2,y2)
+end
+
+local function lineFor(i)
+    local line = lines[i]
+    if not line then
+        local glow=frame:CreateLine(nil,"ARTWORK")
+        glow:SetThickness(4)
+        glow:SetColorTexture(.10,.88,.68,.27)
+        line = frame:CreateLine(nil, "OVERLAY")
+        line.autoTrackGlow=glow
+        lines[i] = line
+    end
+    line:SetThickness(1.65)
+    line:SetColorTexture(.22, .90, .78, .80)
+    if line.Show then line:Show(); line.autoTrackGlow:Show() end
+    return line
+end
+
+local function clearLines(first)
+    for i=first,#lines do if lines[i].Hide then lines[i]:Hide(); lines[i].autoTrackGlow:Hide() end end
+end
+
+local function relative(d, x, y)
+    local east, north = (x-d.origin.x)*d.w, (d.origin.y-y)*d.h
+    return east*d.cosine + north*d.sine, -east*d.sine + north*d.cosine
+end
+
+local function projectedPoint(d, i)
+    local cached = projected[i]
+    if cached then return cached.x, cached.y end
+    local pt = d.path.waypoints[i]
+    if not pt then return end
+    local x, y = pt.x, pt.y
+    local map = d.origin.map
+    if pt.map ~= map then
+        local m = C_Map
+        if not (CreateVector2D and m.GetWorldPosFromMapPos and m.GetMapPosFromWorldPos) then return end
+        local world, pos = m.GetWorldPosFromMapPos(pt.map, CreateVector2D(x, y))
+        if not finite(world) or not ordinary(pos) or not pos then return end
+        local dstMap, dst = m.GetMapPosFromWorldPos(world, pos, map)
+        if dstMap ~= map or not ordinary(dst) or not dst then return end
+        x, y = dst:GetXY()
+    end
+    if not finite(x) or not finite(y) then return end
+    projected[i] = {x=x,y=y}
+    return x,y
+end
+
+local function offset(d, i)
+    local x, y = projectedPoint(d, i)
+    if x then return relative(d, x, y) end
+end
+
+local function clip(ax, ay, bx, by, yardRadius)
+    local dx, dy = bx-ax, by-ay
+    local aa = dx*dx + dy*dy
+    if aa <= .01 then return end
+    local bb = 2*(ax*dx + ay*dy)
+    local cc = ax*ax + ay*ay - yardRadius*yardRadius
+    local disc = bb*bb - 4*aa*cc
+    if disc < 0 then return end
+    local root = math.sqrt(disc)
+    local low, high = math.max(0, (-bb-root)/(2*aa)), math.min(1, (-bb+root)/(2*aa))
+    if low >= high then return end
+    return ax+dx*low, ay+dy*low, ax+dx*high, ay+dy*high
+end
+
+local function insideObjectiveArea(d, x, y, distance)
+    if not (finite(x) and finite(y) and finite(distance)) then return false end
+    local same = arrival and arrival.quest == d.quest and arrival.map == d.origin.map
+    if same then
+        local dx, dy = (arrival.x-x)*d.w, (arrival.y-y)*d.h
+        same = dx*dx + dy*dy <= 4
+    end
+    -- An NPC is a point, not a 35-yard objective area.
+    local limit = scopeTurnIn and (same and 12 or 8) or (same and leaveAreaYards or enterAreaYards)
+    if distance > limit then
+        arrival = nil
+        return false
+    end
+    arrival = {quest=d.quest, map=d.origin.map, x=x, y=y}
+    return true
+end
+
+local function remainingWalkingYards(d, candidate, fraction, best, count)
+    local endX, endY = offset(d, count)
+    if not endX or endX*endX+endY*endY > leaveAreaYards*leaveAreaYards then return math.huge end
+    local sum = math.sqrt(best)
+    -- Arrival requires the last section of the actual route to be short.
+    -- Bound work if a road/path loops, or has missing cross-map geometry.
+    local ax, ay = offset(d, candidate)
+    if not ax or count-candidate > 35 then return math.huge end
+    for i=candidate+1,count do
+        local bx, by = offset(d,i)
+        if not bx then return math.huge end
+        local dx, dy = bx-ax, by-ay
+        sum = sum + (i==candidate+1 and (1-fraction) or 1)*math.sqrt(dx*dx+dy*dy)
+        if sum > leaveAreaYards then return math.huge end
+        ax, ay = bx, by
+    end
+    return sum
+end
+local function measureSome(d,count)
+    if not measure then measure={next=count-1,suffix={[count]=0},leg={}} end
+    for _=1,256 do
+        local i=measure.next
+        if i<1 then return end
+        local ax,ay=projectedPoint(d,i)
+        local bx,by=projectedPoint(d,i+1)
+        if ax and bx then
+            local dx,dy=(bx-ax)*d.w,(by-ay)*d.h
+            measure.leg[i]=math.sqrt(dx*dx+dy*dy)
+            if measure.suffix[i+1] then measure.suffix[i]=measure.leg[i]+measure.suffix[i+1] end
+        end
+        measure.next=i-1
+    end
+end
+local function detailedProgress(d,candidate,fraction,best,count)
+    local ax,ay=offset(d,candidate)
+    if not ax then return end
+    local total, toTurn, turn = math.sqrt(best), nil, nil
+    local vx,vy
+    for i=candidate+1,math.min(count,candidate+32) do
+        local bx,by=offset(d,i)
+        if not bx then return {turn=turn,toTurn=toTurn} end
+        local dx,dy=bx-ax,by-ay
+        local len=math.sqrt(dx*dx+dy*dy)
+        if len>3 then
+            if vx and not turn then
+                local dot=vx*dx/len+vy*dy/len
+                if dot<.88 then
+                    local cross=vx*dy/len-vy*dx/len
+                    turn=dot<-.85 and "Turn back" or (cross>0 and "Turn left" or "Turn right")
+                    toTurn=total
+                end
+            end
+            vx,vy=dx/len,dy/len
+        end
+        total=total+(i==candidate+1 and (1-fraction) or 1)*len
+        ax,ay=bx,by
+    end
+    local remain
+    if measure.suffix[candidate+1] and measure.leg[candidate] then
+        remain=math.sqrt(best)+(1-fraction)*measure.leg[candidate]+measure.suffix[candidate+1]
+    elseif count-candidate<=32 then remain=total end
+    return {remain=remain,turn=turn,toTurn=toTurn}
+end
+local function walk(d, radius, yardRadius)
+    if d.path ~= currentPath then currentPath, cursor, projected, measure = d.path, 1, {}, nil end
+    local count = #d.path.waypoints
+    if count < 2 then return 0 end
+    measureSome(d,count)
+    local candidate, fraction, best
+    local begin = math.max(1, cursor - 6)
+    -- Limit lookahead so an intersection can't skip the intervening corners.
+    for i=begin,math.min(cursor+7,count-1) do
+        local ax, ay = offset(d, i)
+        local bx, by = offset(d, i+1)
+        if ax and bx then
+            local dx, dy = bx-ax, by-ay
+            local length = dx*dx + dy*dy
+            local t = length > 0 and math.max(0, math.min(1, -(ax*dx+ay*dy)/length)) or 0
+            local px, py = ax+t*dx, ay+t*dy
+            local d2 = px*px+py*py
+            if not best or d2 < best - .001 or (math.abs(d2-best)<=.001 and math.abs(i-cursor)<math.abs(candidate-cursor)) then
+                candidate, fraction, best = i, t, d2
+            end
+        end
+    end
+    if not candidate then return end
+    if best > offPathYards*offPathYards then
+        if AT.CancelQuestWalking then AT.CancelQuestWalking() end
+        return
+    end
+    cursor = candidate
+    travelDetail = detailedProgress(d,candidate,fraction,best,count)
+    local targetX, targetY
+    if d.selected and d.selected.map == d.origin.map and frac(d.selected.x,d.selected.y) then
+        targetX,targetY = d.selected.x,d.selected.y
+    else
+        targetX,targetY = projectedPoint(d,count)
+    end
+    local remaining = remainingWalkingYards(d,candidate,fraction,best,count)
+    if insideObjectiveArea(d,targetX,targetY,remaining) then return 0 end
+    if not targetX or not targetY or remaining==math.huge then arrival = nil end
+    mapRoute={path=d.path, selected=d.selected, segment=candidate, fraction=fraction, quest=d.quest}
+    local used, scale = 0, radius/yardRadius
+    for i=candidate,math.min(count-1,candidate+renderLimit-1) do
+        local ax, ay = offset(d, i)
+        local bx, by = offset(d, i+1)
+        if not ax or not bx then break end
+        if i==candidate then ax, ay=ax+(bx-ax)*fraction, ay+(by-ay)*fraction end
+        local x1,y1,x2,y2=clip(ax, ay, bx, by, yardRadius)
+        if x1 then
+            used = used + 1
+            place(lineFor(used),x1*scale,y1*scale,x2*scale,y2*scale)
+        end
+    end
+    return used > 0 and used or nil
+end
+
+local statusCopy={
+    provider_missing={"No walking router loaded","Quest location only"},
+    turnin_missing={"Turn-in location unavailable","This quest has no verified map pin"},
+    objective_missing={"Objective location unavailable","Waiting for game or Questie data"},
+    interior={"Route paused inside","Floor or cave path unavailable"},
+    position={"Finding player position","Route will resume when located"},
+    planning={"Finding a walking route","Checking terrain and access"},
+    replan={"Off route","Recalculating from here"},
+    loading={"Loading walking map","Route will resume when ready"},
+    combat={"Planning paused in combat","Route will resume after combat"},
+    unreachable={"No walkable route found","Check the quest map"},
+    nodata={"Walking map unavailable","No route data for this area"},
+    outside={"Destination outside walking map","Check the quest map"},
+    offmesh={"Path cannot reach this point","Check the quest map"},
+}
+
+local function call(fn,...)
+    if type(fn)~="function" then return end
+    local ok,a,b,c=pcall(fn,...)
+    if ok then return a,b,c end
+end
+
+local function pointOK(map,x,y)
+    return finite(map) and map>0 and frac(x,y) and (x~=0 or y~=0)
+end
+
+function AT.GetNativeQuestRoutePointForMap(quest,map)
+    if not finite(quest) or not finite(map) or not C_SuperTrack or not C_Navigation then return end
+    local selected=call(C_SuperTrack.GetSuperTrackedQuestID)
+    local owns=call(C_SuperTrack.IsSuperTrackingQuest)
+    if not (finite(selected) and selected==quest and ordinary(owns) and owns==true) then return end
+    local kind=call(C_SuperTrack.GetHighestPrioritySuperTrackingType)
+    local types=Enum and Enum.SuperTrackingType
+    if types and types.Quest~=nil and (not ordinary(kind) or kind~=types.Quest) then return end
+    for _,name in ipairs({"IsSuperTrackingCorpse","IsSuperTrackingUserWaypoint","IsSuperTrackingMapPin","IsSuperTrackingContent"}) do
+        local other=call(C_SuperTrack[name])
+        if not ordinary(other) or other==true then return end
+    end
+    local x,y=call(C_Navigation.GetNextWaypointForMap,map)
+    if pointOK(map,x,y) then return x,y end
+end
+
+local function nativeOrParentPoint(quest)
+    if not C_Map or not C_QuestLog then return end
+    local map=call(C_Map.GetBestMapForUnit,"player")
+    for _=1,4 do
+        if not finite(map) or map<=0 then break end
+        local x,y=AT.GetNativeQuestRoutePointForMap(quest,map)
+        if pointOK(map,x,y) then return map,x,y,"native waypoint" end
+        x,y=call(C_QuestLog.GetNextWaypointForMap,quest,map)
+        if pointOK(map,x,y) then return map,x,y,"quest waypoint" end
+        if _>1 then
+            local rows=call(C_QuestLog.GetQuestsOnMap,map)
+            if ordinary(rows) and type(rows)=="table" then
+                for _,item in ipairs(rows) do
+                    if ordinary(item) and type(item)=="table" and finite(item.questID) and item.questID==quest
+                        and pointOK(map,item.x,item.y) then return map,item.x,item.y,"parent-map quest POI" end
+                end
+            end
+        end
+        local info=call(C_Map.GetMapInfo,map)
+        if not ordinary(info) or type(info)~="table" or not finite(info.parentMapID) or info.parentMapID==map then break end
+        map=info.parentMapID
+    end
+end
+
+local function metaFor(quest)
+    local now=GetTime and GetTime() or 0
+    local turnIn=AT.IsQuestTurnInNavigation and AT.IsQuestTurnInNavigation(quest) or false
+    if metadata and metadata.quest==quest and metadata.turnIn==turnIn and now-metadata.when<.5
+        and (not turnIn or metadata.map) then return metadata end
+    local title
+    if C_QuestLog and C_QuestLog.GetTitleForQuestID then
+        local ok,result=pcall(C_QuestLog.GetTitleForQuestID,quest)
+        if ok and ordinary(result) and type(result)=="string" then title=result end
+    end
+    metadata={quest=quest,when=now,turnIn=turnIn,title=title or ("Quest #" .. quest)}
+    if AT.GetFocusedQuestRoutePoint then
+        local ok,id,map,x,y=pcall(AT.GetFocusedQuestRoutePoint)
+        if ok and id==quest and finite(map) and frac(x,y) then
+            if pointOK(map,x,y) then metadata.map,metadata.x,metadata.y,metadata.source=map,x,y,(turnIn and "verified turn-in" or "quest/Questie coordinates") end
+        end
+    end
+    if not metadata.map and not turnIn then metadata.map,metadata.x,metadata.y,metadata.source=nativeOrParentPoint(quest) end
+    return metadata
+end
+
+function AT.GetQuestRouteDisplayPoint(quest)
+    if not finite(quest) or quest<=0 then return end
+    local m=metaFor(quest)
+    return m.map,m.x,m.y
+end
+
+local function mapLabel(map)
+    if not C_Map or not C_Map.GetMapInfo then return end
+    local ok,info=pcall(C_Map.GetMapInfo,map)
+    if ok and ordinary(info) and type(info)=="table" and ordinary(info.name) and type(info.name)=="string" then
+        return info.name
+    end
+end
+
+local function yardEstimate(meta)
+    if not meta.map or (IsIndoors and IsIndoors()) or not C_Map then return end
+    local source=C_Map.GetBestMapForUnit and C_Map.GetBestMapForUnit("player")
+    if not finite(source) then return end
+    local function outdoor(map)
+        local info=C_Map.GetMapInfo and C_Map.GetMapInfo(map)
+        if not C_Map.GetMapInfo then return source==meta.map end
+        return info and ordinary(info.mapType) and info.mapType==(Enum and Enum.UIMapType and Enum.UIMapType.Zone or 3)
+    end
+    if not outdoor(source) then return end
+    local targetInfo=C_Map.GetMapInfo and C_Map.GetMapInfo(meta.map)
+    local kind=targetInfo and targetInfo.mapType
+    if not outdoor(meta.map) and not (source~=meta.map and (kind==1 or kind==2)) then return end
+    local pos=C_Map.GetPlayerMapPosition and C_Map.GetPlayerMapPosition(source,"player")
+    if not ordinary(pos) or not pos then return end
+    local px,py=pos:GetXY()
+    if not frac(px,py) or (px==0 and py==0) then return end
+    local dx,dy
+    if source==meta.map then
+        local w,h=C_Map.GetMapWorldSize(source)
+        if not (finite(w) and finite(h) and w>0 and h>0) then return end
+        dx,dy=(meta.x-px)*w,(meta.y-py)*h
+    elseif CreateVector2D and C_Map.GetWorldPosFromMapPos then
+        local a,ap=C_Map.GetWorldPosFromMapPos(source,CreateVector2D(px,py))
+        local b,bp=C_Map.GetWorldPosFromMapPos(meta.map,CreateVector2D(meta.x,meta.y))
+        if not finite(a) or not finite(b) or a~=b or not ordinary(ap) or not ordinary(bp) or not ap or not bp then return end
+        -- C_Map world X points north and world Y points west.
+        local ax,ay=ap:GetXY()
+        local bx,by=bp:GetXY()
+        if not (finite(ax) and finite(ay) and finite(bx) and finite(by)) then return end
+        dx,dy=ay-by,ax-bx
+    else
+        return
+    end
+    return math.sqrt(dx*dx+dy*dy),dx,dy,source
+end
+local function setHudLabel(region,text)
+    if region.lastATText~=text then region:SetText(text);region.lastATText=text end
+end
+
+local function distanceStatus()
+    if not statusQuest or routeStatus=="disabled" or routeStatus=="no_quest" or routeStatus=="interior" then return end
+    if routeStatus=="arrival" then return end
+    if (routeStatus=="routed" or routeStatus=="road") and travelDetail and finite(travelDetail.remain) then
+        distanceSource="walking path"; return travelDetail.remain,false
+    end
+    local ok,yards=pcall(yardEstimate,metaFor(statusQuest))
+    if ok and finite(yards) then distanceSource="map coordinates"; return yards,true end
+    if not scopeTurnIn and not (IsIndoors and IsIndoors()) and C_QuestLog then
+        local sq,same=call(C_QuestLog.GetDistanceSqToQuest,statusQuest)
+        if finite(sq) and sq>0 and ordinary(same) and same==true then
+            distanceSource="native quest distance"
+            return math.sqrt(sq),true
+        end
+    end
+end
+
+local function meterOffset()
+    local clock=TimeManagerClockButton
+    if not (clock and clock.IsVisible and clock:IsVisible() and clock.GetTop and clock.GetCenter
+        and clock.GetEffectiveScale and Minimap.GetBottom and Minimap.GetCenter and Minimap.GetEffectiveScale) then return 5 end
+    local top,center=clock:GetTop(),clock:GetCenter()
+    local bottom,mapCenter=Minimap:GetBottom(),Minimap:GetCenter()
+    local cScale,mScale=clock:GetEffectiveScale(),Minimap:GetEffectiveScale()
+    local w,h=Minimap:GetWidth(),Minimap:GetHeight()
+    if not (finite(top) and finite(center) and finite(bottom) and finite(mapCenter)
+        and finite(cScale) and finite(mScale) and mScale>0 and finite(w) and finite(h)) then return 5 end
+    local scale=cScale/mScale
+    local clockOffset=top*scale-bottom
+    if math.abs(center*scale-mapCenter)>w*.27 or clockOffset< -24 or clockOffset>h*.25 then return 5 end
+    return math.max(2,clockOffset+2)
+end
+
+local function drawMeter(yards)
+    if not meter then return end
+    if not finite(yards) then meter:Hide(); return end
+    local ok,offset=pcall(meterOffset)
+    if not ok then offset=5 end
+    if meter.atOffset~=offset then
+        meter:ClearAllPoints()
+        meter:SetPoint("BOTTOM",Minimap,"BOTTOM",0,offset)
+        meter.atOffset=offset
+    end
+    setHudLabel(meter.label,math.floor(yards+.5) .. " yd")
+    meter:Show()
+end
+
+local function drawHud()
+    if not hud then return end
+    if not statusQuest or routeStatus=="disabled" or routeStatus=="no_quest" then
+        hud:Hide(); return
+    end
+    local meta=metaFor(statusQuest)
+    local heading,sub
+    if routeStatus=="arrival" then
+        heading,sub="In objective area","Guidance will resume if you leave"
+    elseif routeStatus=="routed" or routeStatus=="road" then
+        local details=travelDetail
+        local mode=routeStatus=="road" and "ROAD-AWARE WALK" or "WALK ROUTE"
+        if details and details.turn and details.toTurn then
+            heading=details.turn .. " in " .. math.floor(details.toTurn+.5) .. " yd"
+        else
+            heading="Follow the walkable path"
+        end
+        sub=details and details.remain and (mode .. "  |  " .. math.floor(details.remain+.5) .. " yd left") or mode
+    else
+        local copy=statusCopy[routeStatus] or {"Walking route unavailable","Check the quest map"}
+        heading=copy[1]
+        local map=meta.map and mapLabel(meta.map)
+        if map and routeStatus~="interior" then
+            sub=string.format("%s  |  %.0f, %.0f",map,meta.x*100,meta.y*100)
+        else
+            sub=copy[2]
+        end
+    end
+    setHudLabel(hud.title,meta.title)
+    setHudLabel(hud.instruction,heading)
+    setHudLabel(hud.detail,sub)
+    local healthy=routeStatus=="routed" or routeStatus=="road" or routeStatus=="arrival"
+    hud.instruction:SetTextColor(healthy and .32 or 1,healthy and .95 or .79,healthy and .85 or .46)
+    hud:Show()
+end
+
+local function makeHud()
+    -- A non-interactive panel below the current minimap, including custom skins.
+    local card=CreateFrame("Frame",nil,Minimap)
+    if not card.SetSize or not card.CreateTexture or not card.CreateFontString then return end
+    card:SetSize(196,45)
+    card:SetPoint("TOP",Minimap,"BOTTOM",0,-10)
+    card:SetFrameLevel(Minimap:GetFrameLevel()+4)
+    card:EnableMouse(false)
+    local fill=card:CreateTexture(nil,"BACKGROUND")
+    fill:SetAllPoints(card);fill:SetColorTexture(.025,.068,.085,.94)
+    local rule=card:CreateTexture(nil,"BORDER")
+    rule:SetPoint("TOPLEFT",card,"TOPLEFT",0,0)
+    rule:SetPoint("TOPRIGHT",card,"TOPRIGHT",0,0)
+    rule:SetHeight(1);rule:SetColorTexture(.19,.64,.61,.95)
+    local function makeText(font,y,r,g,b)
+        local text=card:CreateFontString(nil,"OVERLAY",font)
+        text:SetPoint("TOP",card,"TOP",0,y)
+        text:SetWidth(186);text:SetWordWrap(false)
+        text:SetTextColor(r,g,b)
+        return text
+    end
+    card.title=makeText("GameFontNormalSmall",-6,.94,.98,1)
+    card.instruction=makeText("GameFontHighlightSmall",-18,.32,.95,.85)
+    card.detail=makeText("GameFontDisableSmall",-30,.68,.80,.84)
+    card:Hide()
+    hud=card
+end
+
+local function makeMeter()
+    -- Keep the distance independent of the card below the minimap; skins
+    -- may clip or layer its contents differently. No solid background.
+    local labelFrame=CreateFrame("Frame",nil,Minimap)
+    labelFrame:SetSize(86,14)
+    labelFrame:SetPoint("BOTTOM",Minimap,"BOTTOM",0,5)
+    if labelFrame.SetFrameStrata then labelFrame:SetFrameStrata("HIGH") end
+    labelFrame:SetFrameLevel(Minimap:GetFrameLevel()+12)
+    labelFrame:EnableMouse(false)
+    local label=labelFrame:CreateFontString(nil,"OVERLAY","GameFontHighlightSmall")
+    label:SetPoint("CENTER",labelFrame,"CENTER",0,0)
+    label:SetTextColor(1,1,1)
+    if label.SetShadowColor then label:SetShadowColor(0,0,0,1) end
+    if label.SetShadowOffset then label:SetShadowOffset(1,-1) end
+    labelFrame.label=label
+    labelFrame:Hide()
+    meter=labelFrame
+end
+
+local function viewYards()
+    if C_Minimap and C_Minimap.GetViewRadius then
+        local ok,yards=pcall(C_Minimap.GetViewRadius)
+        if ok and finite(yards) and yards>0 then return yards end
+    end
+    return previewYards
+end
+
+local function makeBearing()
+    local dotFrame=CreateFrame("Frame",nil,Minimap)
+    dotFrame:SetAllPoints(Minimap)
+    if dotFrame.SetFrameStrata then dotFrame:SetFrameStrata("HIGH") end
+    dotFrame:SetFrameLevel(Minimap:GetFrameLevel()+13)
+    dotFrame:EnableMouse(false)
+    local glow=dotFrame:CreateLine(nil,"ARTWORK")
+    glow:SetThickness(4)
+    glow:SetColorTexture(1,.52,.10,.28)
+    local core=dotFrame:CreateLine(nil,"OVERLAY")
+    core:SetThickness(1.4)
+    core:SetColorTexture(1,.81,.38,1)
+    dotFrame.glow,dotFrame.core=glow,core
+    dotFrame:Hide()
+    bearing=dotFrame
+end
+
+local function drawBearing()
+    if not bearing then bearingStatus="overlay unavailable"; return end
+    bearing:Hide()
+    bearingStatus="hidden (" .. (routeStatus or "no status") .. ")"
+    if routeStatus=="arrival" or routeStatus=="interior" or routeStatus=="disabled"
+        or routeStatus=="routed" or routeStatus=="road" or not finite(statusQuest) then return end
+    local m=metaFor(statusQuest)
+    if not m.map then bearingStatus="no objective coordinates"; return end
+    local distance,dx,dy=yardEstimate(m)
+    if not finite(distance) or distance<=0 then bearingStatus="no shared outdoor map position"; return end
+    local rotating=rotateEnabled()
+    if not ordinary(rotating) then bearingStatus="rotation setting protected"; return end
+    local heading=0
+    if rotating then
+        heading=GetPlayerFacing and GetPlayerFacing()
+        if not finite(heading) then
+            bearingStatus="facing unavailable"
+            return
+        end
+    end
+    local w,h=Minimap:GetWidth(),Minimap:GetHeight()
+    if not finite(w) or not finite(h) or math.min(w,h)<42 then return end
+    local r=math.min(w,h)*.42
+    local display=math.min(.93*r, distance/viewYards()*r)
+    if display<(scopeTurnIn and 2 or 8) then bearingStatus="objective very close"; return end
+    local east,north=dx,-dy
+    local vx=(east*math.cos(heading)+north*math.sin(heading))/distance
+    local vy=(-east*math.sin(heading)+north*math.cos(heading))/distance
+    -- Amber projection is intentionally distinct from a teal walking route.
+    local px,py=display*vx,display*vy
+    for _,region in ipairs({bearing.glow,bearing.core}) do
+        region:SetStartPoint("CENTER",bearing,0,0)
+        region:SetEndPoint("CENTER",bearing,px,py)
+        region:Show()
+    end
+    bearingStatus="estimated direction"
+    bearing:Show()
+end
+
+local function draw()
+    travelDetail,mapRoute=nil,nil
+    if not (frame and Minimap and AT.db and AT.db.enabled ~= false and AT.db.showQuestRoute ~= false) then
+        if AT.CancelQuestWalking then AT.CancelQuestWalking() end
+        arrival,scopeQuest,scopeTurnIn,scopeMap,positionLost = nil,nil,nil,nil,nil
+        routeStatus,statusQuest = "disabled",nil
+        hide(); return
+    end
+    local source=AT.GetQuestNavigationID or AT.GetFocusedQuestID
+    local quest,origin=call(source)
+    selectionSource=origin
+    if not finite(quest) then quest=nil end
+    local turnIn=quest and AT.IsQuestTurnInNavigation and AT.IsQuestTurnInNavigation(quest) or false
+    if quest~=scopeQuest or turnIn~=scopeTurnIn then
+        if AT.CancelQuestWalking then AT.CancelQuestWalking() end
+        arrival,scopeQuest,scopeTurnIn,scopeMap,positionLost = nil,quest,turnIn,nil,nil
+    end
+    statusQuest=quest
+    if not finite(quest) or quest<=0 then routeStatus="no_quest"; hide(); return end
+    if turnIn and not metaFor(quest).map then routeStatus="turnin_missing"; hide(); return end
+    local ok,d,reason=pcall(data,quest)
+    if not ok or not d then
+        routeStatus=reason or "position"
+        if routeStatus=="interior" then
+            if AT.CancelQuestWalking then AT.CancelQuestWalking() end
+            arrival,positionLost=nil,nil
+        else
+            -- Quest and map are unchanged. Hide until we know where we are;
+            -- a brief API gap should not throw away a valid route or async job.
+            local now=GetTime and GetTime() or 0
+            positionLost=positionLost or now
+            if now-positionLost>3 and AT.CancelQuestWalking then AT.CancelQuestWalking() end
+        end
+        hide(); return
+    end
+    positionLost=nil
+    if d.insideTaskArea then
+        if AT.CancelQuestWalking then AT.CancelQuestWalking() end
+        arrival=nil
+        routeStatus="arrival"
+        hide(); return
+    end
+    if arrival and (arrival.quest~=d.quest or arrival.map~=d.origin.map) then arrival=nil end
+    if turnIn then
+        local meta=metaFor(quest)
+        if meta.map==d.origin.map then
+            local distance=yardEstimate(meta)
+            if insideObjectiveArea(d,meta.x,meta.y,distance) then
+                routeStatus="arrival"; hide(); return
+            end
+        end
+    end
+    local width,height=Minimap:GetWidth(),Minimap:GetHeight()
+    if not finite(width) or not finite(height) then routeStatus="position"; hide(); return end
+    local radius=math.min(width,height)*.43
+    if radius<18 then routeStatus="position"; hide(); return end
+    -- No route, no geometry. Do not draw a compass bearing through a wall.
+    if not d.path then routeStatus=d.reason or "planning"; hide(); return end
+    local count=walk(d,radius,viewYards())
+    if not count or count==0 then routeStatus=count==0 and "arrival" or (mapRoute and (d.path.roadAware and "road" or "routed") or "replan"); hide(); return end
+    routeStatus=d.path.roadAware and "road" or "routed"
+    clearLines(count+1)
+    if caption then
+        caption:SetText(d.path.roadAware and "ROAD-AWARE WALK" or "WALK ROUTE")
+        caption:SetTextColor(.22,.90,.78,.85)
+    end
+    frame:Show()
+end
+
+function AT.GetQuestRouteStatus()
+    local m=metadata and metadata.quest==statusQuest and metadata or nil
+    local details=string.format("quest source: %s; location: %s; distance: %s; minimap: %s%s",
+        selectionSource or "none",m and m.source or "unavailable",distanceSource or "unavailable",
+        bearingStatus or "unavailable",drawFailure and ("; rendering error: " .. drawFailure) or "")
+    return routeStatus,statusQuest,details
+end
+local function refresh()
+    distanceSource,drawFailure=nil,nil
+    local ok,err = pcall(draw)
+    if not ok then
+        if ordinary(err) and type(err)=="string" then drawFailure=err:sub(1,140) end
+        routeStatus,mapRoute="position",nil; hide()
+    end
+    local distanceOK,yards=pcall(distanceStatus)
+    if not distanceOK then yards=nil end
+    pcall(drawMeter,yards)
+    pcall(drawHud)
+    local directionOK,why=pcall(drawBearing)
+    if not directionOK then
+        if bearing then bearing:Hide() end
+        bearingStatus="bearing render error"
+        if ordinary(why) and type(why)=="string" then drawFailure=why:sub(1,140) end
+    end
+    if AT.RenderWorldQuestRoute then
+        local mapOK=pcall(AT.RenderWorldQuestRoute, routeStatus, statusQuest, mapRoute)
+        if not mapOK and AT.HideWorldQuestRoute then pcall(AT.HideWorldQuestRoute) end
+    end
+end
+
+function AT.RefreshQuestRoute()
+    refresh()
+end
+
+function AT.InitQuestRoute()
+    if frame or not Minimap or not CreateFrame then return end
+    local overlay = CreateFrame("Frame", nil, Minimap)
+    if not overlay.CreateLine then overlay:Hide(); return end
+    overlay:SetAllPoints(Minimap)
+    overlay:EnableMouse(false)
+    overlay:SetFrameLevel(Minimap:GetFrameLevel()+1)
+    frame, lines = overlay, {}
+    if overlay.CreateFontString then
+        caption = overlay:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        caption:SetPoint("BOTTOM", overlay, "BOTTOM", 0, 10)
+    end
+    pcall(makeMeter)
+    pcall(makeBearing)
+    pcall(makeHud)
+    local observer = CreateFrame("Frame")
+    observer:SetScript("OnUpdate", function(_, dt)
+        elapsed = elapsed + dt
+        if elapsed < refreshPeriod then return end
+        elapsed = 0
+        refresh()
+    end)
+    refresh()
+end
+
+
+
+
+
+
+
+
