@@ -43,7 +43,7 @@ end
 local maxNameLength = 255 - #table.concat({marker, setupLine, recallStop, recallPrefix, cleanupLine}, "\n")
 
 local function say(message)
-    if DEFAULT_CHAT_FRAME then DEFAULT_CHAT_FRAME:AddMessage("|cff38ddd1Auto Track:|r " .. message) end
+    if DEFAULT_CHAT_FRAME then DEFAULT_CHAT_FRAME:AddMessage("|cff38ddd1Rankor Tools:|r " .. message) end
 end
 
 local function private(value)
@@ -383,7 +383,7 @@ function AT.OpenTargetEditor()
         editor:SetBackdropColor(0.055, 0.07, 0.095, 0.99)
         local heading = editor:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
         heading:SetPoint("TOPLEFT", 18, -16)
-        heading:SetText("Auto Track | Saved monster")
+        heading:SetText("Rankor Tools | Saved monster")
         local help = editor:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         help:SetPoint("TOPLEFT", 18, -43)
         help:SetText("Type part of a name (e.g. Rap), or save an exact name.")

@@ -13,7 +13,7 @@ foreach ($line in $toc) {
 }
 $dist = Join-Path $root 'dist'
 $null = New-Item -ItemType Directory -Force -Path $dist
-$zip = Join-Path $dist "AutoTrack-$version-forever.zip"
+$zip = Join-Path $dist "RankorTools-$version-forever.zip"
 if (Test-Path -LiteralPath $zip) { throw 'Build destination already exists. Keep previous versioned archives intact.' }
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 [IO.Compression.ZipFile]::CreateFromDirectory($addon,$zip,[IO.Compression.CompressionLevel]::Optimal,$true)

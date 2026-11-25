@@ -1,4 +1,4 @@
-# Auto Track 1.5.35
+# Rankor Tools 1.5.36
 For World of Warcraft: Forever 1.60.1 (interface 16001). Uses the Blizzard quest tracker and a native character-specific action-bar macro. Optional compatibility with Questie.
 
 ## Install or update
@@ -54,7 +54,7 @@ When the optional Polestar 0.4.2.2+ (0.4.x) navigation engine is already loaded 
 
 
 ## Optional Smart Target key
-In WoW Options > Keybindings > Auto Track, bind Smart Target (out of combat) to a regular key. No key is changed automatically. A plain press learns a different selected mob; a repeat with the saved mob marked makes a fresh name search using the same key. With markers off, a matching live target is enough to search again. The Smart Target key is a separate optional binding. WoW chooses which match is selected; a failed search can leave you with no target. If the binding isn't listed after /reload, restart WoW.
+In WoW Options > Keybindings > Rankor Tools, bind Smart Target (out of combat) to a regular key. No key is changed automatically. A plain press learns a different selected mob; a repeat with the saved mob marked makes a fresh name search using the same key. With markers off, a matching live target is enough to search again. The Smart Target key is a separate optional binding. WoW chooses which match is selected; a failed search can leave you with no target. If the binding isn't listed after /reload, restart WoW.
 
 
 ### Full map route
@@ -139,3 +139,6 @@ In Rank Quest, click a ready quest's left tracking circle in Completed to pin it
 ### 1.5.35
 - Rank Quest search starts tucked behind the magnifying glass at the far right. Click it to start typing. Search stays visible while working; click X or delete the query to close it.
 - Dungeon Position can draw on Dungeon Journal's live map view when the selected dungeon and visible floor match verified native tiles. It only shows locations the game makes available; opening the map from Dungeon Position settings reports when live positions are unavailable.
+
+### 1.5.36
+- Auto Track is now Rankor Tools. Keep the AutoTrack folder in place so existing settings, slash commands, action-bar macros, and keybinds continue working.
