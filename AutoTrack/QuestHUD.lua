@@ -1177,6 +1177,13 @@ local function arrange()
     hud.eyebrow:SetTextColor(unpack(a.accent))
     hud.eyebrow:SetText("Rank Quest")
     applyTypography(hud.zoneName,a,12,a.font)
+    applyTypography(hud.search,a,12,a.font)
+    applyTypography(hud.searchHint,a,12,a.font)
+    local _,headerPoints=call(hud.zoneName.GetFont,hud.zoneName)
+    local searchPoints=is(headerPoints,"number") and headerPoints or 12+fontOffset()
+    hud.search:SetHeight(math.max(28,math.ceil(searchPoints)+12))
+    if a.questie then hud.searchHint:SetTextColor(.68,.73,.76)
+    else hud.searchHint:SetTextColor(.79,.70,.54) end
     hud.zoneName:SetTextColor(unpack(a.ink))
 
 
@@ -1658,13 +1665,13 @@ function AT.InitQuestHUD()
     end)
     hud.eyebrow=text(header,"GameFontHighlightSmall");hud.eyebrow:SetPoint("TOPLEFT",13,-10);hud.eyebrow:SetText("Rank Quest")
     local search=CreateFrame("EditBox",nil,body)
-    search:SetSize(216,20);search:SetPoint("TOPRIGHT",body,"TOPRIGHT",-13,-57)
+    search:SetSize(216,28);search:SetPoint("TOPRIGHT",body,"TOPRIGHT",-13,-57)
     search:SetAutoFocus(false);search:SetMaxLetters(128)
-    search:SetFontObject(GameFontHighlightSmall);search:SetTextInsets(8,8,0,0)
+    search:SetFontObject(GameFontNormalLarge);search:SetTextInsets(8,8,0,0)
     if search.SetFrameLevel and header.GetFrameLevel then search:SetFrameLevel(header:GetFrameLevel()+2) end
     hud.search=search
     hud.searchBack=box(search,"BACKGROUND");hud.searchBack:SetAllPoints(search)
-    hud.searchHint=text(search,"GameFontDisableSmall");hud.searchHint:SetPoint("LEFT",8,0)
+    hud.searchHint=text(search,"GameFontNormalLarge");hud.searchHint:SetPoint("LEFT",8,0)
     hud.searchHint:SetText("Search all quests")
     search:SetScript("OnTextChanged",function(self)
         searchWords={}
