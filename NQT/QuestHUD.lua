@@ -11,7 +11,7 @@ local observedObjectives, highlights={},{}
 local partyRetained,partyTurnedIn={},{}
 local removedQuests={}
 local inlineParty=false
-local questTooltip,tooltipTicker,hover
+local questTooltip,tooltipTicker,hover,addDropTooltip
 local themes={
     { name="Map", map=true, accent={.95,.76,.40}, ink={.90,.83,.64}, row={.20,.13,.067,.40},
       rail={.13,.085,.045,.92}, font="GameFontNormalLarge" },
@@ -698,6 +698,7 @@ local function drawQuestHover()
         tip:AddLine(description,1,.76,.38,true)
     end
     addPartyTooltip(tip,snapshot,usingStock)
+    if not row.partyOnly and addDropTooltip then addDropTooltip(tip,state.qid) end
     if not row.partyOnly then
         tip:AddLine("Click: open on map  |  Ctrl-click: queue  |  Right-click: exclude",.48,.91,.82,true)
     end
@@ -831,11 +832,7 @@ end
 local function describe(e)
     local row=e.row
     if row.complete and not row.partyOnly then return "Ready to turn in" end
-    if row.partyPending then
-        local status=(row.party and row.party.verifiedPending) and "Party still needs objectives" or "Party progress unavailable (last reported incomplete)"
-        if row.partyOnly then return (row.turnedIn and "Turned in by you" or "Not in your quest log").."  |  "..status
-        else return status end
-    end
+    if row.partyOnly then return row.turnedIn and "Turned in by you" or "Not in your quest log" end
 
     local kind=e.kind
     if kind=="dungeon" or kind=="unassigned" then return nil end
@@ -890,6 +887,42 @@ local function dropName(text)
     text=text:gsub("^%s*%d+%s*/%s*%d+%s+",""):gsub("%s*[(:]?%s*%d+%s*/%s*%d+%)?%s*$","")
     return text:match("^%s*(.-)%s*$")
 end
+local dropIndex,dropIndexAt
+local function observedDropItem(qid,label)
+    local items=AT.ObservedQuestDrops and AT.ObservedQuestDrops.items
+    if not items then return end
+    local name,link=call(C_Item and C_Item.GetItemInfo,label)
+    if not is(name,"string") then name,link=call(GetItemInfo,label) end
+    if is(name,"string") and name==label and is(link,"string") then
+        local item=tonumber(link:match("|Hitem:(%d+)"))
+        if id(item) then return item end
+    end
+    -- For cold item caches, two exact Forever quest/item mappings are verified.
+    local known=(qid==22 and 723) or (qid==38 and 730)
+    if known and items[known] then
+        local client=call(C_Item and C_Item.GetItemNameByID,known)
+        if is(client,"string") and client==label or call(GetLocale)=="enUS" and
+            ((known==723 and label=="Goretusk Liver") or (known==730 and label=="Murloc Eye")) then
+            return known
+        end
+    end
+    -- Index only names the client already knows. Never download item data
+    -- for every ID, and only refresh if unresolved text actually needs it.
+    local now=call(GetTime)
+    if not dropIndex or is(now,"number") and dropIndexAt and now-dropIndexAt>=8 then
+        dropIndex,dropIndexAt={},is(now,"number") and now or nil
+        for item in pairs(items) do
+            local n=call(C_Item and C_Item.GetItemNameByID,item)
+            if is(n,"string") and n~="" then
+                if dropIndex[n]~=nil and dropIndex[n]~=item then dropIndex[n]=false
+                else dropIndex[n]=item end
+            end
+        end
+    end
+    return dropIndex[label] or nil
+end
+
+
 local function objectiveDropItem(db,qid,objective,label)
     if field(objective,"type")~="item" then return end
     local exact=field(objective,"itemID")
@@ -905,8 +938,8 @@ local function objectiveDropItem(db,qid,objective,label)
     -- Questie item ordering matches the quest log; compare exact item names.
     local wanted=dropName(label)
     if not wanted or wanted=="" then return end
-    local objectives=field(call(db.GetQuest,qid),"ObjectiveData")
-    if not is(objectives,"table") then return end
+    local objectives=field(db and call(db.GetQuest,qid),"ObjectiveData")
+    if not is(objectives,"table") then return observedDropItem(qid,wanted) end
     local match
     for _,entry in pairs(objectives) do
         local item=field(entry,"Id")
@@ -919,19 +952,17 @@ local function objectiveDropItem(db,qid,objective,label)
             end
         end
     end
-    return match
+    return match or observedDropItem(qid,wanted)
 end
 local function fmtDrop(value)
     if value<.001 then return "<0.001%" end
     return (string.format("%.3f",value):gsub("0+$",""):gsub("%.$","")).."%"
 end
-local function objectiveDropSuffix(db,qid,objective,label)
-    local item=objectiveDropItem(db,qid,objective,label)
-    if not id(item) then return "" end
-    -- Questie returns {percentage, source}; only actual NPC drop records
-    -- for this item qualify, not vendors, objects, or estimates.
+local function questieDropRange(db,item)
+    if not db then return end
+    -- Questie returns {percentage, source}; count only NPC records.
     local npcDrops=field(call(db.GetItem,db,item),"npcDrops")
-    if not is(npcDrops,"table") then return "" end
+    if not is(npcDrops,"table") then return end
     local lo,hi,seen=nil,nil,{}
     for _,npc in pairs(npcDrops) do
         if id(npc) and not seen[npc] then
@@ -940,15 +971,69 @@ local function objectiveDropSuffix(db,qid,objective,label)
             if is(rate,"number") and rate>0 and rate<=100 then
                 lo=not lo and rate or math.min(lo,rate)
                 hi=not hi and rate or math.max(hi,rate)
-
             end
         end
     end
-    if not lo then return "" end
-    local a,b=fmtDrop(lo),fmtDrop(hi)
-    local range=a==b and a or (a.."\226\128\147"..b)
-    return " ("..range..")"
+    return lo,hi
 end
+
+local function observedRecord(item)
+    local pack=AT.ObservedQuestDrops
+    local rows=pack and pack.items[item]
+    if not rows then return end
+    local low,high
+    for _,e in ipairs(rows) do
+        local pct=e[2]/e[3]*100
+        low=not low and pct or math.min(low,pct)
+        high=not high and pct or math.max(high,pct)
+    end
+    if low then return low,high,rows end
+end
+
+local function objectiveDropSuffix(db,qid,objective,label)
+    local item=objectiveDropItem(db,qid,objective,label)
+    if not id(item) then return "" end
+    local lo,hi=questieDropRange(db,item)
+    if lo then
+        local a,b=fmtDrop(lo),fmtDrop(hi)
+        return " ("..(a==b and a or a.."\226\128\147"..b)..")"
+    end
+    local low,high,rows=observedRecord(item)
+    if not low then return "" end
+    local function rounded(value)
+        if value<.1 then return "<0.1%" end
+        return (string.format("%.1f",value):gsub("%.0$","")).."%"
+    end
+    local a,b=rounded(low),rounded(high)
+    return " (~"..(a==b and a or a.."\226\128\147"..b).." Everloot)",rows
+end
+
+addDropTooltip=function(tip,qid)
+    if not (AT.db.rankQuestDropRates~=false and AT.ObservedQuestDrops) then return end
+    local objectives=call(Q.GetQuestObjectives,qid)
+    if not is(objectives,"table") then return end
+    local db=module("QuestieDB")
+    local credited=false
+    for _,o in ipairs(objectives) do
+        local label=field(o,"text")
+        if is(label,"string") then
+            local _,rows=objectiveDropSuffix(db,qid,o,label)
+            if rows then
+                if not credited then
+                    tip:AddLine("Data from Everloot (https://everloot.app), CC BY-SA 4.0.",.70,.83,.93,true)
+                    tip:AddLine("Observed rates per eligible loot window; not guaranteed.",.70,.83,.93,true)
+                    credited=true
+                end
+                tip:AddLine(dropName(label),.86,.92,.95,true)
+                for _,e in ipairs(rows) do
+                    tip:AddLine(("NPC #%d: %d/%d windows, %d installs (%s)"):format(
+                        e[1],e[2],e[3],e[4],AT.ObservedQuestDrops.dates[e[5]]),.70,.83,.93,true)
+                end
+            end
+        end
+    end
+end
+
 
 local function renderObjectives(b,row,width,theme,hasItem,hasDetail)
     local ready=row.complete and not row.partyOnly
@@ -996,12 +1081,14 @@ local function renderObjectives(b,row,width,theme,hasItem,hasDetail)
             end
         end
     end
-    local showParty=inlineParty and AT.db.questPartyProgress~=false and (not ready or row.partyPending)
+    local partyEnabled=AT.db.questPartyProgress~=false
+    local showParty=partyEnabled and (row.partyPending or inlineParty and not ready)
+    local showBreakdown=showParty and (inlineParty or ready or row.partyOnly)
     local function partyLine(line,indent)
         if theme.questie then add(line,indent,.56,.90,.87)
         else add(line,indent,.12,.35,.32) end
     end
-    if showParty and not row.partyOnly and is(list,"table") and #list>0 then
+    if showBreakdown and not row.partyOnly and is(list,"table") and #list>0 then
         partyLine("Your objectives",0)
     end
     if is(list,"table") then
@@ -1009,7 +1096,9 @@ local function renderObjectives(b,row,width,theme,hasItem,hasDetail)
         for _,o in ipairs(list) do
             local label=field(o,"text")
             if is(label,"string") and label~="" then
-                if db then label=label..objectiveDropSuffix(db,row.id,o,label) end
+                if AT.db.rankQuestDropRates~=false and (db or AT.ObservedQuestDrops) then
+                    label=label..objectiveDropSuffix(db,row.id,o,label)
+                end
                 local done=field(o,"finished")==true
                 local bullet=theme.questie and " - " or (done and "|cff8bd1a2+|r " or "|cffb4bbbd- |r")
                 if done then add(bullet..label,0,.64,.78,.68) else add(bullet..label,0) end
@@ -1020,21 +1109,25 @@ local function renderObjectives(b,row,width,theme,hasItem,hasDetail)
         local wroteParty=false
         for _,member in ipairs(row.party and row.party.members or {}) do
             local counts=member.counts or member.lastCounts
-            local wroteMember=false
-            for i,o in ipairs(counts or {}) do
-                local left=o.total-o.current
-                if left>0 then
-                    if not wroteParty then partyLine("Party objectives",0);wroteParty=true end
-                    if not wroteMember then
-                        partyLine(member.name..(member.lastCounts and " (last reported)" or ""),7)
-                        wroteMember=true
+            local current,total=0,0
+            for _,o in ipairs(counts or {}) do current,total=current+o.current,total+o.total end
+            if total>current then
+                if not wroteParty and showBreakdown then partyLine("Party objectives",0) end
+                wroteParty=true
+                local qualifier=member.lastCounts and " (last reported)" or member.countsPartial and " (reported objectives)" or ""
+                partyLine(member.name.."  "..current.."/"..total..qualifier,showBreakdown and 7 or 0)
+                if showBreakdown then
+                    for i,o in ipairs(counts or {}) do
+                        local left=o.total-o.current
+                        if left>0 then
+                            local label=(is(o.desc,"string") and o.desc~="" and o.desc) or ("Objective "..i)
+                            partyLine(left.." remaining - "..label,17)
+                        end
                     end
-                    local label=(is(o.desc,"string") and o.desc~="" and o.desc) or ("Objective "..i)
-                    partyLine(left.." remaining - "..label,17)
                 end
             end
         end
-        if not wroteParty then
+        if not wroteParty and inlineParty then
             local unavailable=false
             for _,m in ipairs(row.party and row.party.members or {}) do
                 if m.status=="Progress unavailable" then unavailable=true;break end

@@ -57,7 +57,10 @@ local saved="Raptor"
 local function noLearn() error("boss mode may not touch the saved mob") end
 AT.GetTargetName=function() return saved end
 AT.IsPartialTarget=function() return false end
-AT.GetSelectedMobForSmartTarget=noLearn
+AT.GetSelectedMobForSmartTarget=function() if AT.db.bossAutoMark and kind=="party" then return noLearn() end end
+AT.MatchesSavedTarget=function(name) return name==saved end
+function UnitIsPlayer() return false end
+function UnitIsTapDenied() return false end
 AT.SaveSelectedTarget=noLearn
 AT.Say=function(note) AT.note=note end
 assert(loadfile("NQT/DungeonPosition.lua"))("NQT",AT)
@@ -74,7 +77,7 @@ local function press()
     assert(b.attrs.macrotext=="/stopmacro","the old action is never left armed")
     return body
 end
-assert(press():find("/targetexact Raptor",1,true))
+units.mouseover={name="Raptor"}; assert(press():find("/target [@mouseover",1,true)); units.mouseover=nil
 AT.db.bossAutoMark=true
 units.nameplate1=mob(644,101,"Boss A")
 units.nameplate1.dist=144
@@ -111,7 +114,7 @@ assert(press()=="/stopmacro","combat cannot mutate or run an old boss macro")
 combat=false
 units.target=nil
 kind="none";ui[1].scripts.OnEvent(ui[1],"PLAYER_ENTERING_WORLD")
-assert(press():find("/targetexact Raptor",1,true),"outside dungeons normal saved-mob behavior remains")
+units.mouseover={name="Raptor"}; assert(press():find("/target [@mouseover",1,true),"outside dungeons verified saved-mob behavior remains"); units.mouseover=nil
 print("PASS Smart Target real PreClick route: default/instance exit, nearest detected, range fallback, Skull/X, optional ping, no learned mob, permissions, combat and marker preservation")
 -- The owned action-bar macro also switches modes. Stockade built-in IDs
 -- work without Journal, even for an elite not classified as "worldboss".

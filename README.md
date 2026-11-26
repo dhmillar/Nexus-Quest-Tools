@@ -18,8 +18,8 @@ Nexus Quest Tools is a World of Warcraft: Forever addon that organizes your ques
 
 - **A customizable floating quest log.** Filter by current zone, any zone, current dungeon, or all dungeons. Search the entire held quest log by quest title, area, dungeon, or objective. Collapse groups to keep the log tidy. Choose the compact Minimal or Map theme, adjust font size with − and +, and move, resize, or collapse the panel.
 - **Quest details at a glance.** See difficulty, kill and collection counts, group-quest skulls, and usable quest items when WoW supplies them. Use the left circle to focus a quest and the title to open it on the map. The Completed view shows quests still awaiting turn-in, including area, coordinates, and NPC when known.
-- **Drop rates.** When Questie supplies a known NPC drop rate, optionally display its percentage or range after Rank Quest item objectives.
-- **Party objectives.** Hover for available party progress or use the person button for named counts under your own objectives. A quest can stay on the list while a party member still needs it. Counts depend on what WoW reports.
+- **Drop rates.** Rank Quest displays NPC drop rates from Questie or bundled WoW Forever observations. Hover for source and sample sizes. Data from Everloot (https://everloot.app), CC BY-SA 4.0. See the in-addon README for scope and attribution.
+- **Party objectives.** Hover for available party progress or use the person button for objective details. Pending quests show teammates and combined counts; their remaining objectives expand when yours finish. A quest can stay on the list while a party member still needs it. Counts depend on what WoW reports.
 - **Bag cleanup hints.** Optional badges explain why a verified leftover quest item is no longer needed by your current log. Items with uncertain data are left alone. The addon never destroys items.
 
 ### Auto Macro

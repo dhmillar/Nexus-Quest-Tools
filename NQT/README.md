@@ -11,7 +11,7 @@ Install this build as Interface/AddOns/NQT with NQT.toc directly inside it. For 
 
 To save or replace a mob, select a living hostile NPC out of combat and press the regular action-bar key or left-click the slot. That press keeps the target selected. AT > Save selected mob and /at set also work.
 
-To recall the saved name, press the slot with no target. In combat, a press keeps a selected living hostile and attempts the configured raid marker and optional ping on that enemy. A selected friendly or corpse is not marked or pinged. A press with no selected target can recall a live match. WoW marker permissions still apply.
+To recall the saved name, press the slot with no target. The regular recall cannot tell which match another group has tagged, so it does not automatically mark or ping ordinary mobs. Use the Smart Target key to check eligibility before acting.
 
 
 Right-click the macro slot (or use AT > Edit target name) to type a partial name such as Rap. Save partial uses WoW's native partial name search; Save exact matches the full name. Selecting a matching mob won't replace the partial search text. Selecting a different, non-matching mob and pressing the button still learns its full name. Existing saved names stay exact unless changed in the editor. WoW chooses the match, so use a longer piece if several mobs have similar names. Check **Lock saved name** in the target editor, then save. The normal key will not replace a locked name with the selected mob. Uncheck it and save to restore ordinary learning. Typed names can still be changed deliberately.
@@ -24,9 +24,9 @@ The standard action-bar macro keeps a selected mob. It learns a different select
 
 For the group, AT > Place mouseover Ping (/at ping) and Place secondary marker (/at x) create optional native action-bar macros. Put one in an empty slot, hover the intended living enemy or its nameplate, and press the slot key. AT Ping sends the stock Attack ping; AT X places a real red X (or a blue square if X is your primary) if the hovered unit has no existing marker. They never fall back to your current target, pick a unit, or transfer a skull on their own. WoW restrictions, including group permissions, still apply.
 
-Open AT > Primary marker to choose Star, Circle, Diamond, Triangle, Moon, Square, X, or Skull (the default). Choose a different marker than your group members; Auto Track does not reserve a group marker. Your choice is per character, affects the regular and separate primary macro, and is recognized by the NEXT hint. The legacy AT Skull macro name stays on your bar so its slot and keybind do not change.
+Open AT > Primary marker to choose Star, Circle, Diamond, Triangle, Moon, Square, X, or Skull (the default). Choose a different marker than your group members; Auto Track does not reserve a group marker. Your choice is per character, affects Smart Target and the separate primary macro, and is recognized by the NEXT hint. The legacy AT Skull macro name stays on your bar so its slot and keybind do not change.
 
-Turn on Ping when placing marker to request WoW's group Attack ping on the same verified target when the primary macro attempts a marker. This is off by default. WoW does not report whether a marker was accepted inside a native macro, so a ping may still fire if the game denies the marker. The macro now puts the native marker and ping together on eligible presses, including fresh rescan mode. The 255-byte macro limit can still omit pings on unusually long target names without changing targeting; AT displays a warning in that case, and the separate primary or mouseover Ping macro remains available.
+Turn on Ping when placing marker for an optional Attack ping on the same eligible target with Smart Target, or when you deliberately use the separate primary marker macro. WoW can still deny a marker or a ping.
 
 Check Mute target macro sounds in the AT options to briefly silence the game's target-select and target-clear sounds during a recall without changing your other sound settings. Use Edit target name in the AT minimap options or /at target to type a name or part of a name out of combat. On an action bar that forwards right-clicks to macros, right-clicking the slot also opens the editor. Clear the name by saving a blank value. There is no floating target button. Blizzard action bars can show a portrait for the saved monster after you select it. Until that monster is seen in the current session, the slot uses its normal macro icon. For a regular key without a modifier, choose AT > Place primary macro (or /at skull), then place it in an empty action-bar slot. The minimap AT button opens settings; right-click it to pause or resume, or drag it to reposition.
 
@@ -54,7 +54,7 @@ When the optional Polestar 0.4.2.2+ (0.4.x) navigation engine is already loaded 
 
 
 ## Optional Smart Target key
-In WoW Options > Keybindings > Nexus Quest Tools, bind Smart Target (out of combat) to a regular key. No key is changed automatically. A plain press learns a different selected mob; a repeat with the saved mob marked makes a fresh name search using the same key. With markers off, a matching live target is enough to search again. The Smart Target key is a separate optional binding. WoW chooses which match is selected; a failed search can leave you with no target. If the binding isn't listed after /reload, restart WoW.
+In WoW Options > Keybindings > Nexus Quest Tools, bind Smart Target (out of combat). A plain press still learns a different selected mob, even from a hostile corpse. Repeated presses pick a living, eligible match from the current target, mouseover and visible enemy nameplates, using distance or available range checks. If no match is confirmed eligible, it does nothing. The regular action-bar macro can still recall by name, but WoW name recall cannot filter by tap status, so it no longer automatically marks or pings. Boss Target Marking and the manual marker macros are separate.
 
 
 ### Full map route
@@ -215,3 +215,13 @@ In Rank Quest, click a ready quest's left tracking circle in Completed to pin it
 
 ### 1.5.65-preview
 - Use the fire-cat artwork when the owned Auto Track action-bar macro would show WoW's question mark. Leave a linked mob portrait or manually chosen icon alone.
+
+## Standalone quest reference coverage
+Built-in game APIs handle the normal quest log. The optional Questie integration fills extra data when available. The small handwritten bag lookup includes Goretusk Liver for Goretusk Liver Pie and Murloc Eye for Westfall Stew, individually checked against:
+- https://www.wowhead.com/forever/quest=22/goretusk-liver-pie
+- https://www.wowhead.com/forever/quest=38/westfall-stew
+
+These lookups cannot cause an item to be marked safe to discard. No Wowhead database or drop-rate table is bundled.
+### Optional drop-rate observations
+Data from Everloot (https://everloot.app), CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/).
+EverlootDrops.lua is the separately licensed adapted data. It holds only NPC IDs, item IDs, and observed counts; no game-file layer or install pseudonyms. Snapshots: https://everloot.app/database/download (November 14, 2026) and https://everloot.app/docs/api/rollups-drops (data as of November 26, 2026). Keep the credit and share this adapted data on the same license. Filters: 20 eligible loot windows and three installs per NPC, NPC sources only; newer qualifying observations replace older ones for the same item/NPC. Counts were not pooled. An absent rate is unknown, not zero. Observed rates per eligible loot window are estimates, not game constants. Hover a quest to see the counts and snapshot dates.

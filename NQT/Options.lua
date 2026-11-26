@@ -1,5 +1,6 @@
 local _, AT = ...
 local panel, minimapButton, checks, status, targetStatus, primaryChoice, markerStatus
+local deadzonePreviewButton, deadzonePreviewHint
 local titleColor = {0.26, 0.88, 0.80}
 
 local function refreshPanel()
@@ -9,6 +10,11 @@ local function refreshPanel()
         local subDungeon = key == "dungeonMapMinimap" or key == "dungeonPositionAutoOpen" or key == "dungeonPositionShowSelf" or key == "dungeonPositionShowParty"
         check:SetEnabled(key == "enabled" or AT.db.enabled and (not subDungeon or AT.db.dungeonPositionEnabled == true)
             and (key ~= "bossMarkPing" or AT.db.bossAutoMark == true))
+    end
+    if deadzonePreviewButton then
+        local preview = AT.IsHunterDeadzonePreview and AT.IsHunterDeadzonePreview()
+        deadzonePreviewButton:SetText(preview and "Done Moving" or "Preview / Move")
+        deadzonePreviewHint:SetShown(preview == true)
     end
     local id = AT.GetFocusedQuestID and AT.GetFocusedQuestID()
     local title = id and C_QuestLog and C_QuestLog.GetTitleForQuestID and C_QuestLog.GetTitleForQuestID(id)
@@ -34,6 +40,7 @@ local function updateState()
     if AT.RefreshQuestHUD then AT.RefreshQuestHUD() end
     if AT.RefreshQuestLeftovers then AT.RefreshQuestLeftovers() end
     if AT.RefreshDungeonPosition then AT.RefreshDungeonPosition() end
+    if AT.RefreshHunterDeadzone then AT.RefreshHunterDeadzone() end
     refreshPanel()
     if minimapButton then
         minimapButton.icon:SetDesaturated(not AT.db.enabled)
@@ -108,9 +115,10 @@ end
 local function buildPanel()
     panel = CreateFrame("Frame", "AutoTrackOptionsFrame", UIParent, "BackdropTemplate")
     panel:SetSize(404, 387)
-    panel:SetPoint("CENTER")
+    panel:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
     panel:SetFrameStrata("DIALOG")
     panel:SetClampedToScreen(true)
+    panel:SetMovable(true)
     panel:EnableMouse(true)
     panel:SetBackdrop({
         bgFile = "Interface/Buttons/WHITE8X8", edgeFile = "Interface/Tooltips/UI-Tooltip-Border",
@@ -119,7 +127,32 @@ local function buildPanel()
     panel:SetBackdropColor(0.027, 0.048, 0.059, 0.985)
     panel:SetBackdropBorderColor(0.28, 0.67, 0.65, 1)
     panel:Hide()
-    panel:SetScript("OnShow", refreshPanel)
+    local moving = false
+    local function stopMoving()
+        if not moving then return end
+        panel:StopMovingOrSizing()
+        panel:SetUserPlaced(false)
+        moving = false
+    end
+    panel:SetScript("OnShow", function()
+        panel:ClearAllPoints()
+        panel:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+        refreshPanel()
+    end)
+    panel:HookScript("OnHide", stopMoving)
+    local titleDrag = CreateFrame("Frame", nil, panel)
+    titleDrag:SetPoint("TOPLEFT", panel, "TOPLEFT", 12, -8)
+    titleDrag:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -38, -8)
+    titleDrag:SetHeight(52)
+    titleDrag:EnableMouse(true)
+    titleDrag:RegisterForDrag("LeftButton")
+    titleDrag:SetScript("OnDragStart", function()
+        if not moving then
+            moving = true
+            panel:StartMoving()
+        end
+    end)
+    titleDrag:SetScript("OnDragStop", stopMoving)
     table.insert(UISpecialFrames, panel:GetName())
     local close = CreateFrame("Button", nil, panel, "UIPanelCloseButton")
     close:SetPoint("TOPRIGHT", -4, -4)
@@ -184,11 +217,24 @@ local function buildPanel()
     option(general, "autoFocus", "Focus one nearby quest at a time", -30)
     option(general, "hideCompleted", "Untrack ready-to-turn-in quests", -58)
     option(general, "showQuestRoute", "Show minimap walking route", -86)
-    status = makeText(general, "GameFontHighlightSmall", -130, "")
+    option(general, "hunterDeadzone", "Hunter Deadzone", -114,
+        "Shows a crossed-out bow when your current enemy is in melee range during Hunter combat and Auto Shot is not in range.")
+    deadzonePreviewButton = setupButton(general, "Preview / Move", 128, 232, -115, function()
+        if AT.SetHunterDeadzonePreview and AT.IsHunterDeadzonePreview then
+            AT.SetHunterDeadzonePreview(not AT.IsHunterDeadzonePreview())
+            refreshPanel()
+        end
+    end)
+    deadzonePreviewHint = makeText(general, "GameFontDisableSmall", -151, "Drag the bow to move it, then click Done Moving.")
+    deadzonePreviewHint:Hide()
+    general:HookScript("OnHide", function()
+        if AT.SetHunterDeadzonePreview then AT.SetHunterDeadzonePreview(false) end
+    end)
+    status = makeText(general, "GameFontHighlightSmall", -177, "")
     status:SetTextColor(0.43, 0.88, 0.81)
 
     option(macro, "quietTarget", "Mute target macro sounds", -2)
-    option(macro, "pressSkull", "Raid marker on normal macro press", -30)
+    option(macro, "pressSkull", "Raid marker on Smart Target press", -30, "Bind Smart Target under WoW Options > Keybindings > Nexus Quest Tools. The regular action-bar macro can recall a name but cannot check tap status before selecting it.")
     option(macro, "nextMobHint", "Highlight next visible untagged mob", -58)
     option(macro, "pingWithMarker", "Ping when placing marker", -86)
     primaryChoice = setupButton(macro, "Primary marker: Skull", 300, 18, -118, choosePrimary)
@@ -198,7 +244,7 @@ local function buildPanel()
     option(rank, "questHUDEnabled", "Enable Rank Quest", -2, "Show the movable, zone-organized Rank Quest panel and hide the stock quest display.")
     option(rank, "questPartyProgress", "Quest Party Progress", -30, "Show the party progress Blizzard reports on hover, and keep shared quests visible while a party member still needs objectives.")
     option(rank, "questLeftoverMarks", "Mark leftover quest items in bags", -58, "Adds a trash badge only when a turned-in quest can be verified and no current known objective uses that item. Never deletes anything.")
-    option(rank, "rankQuestDropRates", "Show Questie item drop rates", -86, "Shows available Questie NPC drop percentages beside Rank Quest item objectives. Unknown rates are hidden.")
+    option(rank, "rankQuestDropRates", "Show item drop rates", -86, "Uses Questie when available or bundled Forever observations. Hover the quest for sample counts. Data from Everloot (https://everloot.app), CC BY-SA 4.0. Unknown rates are hidden.")
     makeText(rank, "GameFontHighlightSmall", -123, "Right-click a quest to exclude it from automatic tracking.")
     makeText(rank, "GameFontDisableSmall", -145, "Ctrl-click quest titles to number them. /at order lists them.")
 

@@ -146,7 +146,8 @@ function AT.GetQuestPartySnapshot(qid,force)
             member.status="Offline"
         elseif data and data.needs then
             member.counts=data.counts
-            if number(now) then nextPending[member.guid]={counts=data.counts,at=now} end
+            member.countsPartial=data.hasUnknown
+            if number(now) then nextPending[member.guid]={counts=data.counts,partial=data.hasUnknown,at=now} end
             snapshot.verifiedPending=true
         elseif data and #data.counts>0 and not data.hasUnknown then
             member.counts=data.counts
@@ -158,6 +159,7 @@ function AT.GetQuestPartySnapshot(qid,force)
                 member.status="Not on this quest"
             elseif remembered[member.guid] and number(now) and now-remembered[member.guid].at<=LAST_KNOWN_SECONDS then
                 member.lastCounts=remembered[member.guid].counts
+                member.countsPartial=remembered[member.guid].partial
                 nextPending[member.guid]=remembered[member.guid]
                 snapshot.lastPending=true
                 member.status="Current progress unavailable; last reported:"

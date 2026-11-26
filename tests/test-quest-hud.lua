@@ -252,6 +252,27 @@ do
     Questie=nil;QuestieLoader=nil
     AT.RefreshQuestHUD()
     assert(not find("Acquired in Stranglethorn").objectives[1].text:find("%%%)"))
+    assert(loadfile("NQT/EverlootDrops.lua"))("NQT",AT)
+    local oldItem=C_Item
+    C_Item={GetItemNameByID=function(x) if x==730 then return "Murloc Eye" end end}
+    C_QuestLog.GetQuestObjectives=function(q)
+        if q==12 then return {
+            {type="item",itemID=730,text="Eye with id: 0/3"},
+            {type="item",text="Murloc Eye: 0/3"},
+            {type="item",text="Missing: 0/3"},
+            {type="monster",text="Murloc Eye: 0/3"}
+        } end
+        return getObjectives(q)
+    end
+    AT.RefreshQuestHUD()
+    local offline=assert(find("Acquired in Stranglethorn"))
+    assert(offline.objectives[1].text:find("45.2% Everloot",1,true))
+    assert(offline.objectives[2].text:find("45.2% Everloot",1,true))
+    assert(not offline.objectives[3].text:find("Everloot",1,true) and not offline.objectives[4].text:find("Everloot",1,true))
+    AT.db.rankQuestDropRates=false;AT.RefreshQuestHUD()
+    assert(not offline.objectives[1].text:find("Everloot",1,true))
+    print("PASS Questie-off objective renders observed drop estimates for numeric IDs and exact client names; toggle and unknowns")
+    C_Item=oldItem
     C_QuestLog.GetQuestObjectives=getObjectives
     AT.db.questHUDTheme=1;AT.db.rankQuestDropRates=nil;AT.RefreshQuestHUD()
     local testRow=find("Acquired in Stranglethorn"); for i=#testRow.objectives,3,-1 do testRow.objectives[i]=nil end
@@ -1630,7 +1651,7 @@ assert(hasLine("4/7") and hasLine("3 remaining") and hasLine("0/7"))
 remote.scripts.OnLeave(remote)
 liveReport=false;now=now+1;AT.RefreshQuestHUD()
 remote=find("Forest hidden quest")
-assert(remote and remote.detail.text:find("last reported",1,true))
+assert(remote); local foundLast;for _,label in ipairs(remote.objectives) do if label.shown and label.text and label.text:find("Kara-A  4/7 (last reported)",1,true) then foundLast=true end end;assert(foundLast)
 remote.scripts.OnEnter(remote)
 assert(hasLine("Current progress unavailable; last reported:") and hasLine("4/7"))
 remote.scripts.OnLeave(remote)
@@ -1683,7 +1704,7 @@ hud:SetWidth(358);AT.db.questHUDFontOffset=5;AT.RefreshQuestHUD()
 for _,name in ipairs({"Map","Minimal"}) do
     local quest=find("Forest hidden quest")
     assert(quest and quest.scripts.OnEnter)
-    assert(not inlineText(quest,"My wolves") and not inlineText(quest,"remaining"),"inline default is off")
+    assert(not inlineText(quest,"My wolves") and inlineText(quest,"3 remaining") and inlineText(quest,"Kara-A  4/7"),"finished quests reveal teammates automatically")
     local owner=person.parent
     local title
     for _,obj in ipairs(objs) do
@@ -1706,19 +1727,37 @@ for _,name in ipairs({"Map","Minimal"}) do
     assert(inlineText(find("Forest hidden quest"),"1 remaining"),"active toggle follows status views")
     clickButton("Completed")
     liveReport=false;now=now+1;AT.RefreshQuestHUD()
-    assert(inlineText(find("Forest hidden quest"),"Kara-A (last reported)") and inlineText(find("Forest hidden quest"),"1 remaining"))
+    assert(inlineText(find("Forest hidden quest"),"Kara-A  6/7 (last reported)") and inlineText(find("Forest hidden quest"),"1 remaining"))
     AT.db.questPartyProgress=false;AT.RefreshQuestHUD()
     assert(not person.shown and not find("Forest hidden quest"))
     AT.db.questPartyProgress=true;liveReport=true;current[1],current[3]=4,0;now=now+1;AT.RefreshQuestHUD()
     quest=find("Forest hidden quest")
     person.scripts.OnClick(person)
-    assert(not inlineText(quest,"My wolves") and not inlineText(quest,"Kara"))
+    assert(not inlineText(quest,"My wolves") and inlineText(quest,"Kara-A  4/7"))
     quest.scripts.OnEnter(quest)
     assert(hasLine("4/7") and hasLine("0/7"),"turning off inline must not disable hover")
     quest.scripts.OnLeave(quest)
     clickButton(name)
 end
-print("PASS person toggle both themes, exact remaining and live/stale counts, master, hover, minimum width/+5 font and scroll position")
+do
+    local prior=AT.GetQuestPartySnapshot
+    local function compactFixture(q,...)
+        if q~=5010 then return prior(q,...) end
+        return {pending=true,verifiedPending=true,members={{name="Mira",counts={
+          {current=4,total=7,desc="Wolves"},{current=3,total=3,desc="Pelts"}
+        }}}}
+    end
+    AT.GetQuestPartySnapshot=compactFixture
+    ready[5010]=false
+    AT.RefreshQuestHUD()
+    local active=assert(find("Forest hidden quest"))
+    assert(inlineText(active,"Mira  7/10") and not inlineText(active,"3 remaining"),"combine objectives before the player is done")
+    ready[5010]=true;AT.RefreshQuestHUD()
+    local finished=assert(find("Forest hidden quest"))
+    assert(inlineText(finished,"Mira  7/10") and inlineText(finished,"3 remaining - Wolves"))
+    AT.GetQuestPartySnapshot=prior
+end
+print("PASS person toggle, named combined party totals, automatic detail after own completion, live/stale counts, master and scroll position")
 
 -- An abandon removal must win over stale native/collapsed rows and party retention.
 do

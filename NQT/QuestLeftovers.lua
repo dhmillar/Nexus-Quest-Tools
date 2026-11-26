@@ -192,20 +192,48 @@ end
 -- a provided quest item is not evidence that every later use is known.
 local verifiedQuestRefs={
     [5505]={[1023]="Raene's Cleansing"},
+    -- Independently checked factual item requirements; see README.
+    [723]={[22]="Goretusk Liver Pie"},
+    [730]={[38]="Westfall Stew"},
 }
 local bagQuestLinks
+local questItemBackdrops=setmetatable({},{__mode="k"})
+local function showQuestItemBackdrop(tip)
+    local texture=questItemBackdrops[tip]
+    if not texture and type(tip.CreateTexture)=="function" and type(tip.HookScript)=="function" then
+        local function hide()
+            if texture then texture:Hide() end
+        end
+        local clears=pcall(tip.HookScript,tip,"OnTooltipCleared",hide)
+        local closes=pcall(tip.HookScript,tip,"OnHide",hide)
+        if clears and closes then
+            texture=tip:CreateTexture(nil,"BACKGROUND",nil,-7)
+            texture:SetPoint("TOPLEFT",tip,"TOPLEFT",3,-3)
+            texture:SetPoint("BOTTOMRIGHT",tip,"BOTTOMRIGHT",-3,3)
+            texture:SetColorTexture(.035,.027,.022,.98)
+            questItemBackdrops[tip]=texture
+        end
+    end
+    if texture then texture:Show() end
+end
+
 local function hint(tip,bag,slot)
     if not tip or not tip.AddLine or not AT.db or AT.db.enabled==false or not C_Container
         or not isa(bag,"number") or bag<0 or bag>(NUM_BAG_SLOTS or 4) or bag%1~=0 or not id(slot) then return end
+    local added=false
+    local function append(...)
+        tip:AddLine(...)
+        added=true
+    end
     local quest=AT.GetLeftoverQuestBagHint(bag,slot)
     if quest then
-        tip:AddLine("Rank Quest: leftover quest item",1,.74,.32)
-        tip:AddLine("Its recorded quest was turned in; no current quest in the checked log uses it. A future quest may still need it.",.9,.89,.86,true)
+        append("Rank Quest: leftover quest item",1,.74,.32)
+        append("Its recorded quest was turned in; no current quest in the checked log uses it. A future quest may still need it.",.9,.89,.86,true)
     end
     if bagQuestLinks then
         local selected,refs,item=bagQuestLinks(bag,slot)
         if refs and next(refs) then
-            tip:AddLine("Nexus Quest Tools: quest links",.40,.91,.83)
+            append("Nexus Quest Tools: quest links",.40,.91,.83)
             local order={}
             for qid in pairs(refs) do order[#order+1]=qid end
             table.sort(order)
@@ -223,15 +251,22 @@ local function hint(tip,bag,slot)
                 if not isa(title,"string") or title=="" then
                     title=verifiedQuestRefs[item] and verifiedQuestRefs[item][qid] or ("Quest #"..qid)
                 end
-                tip:AddLine(title.." (#"..qid.."): "..status,.88,.92,.93,true)
+                append(title.." (#"..qid.."): "..status,.88,.92,.93,true)
             end
-            if selected and AT.SearchRankQuestItem then tip:AddLine("Ctrl-click to find this quest in Rank Quest.",.67,.85,.83,true) end
+            if selected and AT.SearchRankQuestItem then append("Ctrl-click to find this quest in Rank Quest.",.67,.85,.83,true) end
         elseif item then
             local info=call(C_Container.GetContainerItemQuestInfo,bag,slot)
             if field(info,"isQuestItem")==true then
-                tip:AddLine("Nexus Quest Tools: quest link not verified",.68,.76,.78,true)
+                append("Nexus Quest Tools: quest link not verified",.68,.76,.78,true)
             end
         end
+    end
+    -- The native bag tooltip was laid out before the secure post-hook
+    -- ran. Show again after adding lines so Blizzard resizes the actual
+    -- tooltip and its backdrop, not a separate overlay label.
+    if added then
+        showQuestItemBackdrop(tip)
+        if tip.Show then tip:Show() end
     end
 end
 local function paint(button)
@@ -367,6 +402,26 @@ local function matchQuestie(q,item)
     end
 end
 
+-- Use localized live item/objective labels only when the objective has no
+-- explicit ID or item link. These hints never feed the discard classifier.
+local function matchesNativeLabel(itemName,qid)
+    if not kind(itemName,"string") or itemName=="" then return end
+    local objectives=call(C_QuestLog.GetQuestObjectives,qid)
+    if not kind(objectives,"table") then return end
+    for _,obj in pairs(objectives) do
+        local label=field(obj,"text")
+        if field(obj,"type")=="item" and not id(field(obj,"itemID"))
+            and kind(label,"string") and not label:find("|Hitem:",1,true) then
+            label=label:gsub("|c%x%x%x%x%x%x%x%x",""):gsub("|r","")
+            label=label:gsub("^%s*%d+%s*/%s*%d+%s+","")
+                :gsub("%s*[:(]?%s+%d+%s*/%s*%d+%)?%s*$","")
+                :gsub("^%s+",""):gsub("%s+$","")
+            if label==itemName then return true end
+        end
+    end
+end
+
+
 local function associatedQuest(bag,slot)
     if not C_Container or not C_QuestLog or not kind(bag,"number") or bag%1~=0 or bag<0
         or bag>(NUM_BAG_SLOTS or 4) or not id(slot) then return end
@@ -375,6 +430,10 @@ local function associatedQuest(bag,slot)
     local db=questieDB()
     local matched,ambiguous,seen=nil,false,{}
     local refs={}
+    local info=call(C_Container.GetContainerItemQuestInfo,bag,slot)
+    local questItem=field(info,"isQuestItem")==true
+    local itemName=questItem and call(C_Item and C_Item.GetItemNameByID,item)
+    local textMatches={}
     local function register(qid)
         refs[qid]=true
         if matched and matched~=qid then ambiguous=true end
@@ -390,10 +449,11 @@ local function associatedQuest(bag,slot)
         end
         local native={}
         nativeObjectiveIDs(qid,native)
-        if native[item] then register(qid) end
+        if native[item] then register(qid)
+        elseif matchesNativeLabel(itemName,qid) then textMatches[qid]=true end
         if db and matchQuestie(call(db.GetQuest,qid),item) then register(qid) end
     end
-    local shown=call(C_QuestLog.GetNumQuestLogEntries)
+    local shown,total=call(C_QuestLog.GetNumQuestLogEntries)
     if not kind(shown,"number") or shown<0 or shown>1000 then shown=0 end
     for i=1,shown do
         local row=call(C_QuestLog.GetInfo,i)
@@ -403,6 +463,16 @@ local function associatedQuest(bag,slot)
         local aq=call(QuestieLoader.ImportModule,QuestieLoader,"ActiveQuests")
         local loaded=aq and call(aq.GetAll)
         if kind(loaded,"table") then for qid in pairs(loaded) do inspect(qid) end end
+    end
+    -- A bag quest ID alone can be an item that starts a quest. Require both
+    -- native active-item evidence and a quest actually in the player log.
+    local linked=field(info,"questID")
+    if questItem and field(info,"isActive")==true and id(linked)
+        and call(C_QuestLog.IsOnQuest,linked)==true then register(linked) end
+    local inspected=0
+    for _ in pairs(seen) do inspected=inspected+1 end
+    if kind(total,"number") and total==inspected then
+        for qid in pairs(textMatches) do register(qid) end
     end
     -- Exact backlinks also let us inspect held quests beneath collapsed headings.
     -- A backlink alone (especially a starter/reward) never authorizes opening.

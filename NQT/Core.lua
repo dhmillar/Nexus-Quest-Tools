@@ -9,6 +9,9 @@ local defaults = {
     nextMobHint = true,
     reacquireEachPress = false,
     showQuestRoute = true,
+    hunterDeadzone = true,
+    hunterDeadzoneX = 0,
+    hunterDeadzoneY = 0,
     minimapAngle = 220,
     questHUDEnabled = false,
     dungeonPositionEnabled = true,
@@ -67,6 +70,7 @@ loader:SetScript("OnEvent", function(self, event, arg)
         safeInit("Bag quest links", AT.InitBagQuestLink)
         safeInit("Dungeons", AT.InitDungeonPosition)
         safeInit("Boss Target Marking", AT.InitBossTargetMarking)
+        safeInit("Hunter Deadzone", AT.InitHunterDeadzone)
         safeInit("Settings", AT.InitOptions)
     end
 end)

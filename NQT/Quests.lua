@@ -679,6 +679,27 @@ local function nativeTurnIn(id,map)
     end
 end
 
+-- Keep a small session-local index of maps where the client has already
+-- exposed real ready-for-turn-in POIs. Keep the map IDs, never coordinates:
+-- always re-query the native pin so changed phasing does not reuse stale data.
+local nativeTurnInMaps={}
+local turnInMapCount=0
+local function rememberTurnInMap(quest,map)
+    if call(Q.IsOnQuest,quest)~=true then return end
+    if nativeTurnInMaps[quest]==nil then
+        if turnInMapCount>=64 then return end
+        turnInMapCount=turnInMapCount+1
+    end
+    nativeTurnInMaps[quest]=map
+end
+local function forgetTurnInMap(quest)
+    if validID(quest) and nativeTurnInMaps[quest] then
+        nativeTurnInMaps[quest]=nil
+        turnInMapCount=turnInMapCount-1
+    end
+end
+
+
 local function resolveTurnInPoint(id,viewMap,wantName)
     local visited={}
     local function chain(map)
@@ -705,6 +726,8 @@ local function resolveTurnInPoint(id,viewMap,wantName)
     if not m and WorldMapFrame then m,x,y=chain(call(WorldMapFrame.GetMapID,WorldMapFrame)) end
     local origins=AT.char and AT.char.zoneQuestOrigins
     if not m then m,x,y=chain(field(origins,id)) end
+    if not m then m,x,y=chain(nativeTurnInMaps[id]) end
+    if m then rememberTurnInMap(id,m) end
     if m and not wantName then return m,x,y end
     local db,dist,zones=questieModule("QuestieDB"),questieModule("DistanceUtils"),questieModule("ZoneDB")
     local quest=db and call(db.GetQuest,id)
@@ -840,6 +863,7 @@ local function schedule()
 end
 
 function AT.ForgetRemovedQuest(id)
+    forgetTurnInMap(id)
     if not validID(id) then return end
     local changed
     local order=trackingOrder()
@@ -875,7 +899,10 @@ function AT.InitQuests()
     local frame = CreateFrame("Frame")
     frame:SetScript("OnEvent",function(_,event,id)
         if event=="QUEST_TURNED_IN" or event=="QUEST_REMOVED" then AT.ForgetRemovedQuest(id)
-        else schedule() end
+        else
+            if event=="QUEST_ACCEPTED" then forgetTurnInMap(id) end
+            schedule()
+        end
     end)
     local events = {
         "PLAYER_ENTERING_WORLD", "PLAYER_REGEN_ENABLED", "PLAYER_MAP_CHANGED",

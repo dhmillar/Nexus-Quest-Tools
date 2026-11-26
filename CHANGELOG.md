@@ -2,6 +2,18 @@
 
 WowUp installs the Forever ZIP attached to tagged GitHub releases.
 
+## 1.5.103 - 2026-11-26
+
+### Changes
+- Rank Quest displays observed drop rates with Questie disabled. Includes 1,177 NPC/item pairs across 626 item IDs; unknown rates remain hidden. Hover the quest for sample sizes and dates. Data from Everloot (https://everloot.app), CC BY-SA 4.0.
+- Party rows show teammates' names and combined progress. Remaining objectives expand once yours are done.
+- Rank Quest finds more quest-item links from game data and rechecks verified turn-in pins after you leave a map.
+- Added General > Hunter Deadzone, a crossed-out bow cue with a draggable preview. Settings can be dragged and reopen centered.
+- Smart Target skips mobs tagged by another group. Ordinary action-bar recall no longer marks or pings unverified mobs. Boss mode is unchanged.
+
+### Hotfixes
+- Extended quest-item details now stay within the native bag tooltip's dark backdrop.
+
 ## 1.5.102 - 2026-11-25
 
 ### Changes

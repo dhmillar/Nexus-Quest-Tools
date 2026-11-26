@@ -36,8 +36,15 @@ for i=1,11 do
         end}
 end
 ContainerFrameCombinedBags={IsShown=function()return true end,EnumerateValidItems=function()return ipairs(buttons)end}
-local watcher,tipHook
+local watcher,tipHook; local tipShows,tipScripts=0,{}; local solid
 GameTooltip={SetBagItem=function()end,AddLine=function(self,line)self.text=(self.text or "")..line end}
+function GameTooltip:Show() tipShows=tipShows+1 end
+function GameTooltip:HookScript(event,cb) tipScripts[event]=cb end
+function GameTooltip:CreateTexture()
+    solid={SetPoint=function()end,SetColorTexture=function(_,r,g,b,a) assert(a>=.95) end,
+        Show=function(self) self.visible=true end,Hide=function(self) self.visible=false end}
+    return solid
+end
 function hooksecurefunc(_,key,fn) if key=="SetBagItem" then tipHook=fn end end
 function CreateFrame() watcher={RegisterEvent=function()end,SetScript=function(_,_,cb)watcher.event=cb end};return watcher end
 local deferred
@@ -46,7 +53,7 @@ assert(loadfile("NQT/QuestLeftovers.lua"))("NQT",AT)
 AT.InitQuestLeftovers()
 assert(buttons[1].mark.shown and buttons[2].mark.shown and buttons[1].mark.path:match("LeftoverTrash.tga"))
 for i=3,10 do assert(not buttons[i].mark,"must not mark unverified or protected slot "..i) end
-tipHook(GameTooltip,0,1);assert(GameTooltip.text:find("future quest",1,true))
+tipHook(GameTooltip,0,1);assert(GameTooltip.text:find("future quest",1,true) and tipShows==1 and solid.visible);tipScripts.OnTooltipCleared();assert(not solid.visible)
 GameTooltip.text=nil;tipHook(GameTooltip,0,3);assert(not GameTooltip.text or not GameTooltip.text:find("leftover quest item",1,true))
 log={8};watcher.event(nil,"QUEST_ACCEPTED",8);assert(not buttons[1].mark.shown);deferred();assert(not buttons[1].mark.shown)
 log={};total=2;AT.RefreshQuestLeftovers();assert(not buttons[1].mark.shown,"hidden or collapsed rows block marking")

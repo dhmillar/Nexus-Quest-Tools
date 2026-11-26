@@ -3,15 +3,12 @@ local marker, previousMarker, oldMarker, v1Marker = "#AT4", "#AT3:t", "# AT2:tar
 local icon = 134400
 local macroNames = { "Auto Track", "Auto Track AT" }
 local setupLine = "/atmob [btn:2]e;c"
-local learnLine = setupLine
 local captureCondition = "[harm,nodead,nocombat,nomod]"
 local recallStop = "/stopmacro [btn:2]" .. captureCondition
 local recallPrefix, partialPrefix = "/targetexact ", "/target "
 local cleanupLine = "/cleartarget [dead]"
 local quietLine = "/atmob q"
 local tapLine = "/atmob m"
-local captureMarkCondition = "btn:1,harm,nodead,nocombat,nomod"
-local recallMarkCondition = "harm,nodead,nocombat,nomod"
 local markerNames = {"Star","Circle","Diamond","Triangle","Moon","Square","X","Skull"}
 AT.MarkerNames = markerNames
 
@@ -33,13 +30,6 @@ local function pingLine(condition)
     return "/ping [@target," .. condition .. "] Attack"
 end
 
-local function appendPing(lines, condition, left)
-    if not (AT.db and AT.db.pingWithMarker) then return left end
-    local command = pingLine(condition)
-    if left < #command+1 then return left end
-    lines[#lines+1] = command
-    return left-#command-1
-end
 local maxNameLength = 255 - #table.concat({marker, setupLine, recallStop, recallPrefix, cleanupLine}, "\n")
 
 local function say(message)
@@ -100,8 +90,6 @@ end
 local targetStop = "/stopmacro [btn:2][dead]"
 local targetConditional = "[nocombat,noharm][noexists] "
 local compactConditional = "[noexists] "
-local markStop = "/stopmacro [noharm][dead]"
-local regularMark = "harm,nodead"
 
 -- For both option states, no existing living hostile or selected corpse
 -- can be displaced by recall. An out-of-combat selection is learned first.
@@ -117,20 +105,7 @@ local function targetBody(name, compact)
     end
     local left = 255 - #table.concat(lines,"\n")
     if left < 0 then return end
-    if AT.db and AT.db.pressSkull then
-        local pair = {markStop, "/tm !" .. AT.GetPrimaryMarker(), "/ping [@target] Attack"}
-        local bytes = #table.concat(pair,"\n")+1
-        if AT.db.pingWithMarker and left >= bytes then
-            for _, line in ipairs(pair) do lines[#lines+1] = line end
-            left = left-bytes
-        else
-            local mark = markLine(regularMark)
-            if left>=#mark+1 then
-                lines[#lines+1] = mark
-                left = left-#mark-1
-            end
-        end
-    end
+    -- A normal macro cannot branch on tap status. Do not send a blind marker or ping.
     if name and AT.db and AT.db.quietTarget and left >= #quietLine+1 then
         table.insert(lines,safetyEnd+1,quietLine)
         left = left-#quietLine-1
@@ -155,11 +130,7 @@ local function macroBody(name)
 end
 function AT.GetMarkerPingNotice()
     if not (AT.db and AT.db.enabled and AT.db.pressSkull) then return end
-    local body = macroBody(AT.GetTargetName())
-    if not body:find("/tm ", 1, true) then return "Macro space limits a marker. Use AT Primary if needed." end
-    if AT.db.pingWithMarker and not body:find("/ping ", 1, true) then
-        return "Macro space limits some pings. Use AT Ping if needed."
-    end
+    return "Bind Smart Target to skip other groups' tags."
 end
 
 function AT.IsOwnTargetMacro(id)

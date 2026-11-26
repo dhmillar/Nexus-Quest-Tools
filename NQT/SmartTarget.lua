@@ -6,33 +6,71 @@ _G["BINDING_NAME_" .. BINDING] = "Smart Target (out of combat)"
 
 local INERT = "/stopmacro"
 local OOC = "/stopmacro [combat]"
-local MISSCHECK = "/stopmacro [exists]"
-local LIVING = "/stopmacro [noharm][dead]"
 local function readable(value)
     return not (issecretvalue and issecretvalue(value))
 end
 
-local function markerTail()
-    if not AT.db.pressSkull then return "" end
-    return "\n"..LIVING.."\n/tm !"..AT.GetPrimaryMarker()
-        .. (AT.db.pingWithMarker and "\n/ping [@target] Attack" or "")
-end
-local function recall(name, clear)
-    if not name then return end
-    local parts = {OOC}
-    if clear then
-        parts[#parts+1] = "/cleartarget"
-        parts[#parts+1] = MISSCHECK
-    end
-    parts[#parts+1] = (AT.IsPartialTarget() and "/target " or "/targetexact ") .. name
-    parts[#parts+1] = "/cleartarget [dead]"
-    local core=table.concat(parts,"\n")
-    local marked=core..markerTail()
-    return #marked<=255 and marked or #core<=255 and core or nil
+-- Only select a unit the client identifies as eligible on this hardware press.
+-- A name search can't test tap status before choosing among duplicate names.
+local function read(api, ...)
+    if type(api) ~= "function" then return end
+    local ok, first, second = pcall(api, ...)
+    if ok and readable(first) then return first, readable(second) and second or nil end
 end
 
--- Read the target on this physical press, not an earlier target-change event.
--- Unknown identity/marker state never arms a destructive clear.
+local function candidate(unit)
+    if read(UnitExists, unit) ~= true
+        or read(UnitCanAttack, "player", unit) ~= true
+        or read(UnitIsPlayer, unit) ~= false
+        or read(UnitIsDeadOrGhost, unit) ~= false
+        or read(UnitIsTapDenied, unit) ~= false then return end
+    local name = read(UnitName, unit)
+    if type(name) ~= "string" then return end
+    local range, known = read(UnitDistanceSquared, unit)
+    local bucket = read(CheckInteractDistance, unit, 3) == true and 1
+        or read(CheckInteractDistance, unit, 2) == true and 2
+        or read(CheckInteractDistance, unit, 1) == true and 3 or 4
+    return { unit=unit, name=name, range=known == true and type(range) == "number"
+        and range >= 0 and range < math.huge and range or nil, bucket=bucket }
+end
+
+local function closest()
+    local candidates = {}
+    local function check(unit)
+        local item = candidate(unit)
+        if item and AT.MatchesSavedTarget(item.name) then candidates[#candidates+1] = item end
+    end
+    check("target")
+    check("mouseover")
+    for i = 1, 40 do check("nameplate"..i) end
+    local exact = #candidates > 0
+    for _, item in ipairs(candidates) do
+        if not item.range then exact = false; break end
+    end
+    local best
+    for _, item in ipairs(candidates) do
+        if not best or (exact and item.range < best.range) or (not exact and item.bucket < best.bucket) then
+            best = item
+        end
+    end
+    return best
+end
+
+local function action(item)
+    if not item then return end
+    local unit = item.unit
+    local conditions = "[@"..unit..",harm,nodead]"
+    local body = OOC
+    if unit ~= "target" then
+        body = body .. "\n/target "..conditions.." "..unit
+    end
+    if AT.db.pressSkull then
+        body = body .. "\n/tm "..conditions.." !"..AT.GetPrimaryMarker()
+        if AT.db.pingWithMarker then body = body .. "\n/ping "..conditions.." Attack" end
+    end
+    return body
+end
+
 local function prepare()
     if not AT.db or AT.db.enabled==false then return end
     if AT.GetBossTargetMacro then
@@ -42,25 +80,16 @@ local function prepare()
             return body
         end
     end
-    local exists=UnitExists("target")
-    if not readable(exists) then return end
-    if not exists then return recall(AT.GetTargetName(),false) end
     local name, corpse=AT.GetSelectedMobForSmartTarget()
-    if not name then return end
-    if not AT.MatchesSavedTarget(name) then
-        if AT.SaveSelectedTarget() and not corpse then return OOC..markerTail() end
-        return
+    if name and not AT.MatchesSavedTarget(name) then
+        -- Keep the original select-then-press learning, including corpses.
+        -- Learning a name doesn't authorize marking the selected mob.
+        if AT.SaveSelectedTarget() then
+            if corpse then return end
+            return action(candidate("target") or closest())
+        end
     end
-    if corpse then return end
-    if not AT.db.pressSkull then
-        -- With no marker, the saved name is the explicit repeat signal.
-        return recall(AT.GetTargetName(),true)
-    end
-    if not GetRaidTargetIndex then return end
-    local mark=GetRaidTargetIndex("target")
-    if not readable(mark) or (mark~=nil and type(mark)~="number") then return end
-    if mark==AT.GetPrimaryMarker() then return recall(AT.GetTargetName(),true) end
-    return OOC..markerTail()
+    return action(closest())
 end
 
 local function initialize()
