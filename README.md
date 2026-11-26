@@ -4,6 +4,8 @@
 
 Nexus Quest Tools is a World of Warcraft: Forever addon that organizes your quest log, tracks what you’re working on, and helps you get to the next objective. It also adds a reusable action-bar macro for named targets and an optional dungeon map view. Formerly Rankor Tools and Auto Track.
 
+[Read the Nexus Quest Tools Field Manual](https://nighteternal.net/NQT) for installation, in-game screenshots, and walkthroughs for General, Auto Macro, Rank Quest, and Dungeons.
+
 ## What it does
 
 ### Quest tracking and navigation
