@@ -97,6 +97,27 @@ AT.db.pingWithMarker=false; local mark=press(); assert(mark:find("/tm ",1,true) 
 units.target=allowed
 units.nameplate3.distance=40
 pick("nameplate3")
+units.nameplate4={name="Raptor",tap=false}
+pick("nameplate3") -- unknown extra plate must not discard measured distances
+local nativeDistance=UnitDistanceSquared
+function UnitDistanceSquared() return nil,false end
+function UnitPosition(u)
+    if u=="player" then return 0,0,0,1 end
+    if u=="nameplate3" then return 6,0,0,1 end
+    if u=="nameplate4" then return 1,0,0,2 end -- different instance
+    if u=="target" or u=="nameplate2" then return 10,0,0,1 end
+end
+pick("nameplate3")
+UnitPosition=nil
+LibStub=function(name) if name=="LibRangeCheck-3.0" then
+    return {GetRange=function(_,u)
+        if u=="nameplate3" then return 5,8 end
+        if u=="target" or u=="nameplate2" then return 10,15 end
+    end}
+end end
+pick("nameplate3")
+LibStub=nil;UnitDistanceSquared=nativeDistance
+units.nameplate4=nil
 units.nameplate2=nil;units.nameplate3=nil
 assert(press():find("/tm [@target,exists,harm,nodead]",1,true))
 units.target=denied

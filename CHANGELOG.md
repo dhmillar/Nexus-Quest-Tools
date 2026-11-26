@@ -2,6 +2,13 @@
 
 WowUp installs the Forever ZIP attached to tagged GitHub releases.
 
+## 1.5.105 - 2026-11-26
+
+### Hotfixes
+- Smart Target no longer lets a mob with unknown distance make it ignore measured distances for other mobs with the saved name. It can use exposed same-map positions and, if already loaded, LibRangeCheck for additional range information. When the client only provides range bands, the nearest choice is approximate.
+- Tap checks, marking, pinging, mute settings, and dungeon boss targeting are unchanged.
+
+
 ## 1.5.104 - 2026-11-26
 
 ### Changes

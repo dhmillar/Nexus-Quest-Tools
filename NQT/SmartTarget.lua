@@ -74,11 +74,52 @@ end
 -- A name search can't test tap status before choosing among duplicate names.
 local function read(api, ...)
     if type(api) ~= "function" then return end
-    local ok, first, second = pcall(api, ...)
-    if ok and readable(first) then return first, readable(second) and second or nil end
+    local ok, first, second, third, fourth = pcall(api, ...)
+    if not ok then return end
+    if not readable(first) then first=nil end
+    if not readable(second) then second=nil end
+    if not readable(third) then third=nil end
+    if not readable(fourth) then fourth=nil end
+    return first,second,third,fourth
 end
 
-local function candidate(unit)
+local function finite(v)
+    return type(v)=="number" and v==v and v>-math.huge and v<math.huge
+end
+
+local function sampleContext()
+    local x,y,z,map=read(UnitPosition,"player")
+    local lib=read(function() return LibStub and LibStub("LibRangeCheck-3.0",true) end)
+    return {x=x,y=y,z=z,map=map,lib=type(lib)=="table" and lib}
+end
+
+local function sampleRange(unit,ctx)
+    local squared,valid=read(UnitDistanceSquared,unit)
+    if valid==true and finite(squared) and squared>=0 then
+        local yards=math.sqrt(squared);return yards,yards
+    end
+    if finite(ctx.x) and finite(ctx.y) and finite(ctx.map) then
+        local x,y,z,map=read(UnitPosition,unit)
+        if finite(x) and finite(y) and map==ctx.map then
+            local dx,dy,dz=ctx.x-x,ctx.y-y,finite(ctx.z) and finite(z) and ctx.z-z or 0
+            local yards=math.sqrt(dx*dx+dy*dy+dz*dz)
+            if finite(yards) then return yards,yards end
+        end
+    end
+    local lo,hi
+    if ctx.lib then lo,hi=read(ctx.lib.GetRange,ctx.lib,unit,true) end
+    if finite(lo) and lo>=0 and (hi==nil or finite(hi) and hi>=lo) then
+        return lo,hi or math.huge
+    end
+    -- A successful test supplies an upper bound; nil/false can also
+    -- indicate the interaction isn't available on this unit.
+    local ceiling=read(CheckInteractDistance,unit,3)==true and 10
+        or read(CheckInteractDistance,unit,2)==true and 12
+        or read(CheckInteractDistance,unit,1)==true and 29 or math.huge
+    return 0,ceiling
+end
+
+local function candidate(unit,ctx)
     if read(UnitExists, unit) ~= true
         or read(UnitCanAttack, "player", unit) ~= true
         or read(UnitIsPlayer, unit) ~= false
@@ -88,19 +129,16 @@ local function candidate(unit)
     if tapped~=false then return nil, tapped==true and "tagged by another group" or "tap status unavailable" end
     local name = read(UnitName, unit)
     if type(name) ~= "string" then return end
-    local range, known = read(UnitDistanceSquared, unit)
-    local bucket = read(CheckInteractDistance, unit, 3) == true and 1
-        or read(CheckInteractDistance, unit, 2) == true and 2
-        or read(CheckInteractDistance, unit, 1) == true and 3 or 4
-    return { unit=unit, name=name, range=known == true and type(range) == "number"
-        and range >= 0 and range < math.huge and range or nil, bucket=bucket }
+    local lo,hi=sampleRange(unit,ctx or sampleContext())
+    return {unit=unit,name=name,lo=lo,hi=hi}
 end
 
 local function closest()
     local candidates = {}
+    local ctx=sampleContext()
     local blockedMatch=false
     local function check(unit)
-        local item, reason = candidate(unit)
+        local item, reason = candidate(unit,ctx)
         if item and AT.MatchesSavedTarget(item.name) then candidates[#candidates+1] = item
         elseif reason=="tagged by another group" and AT.MatchesSavedTarget(read(UnitName,unit)) then blockedMatch=true end
     end
@@ -122,14 +160,13 @@ local function closest()
         end
     end
     for i = 1, 40 do scan("nameplate"..i) end
-    local exact = #candidates > 0
-    for _, item in ipairs(candidates) do
-        if not item.range then exact = false; break end
-    end
+    local nearestUpper=math.huge
+    for _,item in ipairs(candidates) do nearestUpper=math.min(nearestUpper,item.hi) end
     local best
-    for _, item in ipairs(candidates) do
-        if not best or (exact and item.range < best.range) or (not exact and item.bucket < best.bucket) then
-            best = item
+    for _,item in ipairs(candidates) do
+        if item.lo<=nearestUpper and (not best or item.hi<best.hi
+            or item.hi==best.hi and item.lo<best.lo) then
+            best=item
         end
     end
     return best, blockedMatch
