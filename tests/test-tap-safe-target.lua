@@ -45,6 +45,19 @@ assert(loadfile("NQT/Target.lua"))("NQT",AT)
 AT.InitTarget()
 assert(not body:find("/tm",1,true) and not body:find("/ping",1,true),"existing owned action-slot macro must be rewritten")
 assert(body:find("/targetexact",1,true) and body:find("/atmob m",1,true),"slot keeps native recall without blind marking/pinging")
+do
+    local original=body
+    assert(AT.SetQuestMobTarget("Raptor"))
+    assert(AT.SetQuestMobTarget("Durotar Tiger") and body:find("Durotar Tiger",1,true))
+    AT.char.targetNameLocked=true
+    assert(not AT.SetQuestMobTarget("Other Boss") and AT.GetTargetName()=="Durotar Tiger")
+    AT.char.targetNameLocked=nil
+    combat=true
+    assert(not AT.SetQuestMobTarget("Other Boss") and AT.GetTargetName()=="Durotar Tiger")
+    combat=false
+    assert(not AT.SetQuestMobTarget("target") and not AT.SetQuestMobTarget("x;/ping") and not AT.SetQuestMobTarget(""))
+    assert(AT.SetQuestMobTarget("Raptor") and body==original)
+end
 local owner,overrides,actionKind=nil,{},"macro"
 ActionButton1={action=1}
 ActionButton2={action=2}

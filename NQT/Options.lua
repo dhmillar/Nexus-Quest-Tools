@@ -248,10 +248,10 @@ local function buildPanel()
 
     option(rank, "questHUDEnabled", "Enable Rank Quest", -2, "Show the movable, zone-organized Rank Quest panel and hide the stock quest display.")
     option(rank, "questPartyProgress", "Quest Party Progress", -30, "Show the party progress Blizzard reports on hover, and keep shared quests visible while a party member still needs objectives.")
-    option(rank, "questLeftoverMarks", "Mark leftover quest items in bags", -58, "Adds a trash badge only when a turned-in quest can be verified and no current known objective uses that item. Never deletes anything.")
-    option(rank, "rankQuestDropRates", "Show item drop rates", -86, "Uses Questie when available or bundled Forever observations. Hover the quest for sample counts. Data from Everloot (https://everloot.app), CC BY-SA 4.0. Unknown rates are hidden.")
-    option(rank, "showQuestMapPins", "Show standalone map pins", -114, "Adds verified quest and service pins on the maps when Questie is off.")
-    option(rank, "showObservedQuestGivers", "Show observed quest giver locations", -142, "Optional reported landmarks, not proof of current quest availability. Data from Efficient Games, CC BY 4.0.")
+    option(rank, "questLeftoverMarks", "Mark leftover quest items in bags", -58, "Shows a trash badge for verified leftovers and an amber badge for items from a quest you dropped. Keep amber items if you plan to retry the quest. Never deletes anything.")
+    option(rank, "rankQuestDropRates", "Show item drop rates", -86, "Show estimated percentages next to item objectives. Unknown rates are hidden.")
+    option(rank, "showQuestMapPins", "Show standalone map pins", -114, "Adds quest and service pins to the world map when Questie is off. NQT adds no minimap pins. Recorded starts can still have prerequisites.")
+    option(rank, "showObservedQuestGivers", "Show observed quest giver locations", -142, "Show known giver locations, even when the associated quest is not currently available.")
     makeText(rank, "GameFontHighlightSmall", -177, "Right-click a quest to exclude it from automatic tracking.")
     makeText(rank, "GameFontDisableSmall", -199, "Ctrl-click quest titles to number them. /at order lists them.")
 
@@ -284,13 +284,9 @@ local function buildPanel()
         end
         refreshPanel()
     end)
-    setupButton(macro, "Edit target name", 139, 177, -192, function()
-        if AT.OpenTargetEditor then AT.OpenTargetEditor() end
-    end)
-    setupButton(macro, "Save selected mob", 151, 18, -224, saveCurrentTarget)
-    setupButton(macro, "Place primary macro", 139, 177, -224, placeSkullMacro)
-    setupButton(macro, "Place mouseover Ping", 151, 18, -256, function() placeMouseoverMacro(AT.PickupPingMacro,"AT Ping") end)
-    setupButton(macro, "Place secondary marker", 139, 177, -256, function() placeMouseoverMacro(AT.PickupCrossMacro,"AT X (secondary marker)") end)
+    setupButton(macro, "Place primary macro", 139, 177, -192, placeSkullMacro)
+    setupButton(macro, "Place mouseover Ping", 151, 18, -224, function() placeMouseoverMacro(AT.PickupPingMacro,"AT Ping") end)
+    setupButton(macro, "Place secondary marker", 139, 177, -224, function() placeMouseoverMacro(AT.PickupCrossMacro,"AT X (secondary marker)") end)
     showPage(1)
 end
 

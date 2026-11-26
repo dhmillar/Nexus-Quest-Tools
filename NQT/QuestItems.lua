@@ -86,7 +86,7 @@ local function validate(b)
         local _,_,_,name,npcOnly=call(AT.GetReadyQuestTurnInPoint,b.qid)
         return npcOnly==true and npcMacro(name)==b.token
     end
-    return b.tile.link==b.link and itemToken(call(verify,b.qid,b.index))==b.token
+    return b.tile.link==b.link and itemToken(call(verify,b.qid,b.index,b.token))==b.token
 end
 local function newButton()
     if locked() or not UIParent or type(RegisterStateDriver)~="function" then return end
@@ -167,10 +167,13 @@ function AT.SetRankQuestItemTargets(rows,scroll,callback)
     targets={}
     viewport,verify=scroll,callback
     for _,row in ipairs(rows or {}) do
-        local tile=row.item
-        if not row.partyOnly and row.qid and tile and tile.link then
-            local token=itemToken(tile.link)
-            if token then targets[#targets+1]={row=row,tile=tile,token=token,link=tile.link,qid=row.qid,index=tile.rankQuestIndex} end
+        if not row.partyOnly and row.qid then
+            for _,tile in ipairs(row.itemTiles or {row.item}) do
+                if tile.link then
+                    local token=itemToken(tile.link)
+                    if token then targets[#targets+1]={row=row,tile=tile,token=token,link=tile.link,qid=row.qid,index=tile.rankQuestIndex} end
+                end
+            end
         end
         if not row.partyOnly and row.qid and row.turnInLabel then
             local token=npcMacro(row.turnInName)

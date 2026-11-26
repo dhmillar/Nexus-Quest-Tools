@@ -47,7 +47,7 @@ end
 -- Only accept an unambiguous integer current/total on a typed quest objective.
 local function objective(line)
     local current,total=field(line,"numFulfilled"),field(line,"numRequired")
-    local desc=plain(field(line,"leftText"))
+    local desc=plain(field(line,"leftText")) or plain(field(line,"text"))
     if number(current) and number(total) and total>0 and current<=total then
         return current,total,desc
     end
@@ -122,8 +122,213 @@ local function parse(qid,roster)
     return parsed
 end
 
+
+local PREFIX="NQTQuestState1"
+local remote,outbound,departed={},{},{}
+local sentFor,queuedRefresh,queuedBagScan
+local function questID(v) return number(v) and v>0 and v<=99999999 and v%1==0 end
+
+local function groupChannel()
+    if LE_PARTY_CATEGORY_INSTANCE and eq(call(IsInGroup,LE_PARTY_CATEGORY_INSTANCE),true) then
+        return "INSTANCE_CHAT"
+    end
+    return "PARTY"
+end
+
+local function senderKey(name,realm)
+    if not is(name,"string") or name=="" then return end
+    if not name:find("-",1,true) then
+        if not is(realm,"string") or realm=="" then realm=call(GetNormalizedRealmName) end
+        if is(realm,"string") and realm~="" then name=name.."-"..realm end
+    end
+    return name:gsub("%s",""):lower()
+end
+
+local function refreshAfterMessage()
+    if queuedRefresh then return end
+    local function refresh()
+        queuedRefresh=nil
+        if AT.RefreshQuestHUD then AT.RefreshQuestHUD() end
+    end
+    if C_Timer and C_Timer.After then queuedRefresh=true;C_Timer.After(0,refresh)
+    else refresh() end
+end
+
+local function activeSync()
+    return AT.IsQuestPartyProgressActive() and (not AT.db or AT.db.enabled~=false)
+end
+
+-- P carries only objective slots and counts; never send names or chat text.
+local function decodeProgress(payload)
+    local raw,partial,needs,entries=payload:match("^P:(%d+):([01])([01]):([%d/,]+)$")
+    local qid=tonumber(raw)
+    if not questID(qid) then return end
+    local counts,previous={},0
+    for index,a,b in entries:gmatch("(%d+)/(%d+)/(%d+),") do
+        index,a,b=tonumber(index),tonumber(a),tonumber(b)
+        if index<=previous or index>12 or b<1 or b>100000 or a>b or (a<b and needs=="0") then return end
+        counts[#counts+1]={index=index,current=a,total=b}
+        previous=index
+    end
+    if #counts==0 then return end
+    local canonical={}
+    for i,o in ipairs(counts) do canonical[i]=o.index.."/"..o.current.."/"..o.total.."," end
+    if table.concat(canonical)~=entries then return end
+    return qid,{counts=counts,hasUnknown=partial=="1",needs=needs=="1"}
+end
+
+local function receive(payload,channel,sender)
+    if not activeSync() or not is(payload,"string") or #payload>220 or not eq(channel,groupChannel()) then return end
+    local state,raw=payload:match("^([DLO]):(%d+)$")
+    local qid=tonumber(raw)
+    if not state then qid,state=decodeProgress(payload) end
+    if not state or not questID(qid) then return end
+    local incoming=senderKey(sender)
+    if not incoming then return end
+    local match
+    for _,member in ipairs(partyRoster()) do
+        local name,realm=call(UnitFullName,member.unit)
+        if not member.offline and senderKey(is(name,"string") and name or member.name,realm)==incoming then
+            if match then return end
+            match=member
+        end
+    end
+    if not match then return end
+    local guid=match.guid
+    local states=remote[guid]
+    if state=="O" then
+        if states then states[qid]=nil end
+    else
+        if not states then states={};remote[guid]=states end
+        if states[qid]==nil then
+            local n=0;for _ in pairs(states) do n=n+1 end
+            if n>=128 then return end
+        end
+        states[qid]=state
+    end
+    if pending[qid] then pending[qid][guid]=nil end
+    cache[qid]=nil
+    refreshAfterMessage()
+end
+
+local function announce(qid,state,progress)
+    if not questID(qid) then return end
+    local payload=state..":"..qid..(progress and (":"..progress) or "")
+    if #payload>220 or outbound[qid]==payload then return end
+    local result=call(C_ChatInfo.SendAddonMessage,PREFIX,payload,groupChannel())
+    local success=Enum and Enum.SendAddonMessageResult and Enum.SendAddonMessageResult.Success
+    if eq(result,true) or eq(result,0) or (success~=nil and eq(result,success)) then outbound[qid]=payload end
+end
+
+local function encodeProgress(objectives)
+    if not is(objectives,"table") then return end
+    local counts,partial,needs={},#objectives>12,false
+    for i=1,math.min(#objectives,12) do
+        local entry=objectives[i]
+        local current,total=objective(entry)
+        if eq(field(entry,"finished"),false) then needs=true end
+        if number(current) and number(total) and current%1==0 and total%1==0 and total<=100000 then
+            counts[#counts+1]=i.."/"..current.."/"..total..","
+            if current<total then needs=true end
+        else
+            partial=true
+        end
+    end
+    if #counts>0 then return (partial and "1" or "0")..(needs and "1" or "0")..":"..table.concat(counts) end
+end
+
+local function rosterChanged()
+    local seen,keys={},{}
+    for _,member in ipairs(partyRoster()) do
+        if not member.offline then seen[member.guid]=true;keys[#keys+1]=member.guid end
+    end
+    for guid in pairs(remote) do if not seen[guid] then remote[guid]=nil end end
+    for qid,states in pairs(pending) do
+        for guid in pairs(states) do if not seen[guid] then states[guid]=nil end end
+        if not next(states) then pending[qid]=nil end
+    end
+    table.sort(keys)
+    local signature=groupChannel().."|"..table.concat(keys,"|")
+    if signature~=sentFor then
+        sentFor=signature
+        outbound={}
+        cache={}
+    end
+end
+
+local function scanLocal(specificQuest)
+    local q=C_QuestLog
+    if not q then return end
+    local function check(qid)
+        if questID(qid) and not departed[qid] then
+            local ready=call(AT.IsQuestReadyForTurnIn or q.ReadyForTurnIn,qid)
+            if eq(ready,true) or eq(ready,1) then
+                announce(qid,"D")
+            else
+                local objectives=call(q.GetQuestObjectives,qid)
+                local progress=encodeProgress(objectives)
+                if progress and progress:sub(2,2)=="1" then
+                    announce(qid,"P",progress)
+                elseif outbound[qid]=="D:"..qid and is(objectives,"table") then
+                    -- A previously complete objective can regress even without numeric progress.
+                    for _,entry in ipairs(objectives) do
+                        if eq(field(entry,"finished"),false) then announce(qid,"O");break end
+                    end
+                end
+            end
+        end
+    end
+    if questID(specificQuest) then check(specificQuest);return end
+    local count=call(q.GetNumQuestLogEntries)
+    if not number(count) then return end
+    for i=1,math.min(count,1000) do
+        local info=call(q.GetInfo,i)
+        if not eq(field(info,"isHeader"),true) then check(field(info,"questID")) end
+    end
+end
+
+local function onSyncEvent(_,event,a,b,c,d)
+    if not activeSync() then
+        AT.ClearRankQuestPartyProgress()
+        return
+    end
+    if event=="CHAT_MSG_ADDON" then
+        if eq(a,PREFIX) then receive(b,c,d) end
+    elseif event=="QUEST_TURNED_IN" or event=="QUEST_REMOVED" then
+        if questID(a) then departed[a]=true;announce(a,"L") end
+    elseif event=="QUEST_ACCEPTED" then
+        local qid=questID(b) and b or a
+        if questID(qid) then departed[qid]=nil;announce(qid,"O") end
+    elseif event=="BAG_UPDATE_DELAYED" and C_Timer and C_Timer.After then
+        -- Allow the quest log to catch up with the changed bag contents.
+        if not queuedBagScan then
+            queuedBagScan=true
+            C_Timer.After(.2,function()
+                queuedBagScan=nil
+                if activeSync() then scanLocal() end
+            end)
+        end
+    else
+        if event=="PLAYER_ENTERING_WORLD" or event=="GROUP_ROSTER_UPDATE" then rosterChanged() end
+        scanLocal(event=="QUEST_WATCH_UPDATE" and a or nil)
+    end
+end
+
+function AT.InitQuestPartySync()
+    if not C_ChatInfo or type(C_ChatInfo.SendAddonMessage)~="function"
+        or not eq(call(C_ChatInfo.RegisterAddonMessagePrefix,PREFIX),true) then return end
+    local frame=CreateFrame("Frame")
+    for _,event in ipairs({"CHAT_MSG_ADDON","GROUP_ROSTER_UPDATE","PLAYER_ENTERING_WORLD",
+        "QUEST_LOG_UPDATE","QUEST_WATCH_UPDATE","BAG_UPDATE_DELAYED","QUEST_TURNED_IN","QUEST_REMOVED","QUEST_ACCEPTED"}) do
+        pcall(frame.RegisterEvent,frame,event)
+    end
+    frame:SetScript("OnEvent",onSyncEvent)
+    onSyncEvent(frame,"GROUP_ROSTER_UPDATE")
+end
+
 function AT.ClearRankQuestPartyProgress()
-    cache,pending={},{}
+    cache,pending,remote,outbound,departed={},{},{},{},{}
+    sentFor=nil
 end
 
 function AT.GetQuestPartySnapshot(qid,force)
@@ -140,11 +345,37 @@ function AT.GetQuestPartySnapshot(qid,force)
     local remembered=pending[qid] or {}
     local nextPending={}
     local snapshot={members=roster}
+    local localObjectives
     for _,member in ipairs(roster) do
-        local data=reported[member.guid]
+        local shared=remote[member.guid] and remote[member.guid][qid]
+        local liveCounts=is(shared,"table")
+        local data=liveCounts and shared or reported[member.guid]
         if member.offline then
             member.status="Offline"
+        elseif not liveCounts and shared then
+            snapshot.hasSharedResolution=true
+            member.status=shared=="D" and "Objectives complete" or "No longer on this quest"
         elseif data and data.needs then
+            if liveCounts then
+                snapshot.hasSharedResolution=true -- render fresh rows, not the stock tooltip
+                if localObjectives==nil then
+                    localObjectives=(C_QuestLog and call(C_QuestLog.GetQuestObjectives,qid)) or false
+                end
+                local counts={}
+                for i,o in ipairs(data.counts) do
+                    local entry=field(localObjectives,o.index)
+                    local _,total,desc=objective(entry)
+                    if desc then
+                        -- Do not copy the receiver's own count into another player's label.
+                        desc=desc:gsub("^%s*%d+%s*/%s*%d+[%s:]+","")
+                            :gsub("[%s:]+%d+%s*/%s*%d+%s*$","")
+                        if desc=="" or desc:match("^%d+%s*/%s*%d+$") then desc=nil end
+                    end
+                    counts[i]={current=o.current,total=o.total,
+                        desc=total==o.total and desc or "Objective "..o.index}
+                end
+                data={counts=counts,hasUnknown=data.hasUnknown}
+            end
             member.counts=data.counts
             member.countsPartial=data.hasUnknown
             if number(now) then nextPending[member.guid]={counts=data.counts,partial=data.hasUnknown,at=now} end

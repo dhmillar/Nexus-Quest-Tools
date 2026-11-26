@@ -373,6 +373,18 @@ local function setName(value, partial, lock)
     return true
 end
 
+-- A Rank Quest click sets an exact saved name. It never acquires a unit,
+-- marks it, pings it, or unlocks a manually locked target.
+function AT.SetQuestMobTarget(value)
+    if not enabled() then return false, "Auto Macro is disabled." end
+    if AT.IsTargetNameLocked() then return false, "The saved target name is locked." end
+    local name=validName(value)
+    if not name or not validPartial(name) then return false, "No exact monster name is available." end
+    local ok,why=setName(name,false)
+    if not ok and why then say(why) end
+    return ok,why
+end
+
 local editor, input, warning, lockCheck
 function AT.OpenTargetEditor()
     if InCombatLockdown() then say("Leave combat before changing the saved target."); return end

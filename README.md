@@ -22,6 +22,10 @@ Nexus Quest Tools is a World of Warcraft: Forever addon that organizes your ques
 - **Party objectives.** Hover for available party progress or use the person button for named counts under your own objectives. A quest can stay on the list while a party member still needs it. Counts depend on what WoW reports.
 - **Bag cleanup hints.** Optional badges explain why a verified leftover quest item is no longer needed by your current log. Items with uncertain data are left alone. The addon never destroys items.
 
+### NQT Level Guide
+
+Open with the map-book icon in Rank Quest. **For You** ranks available leveling areas; **Zones** and **Dungeons** let you browse. Pick Solo, 2 players, or 3 players to adjust recommendations, and filter by Kill, Collect, Mixed, or Other. Select a quest to see objectives and highlight its known start on the guide map. **Track** sets a waypoint to a known start or highlights a recorded item-drop area. **NPC Icons** toggles service categories, all off by default. Coverage is not exhaustive.
+
 ### Auto Macro
 
 - Place the **Auto Track** macro on an action bar and use that slot’s normal keybind. Save a selected mob or type an exact or partial name, then reuse it without editing the macro each time. Lock a manually entered name if you don’t want other selections to replace it.
@@ -55,11 +59,11 @@ Set the version in `NQT/NQT.toc`, run `tools/New-Release.ps1`, and attach the re
 
 ### Optional drop-rate observations
 Data from Everloot (https://everloot.app), CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/).
-EverlootDrops.lua is the separately licensed adapted data. It holds only NPC/object IDs, item IDs, and observed counts; no game-file layer or install pseudonyms. Snapshots: https://everloot.app/database/download (November 14, 2026) and https://everloot.app/docs/api/rollups-drops (data as of November 26, 2026). Keep the credit and share this adapted data on the same license. Filters: public observations from at least three installs for NPC and object sources. For each item and source type, smaller samples fill gaps only when no source has at least 20 eligible windows. Newer observations replace older ones for the same source unless the older sample is the only one with at least 20 windows. Rates are rounded up for display; a range indicates that different sources have different rates. Counts were not pooled. An absent rate is unknown, not zero. Observed rates per eligible loot window are estimates, not game constants. Hover a quest to see the counts and snapshot dates.
+EverlootDrops.lua is the separately licensed adapted data. It holds only NPC/object IDs, item IDs, and observed counts; no game-file layer or install pseudonyms. Snapshots: https://everloot.app/database/download (November 14, 2026) and https://everloot.app/docs/api/rollups-drops (data as of November 26, 2026). Keep the credit and share this adapted data on the same license. Filters: public observations from at least three installs for NPC and object sources. For each item and source type, smaller samples fill gaps only when no source has at least 20 eligible windows. Newer observations replace older ones for the same source unless the older sample is the only one with at least 20 windows. Rates are rounded up for display; a range indicates that different sources have different rates. Counts were not pooled. An absent rate is unknown, not zero. Observed rates per eligible loot window are estimates, not game constants. The addon rounds known drop rates for display.
 
 ## Standalone map pins versus Questie Forever defaults
 
-In Rank Quest settings, Show standalone map pins is on by default and hides the NQT layer when Questie is loaded. Where Forever reports them, NQT shows available starts, active quest/waypoint pins, ready turn-ins, flight masters, and service POIs. It avoids drawing over detected stock quest pins. Outdoor minimap placement uses the client's position and view radius and does not draw when those values or rotation are unavailable. The world map shows cursor coordinates while supported.
+In Rank Quest settings, Show standalone map pins is on by default and hides the NQT layer when Questie is loaded. Where Forever reports them, NQT shows available starts, active quest/waypoint pins, ready turn-ins, flight masters, and service POIs. It avoids drawing over detected stock quest pins. The standalone pins appear on the world map, not the minimap. The world map shows cursor coordinates while supported.
 
 Additional observed service pins: 12 innkeeper, 39 flight-master and 51 mailbox records. Coordinates are approximate interaction points, not exact spawns. Known factions are filtered; a mailbox or inn with unknown affiliation does not imply access. Observed quest givers is a separate off-by-default option, with 61 recorded locations. These are prior observations, not proof the quest is offered to your character.
 

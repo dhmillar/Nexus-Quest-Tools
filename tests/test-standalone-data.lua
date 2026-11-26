@@ -60,9 +60,36 @@ if tooltip then tooltip(GameTooltip,0,1); assert(GameTooltip.out:find("Goretusk 
 held[22]=false;press(nil)
 bagItem=730;held[38]=true;press(38)
 assert(not AT.GetLeftoverQuestBagHint(0,1),"bundle never authorizes a discard classification")
+assert(loadfile("NQT/ForeverQuestFacts.lua"))("NQT",AT)
+bagItem=16305;held[2]=true
+assert(AT.ForeverQuestFacts[2][1]==20 and AT.ForeverQuestFacts[2][2]==30)
+assert(AT.GetForeverObjectiveQuests(bagItem)[2])
+press(2) -- numeric backlink under a collapsed header; no Questie and no item cache
+assert(not AT.GetLeftoverQuestBagHint(0,1),"positive objective data cannot authorize discarding")
+local originalLookup=AT.GetForeverObjectiveQuests
+AT.GetForeverObjectiveQuests=function(item) if item==16305 then return {[2]=true,[3]=true,[4]=true} end end
+held[3]=true;held[4]=false
+chosen=nil;click(bagbtn,"LeftButton",false)
+assert(type(chosen)=="table" and chosen[2] and chosen[3] and not chosen[4],"all verified held matches should reach Rank Quest")
+held[3]=false;AT.GetForeverObjectiveQuests=originalLookup
+held[2]=false;press(nil)
+bagItem=3248
+assert(AT.ForeverQuestItemOrigins[3248][252]==1 and AT.ForeverProtectedQuestItems[3248])
+GameTooltip.out=nil;tooltip(GameTooltip,0,1)
+assert(GameTooltip.out:find("Reward from Quest #252",1,true))
+assert(not GameTooltip.out:find("quest link not verified",1,true))
+press(nil)
 assert(loadfile("NQT/Quests.lua"))("NQT",AT)
 held[595]=true
 pins[42]={{questID=595,isQuestStart=false,inProgress=false,x=.273,y=.695}}
+function UnitFactionGroup() return "Alliance" end
+function GetLocale() return "enUS" end
+ready[623]=true;held[623]=true
+local dust,gx,gy,finisher,clickable,approx=AT.GetReadyQuestTurnInPoint(623)
+assert(dust==1445 and gx==.688 and gy==.532 and finisher=="Privateer Groy" and clickable and approx)
+pins[1445]={{questID=623,isQuestStart=false,inProgress=false,x=.68,y=.53}}
+local _,nx,_,knownName,_,nativeApprox=AT.GetReadyQuestTurnInPoint(623,1445)
+assert(nx==.68 and knownName=="Privateer Groy" and not nativeApprox,"real game coordinates take priority")
 local m,x,y=AT.GetReadyQuestTurnInPoint(595,42)
 assert(m==42 and x==.273 and y==.695)
 assert(AT.GetReadyQuestTurnInPoint(595)==42,"look up remembered native map after closing the displayed map")
@@ -79,4 +106,56 @@ assert(not AT.GetReadyQuestTurnInPoint(595),"forget the remembered map when a qu
 assert(AT.GetReadyQuestTurnInPoint(595,42)==42)
 held[595]=false
 assert(not AT.GetReadyQuestTurnInPoint(595),"never route a quest that is no longer held")
-print("PASS Questie-free live bag links, ambiguity guards, selective Forever reference links and verified turn-in map re-query")
+assert(loadfile("NQT/ForeverVerifiedEndpoints.lua"))("NQT",AT)
+held[274]=true;ready[274]=true
+local em,ex,ey,en,act,estimated=AT.GetReadyQuestTurnInPoint(274)
+assert(em==1432 and ex==.4601 and ey==.136 and en=="Chief Engineer Hinderweir VII" and act and estimated)
+AT.db.questHUDEnabled=true
+assert(AT.ToggleQuestHUDManualFocus(274))
+assert(AT.IsQuestTurnInNavigation(274),"test exercises focused completed quest")
+assert(not AT.GetQuestTurnInPoint(274), "a reference must not route without a native point")
+pins[1432]={{questID=274,isQuestStart=false,inProgress=false,x=.462,y=.137}}
+local gm,gy=AT.GetQuestTurnInPoint(274)
+assert(gm==1432 and gy==.462,"known map should find the live turn-in before opening the map")
+pins[1432]=nil
+function UnitFactionGroup() return "Horde" end
+assert(not AT.GetReadyQuestTurnInPoint(274),"supplemental turn-in must respect faction")
+function UnitFactionGroup() return "Alliance" end
+held[306]=true; ready[306]=true
+local tm,tx,ty,tn,tc,ta=AT.GetReadyQuestTurnInPoint(306)
+assert(tm==1437 and tx==.1143 and ty==.523 and tn=="Tarrel Rockweaver" and tc and ta)
+print("PASS Questie-free live bag links, ambiguity guards, selective Forever reference links and verified turn-in map re-query")local function checkArea(q,area,npc,works)
+    ready[q]=true;held[q]=true
+    local a,n,c=AT.GetReadyQuestTurnInArea(q)
+    assert(a==area and n==npc and c==works)
+    assert(not AT.GetReadyQuestTurnInPoint(q),"area is not coordinates")
+end
+function UnitFactionGroup() return "Horde" end
+checkArea(1098,"Shadowfang Keep","Deathstalker Vincent",true)
+checkArea(3446,"Temple of Atal'Hakkar","Altar of Hakkar",false)
+checkArea(1144,"Razorfen Kraul","Willix the Importer",true)
+function UnitFactionGroup() return "Alliance" end
+assert(not AT.GetReadyQuestTurnInArea(1098),"faction gates named reference")
+function GetLocale() return "frFR" end
+assert(not AT.GetReadyQuestTurnInArea(1144),"do not expose untranslated macro name")
+function GetLocale() return "enUS" end
+ready[1144]=false
+assert(not AT.GetReadyQuestTurnInArea(1144),"must be ready for turn-in")
+ready[1144]=true;held[1144]=false
+assert(not AT.GetReadyQuestTurnInArea(1144),"must still hold the quest")
+print("PASS area-only native-client turn-in fallback, object vs NPC, faction and locale safety")
+function UnitFactionGroup() return "Horde" end
+checkArea(95309,"Alcaz Prison","Commander Folkar",true)
+checkArea(96335,"Alcaz Prison","Mason Connery",true)
+checkArea(96369,"Alcaz Prison","Commander Folkar",true)
+checkArea(2953,"Gnomeregan","The Sparklematic 5200",false)
+checkArea(4603,"Gnomeregan","The Sparklematic 5200",false)
+assert(not AT.GetReadyQuestTurnInArea(95454),"do not infer whether the note or Folkar ends this quest")
+assert(loadfile("NQT/EverlootDrops.lua"))("NQT",AT)
+local jaw=assert(AT.ObservedQuestDrops.items[6166],"latest snapshot supplies exact item ID")
+local dated=false
+for _,v in ipairs(jaw) do
+    assert(v[2]>0 and v[2]<=v[3] and v[4]>=3)
+    if AT.ObservedQuestDrops.dates[v[5]]=="2026-11-26 09:00 UTC" then dated=true end
+end
+assert(dated)

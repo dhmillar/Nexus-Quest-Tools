@@ -100,3 +100,8 @@ assert(panel.moving==false,"hide ends the drag")
 mini.scripts.OnClick(mini,"LeftButton")
 isCentered()
 print("PASS: Title-only drag, no recenter while open, hide releases drag, reopening centers")
+assert(not buttons["Edit target name"] and not buttons["Save selected mob"])
+for _,label in ipairs({"Place recall macro","Place primary macro","Place mouseover Ping","Place secondary marker"}) do
+    assert(buttons[label] and buttons[label].scripts.OnClick)
+end
+print("PASS: Auto Macro only shows the four placement actions")

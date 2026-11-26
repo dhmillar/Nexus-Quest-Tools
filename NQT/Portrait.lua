@@ -65,6 +65,9 @@ function AT.RefreshPortrait()
     local name = AT.GetTargetName()
     if AT.db and AT.db.enabled == false then name = nil end
     local takePortrait = SetPortraitTexture and matchingTarget(name)
+    local displayID = name and SetPortraitTextureFromCreatureDisplayID and AT.GetQuestMobDisplayID
+        and AT.GetQuestMobDisplayID(name)
+    if not ordinary(displayID) or type(displayID)~="number" or displayID<=0 or displayID%1~=0 then displayID=nil end
     for _, prefix in ipairs(buttonGroups) do
         for index = 1, 12 do
             local button = _G[prefix .. index]
@@ -73,7 +76,7 @@ function AT.RefreshPortrait()
                 if slotHasOurMacro(button) then
                     local icon = button.icon or button.Icon
                     local fallback = icon and needsFireCat(button, icon)
-                    if not portrait and icon and (takePortrait or fallback) then
+                    if not portrait and icon and (takePortrait or displayID or fallback) then
                         local texture = button:CreateTexture(nil, "ARTWORK", nil, 7)
                         texture:SetAllPoints(icon)
                         texture:SetAlpha(0)
@@ -82,12 +85,19 @@ function AT.RefreshPortrait()
                     end
                     if portrait then
                         if portrait.name and portrait.name ~= name then
-                            portrait.name = nil
+                            portrait.name,portrait.fireCat = nil,false
                             portrait.texture:SetTexture(nil)
                         end
                         if takePortrait then
                             local ok = pcall(SetPortraitTexture, portrait.texture, "target", true)
                             if ok then portrait.name,portrait.fireCat = name,false end
+                        end
+                        -- A verified creature display needs no live unit.
+                        if displayID and not portrait.name then
+                            portrait.texture:SetTexture(nil)
+                            portrait.fireCat=false
+                            local ok,result=pcall(SetPortraitTextureFromCreatureDisplayID,portrait.texture,displayID)
+                            if ok and result~=false then portrait.name=name end
                         end
                         if not portrait.name then
                             if fallback and not portrait.fireCat then

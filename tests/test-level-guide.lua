@@ -1,0 +1,431 @@
+local AT={char={}}
+local playerLevel=20
+local done={[104]=true}
+local openToMap,requests
+local activeWaypoint,waypointTracked
+UnitLevel=function() return playerLevel end
+UnitRace=function() return "Human","Human",1 end
+UnitClass=function() return "Hunter","HUNTER",3 end
+UnitFactionGroup=function() return "Alliance" end
+local function levelRecord(level,area,name,objs,min,mask,tier)
+    return {min or 1,level,area,0,mask or "ffffffffffffffff",tier or 5,1,0,name,objs or {}}
+end
+AT.ForeverLevelGuideQuests={
+ [101]=levelRecord(20,40,"Westfall cull",{{1,500,8}}),
+ [102]=levelRecord(20,44,"Redridge trinkets",{{2,111,8}}),
+ [103]=levelRecord(20,44,"Redridge rations",{{2,112,8}}),
+ [104]=levelRecord(20,40,"Already turned in",{{1,501,5}}),
+ [105]=levelRecord(24,44,"Not high enough",{{1,500,8}},24),
+ [106]=levelRecord(20,40,"Other faction",{{1,500,8}},1,"0000000000000002"),
+ [107]=levelRecord(20,40,"Historical only",{{2,113,1}}),
+ [108]=levelRecord(20,40,"Ready to report",{{1,502,10}}),
+ [109]=levelRecord(18,1581,"Deadmines passage",{{1,503,8}}),
+ [110]=levelRecord(25,44,"Next zone when leveled",{{1,500,8}},25),
+ [111]=levelRecord(20,0,"Native qualifying area",{{1,510,8}}),
+ [112]=levelRecord(20,40,"Party reminder, not held",{{1,510,8}}),
+ [113]=levelRecord(20,0,"Outdoor errand with stale dungeon tag",{{1,510,8}}),
+ [114]=levelRecord(25,1581,"Dungeon quest above your minimum",{{1,503,8}},24),
+ [115]=levelRecord(20,40,"Catalog row missing objectives",{}),
+ [116]=levelRecord(20,44,"Westfall kill counted even when finished",{{1,523,8}}),
+ [117]=levelRecord(20,717,"Stockade package",{{2,112,1}}),
+}
+AT.GetLevelGuideQuestLog=function() return {[108]={title="Ready to report",complete=true,destination=1436},
+    [112]={title="Party reminder, not held",partyOnly=true,destination=1436},
+    [113]={title="Outdoor errand with stale dungeon tag",dungeon="Deadmines",destination=1436},
+    [115]={title="Catalog row missing objectives",destination=1436},
+    [116]={title="Finished but not turned in",complete=true,destination=1433}} end
+AT.ObservedQuestStarts={[1436]={{107,.4,.4,1}}}
+AT.LevelGuideQuestGivers={[101]={{1436,.45,.72,1,42,"Giver of Westfall"}},[109]={{1436,.31,.42,1,84,"Outside Dungeon Giver"}}}
+UiMapPoint={CreateFromCoordinates=function(m,x,y) return {uiMapID=m,position={GetXY=function()return x,y end}} end}
+C_SuperTrack={SetSuperTrackedUserWaypoint=function(v) waypointTracked=v end,
+    IsSuperTrackingUserWaypoint=function() return waypointTracked==true end}
+AT.ObservedQuestDrops={items={[111]={{500,1,10,0,0,0}},[112]={{501,5,10,0,0,0}}}}
+AT.LevelGuideMapReveal={[7000]={["250:130:20:30"]="1001, 1002"}}
+local names={[1436]="Westfall",[1433]="Redridge Mountains",[1431]="Duskwood",[6000]="Frontier",
+    [6100]="Deadmines"}
+C_Map={
+ GetBestMapForUnit=function() return 1436 end,
+ GetMapInfo=function(id) return names[id] and {name=names[id],mapType=id==6100 and 4 or 3} end,
+ GetMapChildrenInfo=function(id,ty)
+    if id~=1415 then return {} end
+    if ty==3 then return {{mapID=6000,name=names[6000]}} end
+    return {{mapID=6100,name=names[6100]}}
+ end,
+ GetMapArtLayers=function(id)
+    if id==1436 then return {{layerWidth=300,layerHeight=200,tileWidth=200,tileHeight=200}} end
+ end,
+ GetMapArtID=function(id) if id==1436 then return 7000 end end,
+ GetMapArtLayerTextures=function() return {8,9} end,
+ SetUserWaypoint=function(p) activeWaypoint=p end,
+ GetUserWaypoint=function() return activeWaypoint end,
+ ClearUserWaypoint=function() activeWaypoint=nil;waypointTracked=false end,
+}
+local offers={[1436]={101,104,106},[1433]={102,103,105,110},[6000]={111},[6100]={109}}
+-- The wrong-faction historical quest is not a native offer.
+table.remove(offers[1436],3)
+C_QuestLog={
+ GetQuestsOnMap=function(id)
+    local list={}
+    for _,q in ipairs(offers[id] or {}) do list[#list+1]={questID=q,isQuestStart=true} end
+    return list
+ end,
+ GetQuestRewardXP=function(id) if id==101 then return 375 end end,
+ IsQuestFlaggedCompleted=function(id) return done[id]==true end,
+ GetAllCompletedQuestIDs=function()return {} end, -- per-quest flag must still win
+ GetQuestObjectives=function(id)
+    if id==115 then return {{type="item",itemID=111,text="Acorns: 2/7"},
+        {type="monster",text="Rescue trapped guards: 0/2"}} end
+    if id==116 then return {{type="monster",text="Wild cats slain: 8/8",finished=true}} end
+    return {}
+ end,
+}
+assert(loadfile("NQT/LevelGuide.lua"))("NQT",AT)
+local function place(r,name)
+    for _,p in ipairs(r.places)do if p.name==name then return p end end
+    error(name)
+end
+local solo=AT.BuildLevelGuide()
+local west=place(solo,"Westfall");local red=place(solo,"Redridge Mountains")
+assert(west.count==4 and west.available==1 and west.leads==2 and west.total==6,"include quests outside log without calling party reminders held")
+assert(west.mix.kill==3 and west.mix.collect==1 and west.mix.turnin==1 and west.xpKnown==1 and west.exactXP==375)
+assert(red.count==3 and red.mix.collect==2 and red.mix.kill==1 and red.mix.turnin==1 and red.lowDrops==1 and red.score<west.score)
+assert(place(solo,"Frontier").count==1 and place(solo,"Frontier").lo==20)
+local dungeon=place(solo,"Deadmines")
+assert(dungeon.count==1 and dungeon.artMap==6100)
+for _,q in ipairs(dungeon.quests) do assert(q.id~=113 and q.id~=117) end
+assert(dungeon.quests[1].id==109 and not dungeon.quests[2].availableHere)
+assert(place(solo,"Stockade").quests[1].id==117)
+local sparseScore=AT.ScoreLevelGuideQuest(115,AT.ForeverLevelGuideQuests[115],20,1,{status="In log",held=true})
+assert(sparseScore.kind=="collect" and sparseScore.items==5 and sparseScore.kills==0 and sparseScore.lowRate==.1)
+local shadowScore=AT.ScoreLevelGuideQuest(116,AT.ForeverLevelGuideQuests[116],20,1,{status="Turn in",held=true})
+assert(shadowScore.kind=="kill" and shadowScore.kills==0 and shadowScore.work==2)
+-- Optional DB expands the whole catalog, and actual character prerequisites are respected.
+LibQuestieDB={flavor={key="Forever"},Quest={GetAllIds=function() return {119,120} end,Get=function(q,k)
+    if q==119 then return ({name="Extra catalog quest",questLevel=20,requiredLevel=18,zoneOrSort=40,objectives={[1]={{500,"Wild animals slain"}}}})[k] end
+    if q==120 then return ({name="Locked chain",questLevel=20,requiredLevel=18,zoneOrSort=40,preQuestSingle={142}})[k] end
+end}}
+local extra=place(AT.BuildLevelGuide(),"Westfall");assert(extra.total==7 and extra.leadMix.kill==2)
+local projected
+for _,q in ipairs(extra.quests) do if q.id==119 then projected=q end;assert(q.id~=120) end
+assert(projected and projected.status=="In range" and projected.kind=="kill")
+LibQuestieDB=nil
+for _,q in ipairs(west.quests) do assert(q.id~=104 and q.id~=106) end
+local duo=AT.BuildLevelGuide(20,2)
+local trio=AT.BuildLevelGuide(20,3)
+assert(place(trio,"Westfall").score>place(duo,"Westfall").score and place(duo,"Westfall").score>west.score)
+assert(AT.ScoreLevelGuideQuest(102,AT.ForeverLevelGuideQuests[102],20,3,{status="Pick up"}).work > AT.ScoreLevelGuideQuest(102,AT.ForeverLevelGuideQuests[102],20,1,{status="Pick up"}).work)
+done[101]=true;playerLevel=25
+local leveled=AT.BuildLevelGuide()
+assert(place(leveled,"Westfall").count==3 and place(leveled,"Redridge Mountains").count==5)
+assert(AT.FilterLevelGuide(solo,"dungeons","drowned",35,40)[1].name=="The Drowned City")
+assert(#AT.FilterLevelGuide(solo,"dungeons","drowned",13,19)==0)
+assert(AT.FilterLevelGuide(solo,"zones","red",30,15)[1].name=="Redridge Mountains")
+assert(#AT.FilterLevelGuide(solo,"zones","duskwood",20,20)==1)
+print("PASS recommendations: completion, level-ups, owned progress, availability, party pace, XP, drop rates, dungeons, and manual filters")
+
+local env={}
+local function object()
+ local obj={shown=true,scripts={},events={},texture=nil}
+ for _,k in ipairs({"SetSize","SetPoint","SetAllPoints","SetColorTexture","SetTexCoord","SetJustifyH",
+ "SetTextColor","SetWordWrap","SetWidth","SetHeight","SetFrameStrata","SetMovable","EnableMouse",
+ "SetClampedToScreen","SetScale","SetResizable","SetResizeBounds","SetBackdrop","SetBackdropColor","SetBackdropBorderColor","SetAutoFocus",
+ "SetMaxLetters","SetNumeric","ClearFocus","RegisterForDrag","RegisterForClicks","SetFrameLevel",
+ "ClearAllPoints","StartMoving","StopMovingOrSizing"}) do obj[k]=function() end end
+ function obj:GetFrameLevel() return self.frameLevel or (self.parent and self.parent:GetFrameLevel()+1 or 9) end
+ function obj:SetFrameLevel(level) self.frameLevel=level end
+ function obj:EnableMouse(value) self.mouseEnabled=value end
+ function obj:RegisterForClicks(...) self.clicks={...} end
+ function obj:SetPoint(...) self.point={...} end
+ function obj:SetVertexColor() end
+ function obj:SetBlendMode() end
+ function obj:SetAlpha(v) self.alpha=v end
+ function obj:GetScript(k) return self.scripts[k] end
+ function obj:SetPropagateMouseWheel(v) self.wheelPropagates=v end
+ function obj:SetFrameStrata(v) self.strata=v end
+ function obj:HookScript(k,f) self:SetScript(k,f) end
+ function obj:SetDrawLayer(layer,sub) self.sublevel=sub end
+ function obj:SetTexCoord(...) self.texCoord={...} end
+ function obj:SetNormalTexture(asset) self.normal=object();self.normal.texture=asset end
+ function obj:SetPushedTexture(asset) self.pushed=object();self.pushed.texture=asset end
+ function obj:SetHighlightTexture() end
+ function obj:SetChecked(v) self.checked=v end
+ function obj:GetChecked() return self.checked end
+ function obj:EnableMouseWheel(v) self.mouseWheel=v end
+ function obj:SetScrollChild(child) self.scrollChild=child end
+ function obj:SetVerticalScroll(v) self.verticalScroll=v end
+ function obj:GetVerticalScroll() return self.verticalScroll or 0 end
+ function obj:GetNormalTexture() return self.normal end
+ function obj:GetPushedTexture() return self.pushed end
+ function obj:SetSize(w,h) self.width,self.height=w,h end
+ function obj:SetWidth(w) self.width=w end
+ function obj:SetHeight(h) self.height=h end
+ function obj:GetWidth() return self.width or 1920 end
+ function obj:GetHeight() return self.height or 1080 end
+ function obj:StartSizing(where) self.started=where end
+ function obj:StopMovingOrSizing() self.stopped=true end
+ function obj:Show() self.shown=true end
+ function obj:Hide() self.shown=false;if self.scripts.OnHide then self.scripts.OnHide() end end
+ function obj:IsShown() return self.shown end
+ function obj:SetShown(v) self.shown=v end
+ function obj:SetTexture(t) self.texture=t end
+ function obj:CreateTexture() return object() end
+ function obj:CreateFontString() return object() end
+ function obj:SetText(t) self.text=t;if self.scripts.OnTextChanged then self.scripts.OnTextChanged() end end
+ function obj:GetText() return self.text or "" end
+ function obj:SetScript(k,fn) self.scripts[k]=fn end
+ function obj:RegisterEvent(e) self.events[e]=true end
+ return obj
+end
+local frames={}
+function CreateFrame(kind,name,parent,template)
+ local o=object();o.kind,o.parent,o.template=kind,parent,template
+ frames[#frames+1]=o
+ if name then env[name]=o;_G[name]=o end
+ return o
+end
+UIParent=object();UISpecialFrames={}
+WorldMapFrame=object();WorldMapFrame:Hide();WorldMapFrame:SetFrameStrata("HIGH")
+function WorldMapFrame:GetFrameStrata() return self.strata end
+function WorldMapFrame:SetMapID(id) openToMap=id end
+function WorldMapFrame:Show() self.shown=true;requests=true end
+function WorldMapFrame:Raise() self.raised=true end
+done[101]=false;playerLevel=20
+AT.ToggleLevelGuide()
+local g=assert(env.NQTLevelGuide)
+assert(g:IsShown() and g.heroName.text=="Westfall")
+assert(g.heroTop.text=="" and g.headerSub.text:find("Level 20",1,true))
+assert(g.inQuestLog:GetChecked() and g.hideHeld)
+assert(g.badges[1].label.text=="2 Kill" and g.heroFact.text:find("3 quests",1,true))
+for _,row in ipairs(g.quests) do
+    assert(not row.record or row.record.status~="In log" and row.record.status~="Turn in")
+end
+g.inQuestLog:SetChecked(false);g.inQuestLog.scripts.OnClick(g.inQuestLog)
+assert(not g.hideHeld and AT.char.levelGuideHideHeld==false)
+assert(g.badges[1].label.text=="4 Kill" and g.heroFact.text:find("6 quests",1,true))
+assert(math.abs(g.art:GetWidth()/g.canvas:GetWidth()-.465)<.03 and g.art:GetHeight()>300)
+assert(g.badges[1]:GetWidth()<=76)
+assert(g.quests[1].mouseWheel and not g.quests[1].wheelPropagates and g.areas[1].mouseWheel and not g.areas[1].wheelPropagates)
+assert(not g.art.wheelPropagates and not g.objectives.scroll.wheelPropagates)
+assert(not g.npcMenu:IsShown() and #g.npcChecks==15)
+for _,c in ipairs(g.npcChecks) do assert(not c:GetChecked()) end
+AT.LevelGuideNPCServices={[1436]={{3,1,.4,.5,"Test repair"},{3,2,.2,.6,"Other faction repair"}}}
+g.npcButton.scripts.OnClick();assert(g.npcMenu:IsShown())
+g.npcChecks[3]:SetChecked(true);g.npcChecks[3].scripts.OnClick(g.npcChecks[3]);assert(#g.art.services==1 and g.art.serviceMarks[1].shown)
+g.npcChecks[3]:SetChecked(false);g.npcChecks[3].scripts.OnClick(g.npcChecks[3]);assert(#g.art.services==0 and not g.art.serviceMarks[1].shown)
+g.npcButton.scripts.OnClick()
+g.badges[1].scripts.OnClick()
+assert(g.questKind=="kill" and g.heroName.text=="Westfall" and g.heroFact.text:find("4 matching",1,true))
+for _,row in ipairs(g.quests) do if row.record then assert(row.record.kind=="kill") end end
+g.badges[1].scripts.OnClick()
+assert(not g.questKind and g.heroFact.text:find("6 quests",1,true))
+assert(g.art.startMarks[1] and g.art.startMarks[1].shown)
+assert(#g.art.tiles==4 and not g.art.fallback.shown and g.art.tiles[2].texture==9 and not openToMap)
+local detail=g.art.tiles[4]
+assert(detail.shown and detail.texture==1002 and detail.sublevel==1
+    and math.abs(detail.texCoord[2]-50/64)<.0001 and math.abs(detail.texCoord[4]-130/256)<.0001
+    and g.art.tiles[2].sublevel==0,"unexplored detail is painted above native terrain with cropped edge UVs")
+local giverRow
+for _,row in ipairs(g.quests) do if row.record and row.record.id==101 then giverRow=row end end
+assert(giverRow and giverRow.waypoint.shown and giverRow.detail.text:find("Giver of Westfall",1,true))
+assert(giverRow.detail.text:find("Westfall 45.0, 72.0",1,true))
+giverRow.scripts.OnClick(giverRow,"LeftButton")
+assert(g.selectedQuest==101 and g.art.pin.shown and not activeWaypoint and not AT.GetLevelGuideRoutePoint())
+assert(g.objectives.shown and g.objectives.title.text=="Westfall cull" and g.objectives.text.text=="Kills: 0/8")
+assert(giverRow.waypoint.caption.text=="Track")
+assert(g.art.pin.shown and g.art.pin:GetWidth()>12)
+
+local native,nativeText=AT.GetLevelGuideObjectiveText(115)
+assert(nativeText and native=="Acorns: 2/7\nRescue trapped guards: 0/2")
+local beforeWidth=g.art.mapGeometry.w
+g.art.zoomIn.scripts.OnClick(g.art.zoomIn)
+assert(g.art.zoom>1 and g.art.mapGeometry.w>beforeWidth and g.art.pin.shown)
+g.art.scripts.OnMouseWheel(g.art,3)
+assert(g.art.zoom>2 and g.art.pin.shown)
+for _,tile in ipairs(g.art.tiles) do
+    if tile.shown then assert(tile:GetWidth()<=g.art:GetWidth() and tile:GetHeight()<=g.art:GetHeight()) end
+end
+g.art.scripts.OnMouseWheel(g.art,-20)
+assert(g.art.zoom==1 and g.art.mapGeometry.w==beforeWidth)
+giverRow.waypoint.scripts.OnClick()
+assert(waypointTracked and activeWaypoint.uiMapID==1436 and AT.GetLevelGuideRoutePoint()==101)
+g.scripts.OnEvent(g,"QUEST_ACCEPTED",5,101)
+assert(not activeWaypoint and not AT.GetLevelGuideRoutePoint() and g.art.pin.shown)
+g.mapButton.scripts.OnClick(g.mapButton)
+assert(openToMap==1436 and requests and WorldMapFrame.raised and g.strata=="LOW")
+WorldMapFrame:Hide();assert(g.strata=="FULLSCREEN_DIALOG")
+C_Map.GetMapArtID=function() return 1 end
+g.art.artKey=nil
+g.scripts.OnEvent(g,"QUEST_LOG_UPDATE")
+assert(not detail.shown,"stale detail must hide when a map has no compatible art ID")
+C_Map.GetMapArtID=function() return 7000 end
+g.art.artKey=nil
+g.scripts.OnEvent(g,"QUEST_LOG_UPDATE")
+assert(not g.partyMenu:IsShown());g.partyChoice.scripts.OnClick();assert(g.partyMenu:IsShown())
+g.group[3].scripts.OnClick(g.group[3]);assert(not g.partyMenu:IsShown())
+assert(g.size==3 and AT.char.levelGuidePartySize==3)
+g.tabs.dungeons.scripts.OnClick()
+g.search:SetText("Deadmines")
+assert(g.quests[1].shown and g.quests[1].name.text:find("Deadmines passage",1,true) and not g.quests[2].shown)
+assert(g.areas[1].index.text=="")
+assert(g.quests[1].waypoint.shown and g.quests[1].detail.text:find("Outside Dungeon Giver",1,true))
+g.quests[1].scripts.OnClick(g.quests[1],"LeftButton")
+assert(g.art.pin.shown and g.art.destination.map==1436 and not activeWaypoint)
+g.quests[1].waypoint.scripts.OnClick()
+local qid,giverMap=AT.GetLevelGuideRoutePoint()
+assert(qid==109 and giverMap==1436)
+g.quests[1].waypoint.scripts.OnClick()
+assert(not activeWaypoint)
+-- Item route without a fake exact waypoint. Current and browsing modes use the same start data.
+AT.LevelGuideItemStarts={[109]={30001,{{1436,.4,.55,.08,1,501,"Crate Raider"}}}}
+local original=AT.LevelGuideQuestGivers[109];AT.LevelGuideQuestGivers[109]=nil
+g.scripts.OnEvent(g,"QUEST_LOG_UPDATE")
+local q=g.quests[1]
+assert(q.record.giver.pickup and q.waypoint.shown and q.detail.text:find("Crate Raider",1,true))
+q.waypoint.scripts.OnClick()
+assert(g.art.destination.pickup and g.art.pin.shown and not activeWaypoint and not AT.GetLevelGuideRoutePoint())
+local dots=0;for _,d in pairs(g.art.areaRing) do if d.shown then dots=dots+1 end end
+assert(dots>=16 and q.waypoint.caption.text=="Stop")
+q.waypoint.scripts.OnClick()
+assert(q.waypoint.caption.text=="Track")
+AT.LevelGuideItemStarts[109]={30001,{}}
+g.scripts.OnEvent(g,"QUEST_LOG_UPDATE")
+assert(not g.quests[1].waypoint.shown and g.quests[1].detail.text:find("Starts with item #30001",1,true))
+assert(not g.art.pin.shown)
+AT.LevelGuideQuestGivers[109]=original
+AT.LevelGuideItemStarts=nil
+g.search:SetText("Drowned City")
+assert(g.heroName.text=="The Drowned City")
+g.high:SetText("18");assert(g.heroName.text=="No matching areas")
+g.high:SetText("")
+g.tabs.zones.scripts.OnClick()
+g.search:SetText("redridge")
+assert(g.heroName.text=="Redridge Mountains")
+g.tabs.forYou.scripts.OnClick()
+playerLevel=25;done[101]=true;g.scripts.OnEvent(g,"PLAYER_LEVEL_UP")
+assert(g.headerSub.text:find("Level 25",1,true))
+local last=place(g.result,"Redridge Mountains");assert(last.count==5)
+local before=g.questLimit
+g.grip.scripts.OnMouseDown(g.grip,"LeftButton");assert(g.started=="BOTTOMRIGHT")
+g:SetSize(1100,800);g.scripts.OnSizeChanged()
+g.grip.scripts.OnMouseUp(g.grip,"LeftButton")
+assert(g.stopped and AT.char.levelGuideWidth==1100 and AT.char.levelGuideHeight==800 and g.contentZoom>1.20 and g.canvas:GetWidth()<1100)
+local maximize=g.maximizeButton
+local mast
+for _,f in ipairs(frames) do if f.parent==g.canvas and f.scripts.OnDragStart then mast=f end end
+assert(mast and mast.mouseEnabled and maximize.mouseEnabled)
+assert(maximize:GetWidth()==32 and maximize:GetHeight()==32 and maximize.clicks[1]=="LeftButtonUp")
+assert(maximize:GetFrameLevel()>mast:GetFrameLevel(),"drag surface must not intercept the click")
+assert(maximize.point[2].template=="UIPanelCloseButton" and maximize.point[2]:GetFrameLevel()==maximize:GetFrameLevel())
+assert(maximize.normal.texture:find("LevelGuideWindowControls",1,true) and maximize.normal.texCoord[1]==0)
+local function clickTitleControl()
+    local target=maximize:GetFrameLevel()>mast:GetFrameLevel() and maximize or mast
+    assert(target.scripts.OnClick)
+    target.scripts.OnClick(target,"LeftButton")
+end
+clickTitleControl()
+assert(maximize.normal.texCoord[1]==.5)
+local qp=g.questPage
+ g.quests[1].scripts.OnMouseWheel(g.quests[1],-1)
+ assert(g.questPage>=qp)
+assert(g.areaLimit>=10 and g.questLimit>=10 and g.areas[1].point[4]<g.quests[1].point[4]
+   and g.areas[1].point[5]==g.quests[1].point[5] and g.detailsHeight>=104)
+assert(g.maximized and not g.grip.shown and g:GetWidth()==1912 and g:GetHeight()==1072 and g.contentZoom<=1.12)
+clickTitleControl()
+assert(maximize.normal.texCoord[1]==0)
+assert(not g.maximized and g.grip.shown and g:GetWidth()==1100 and g:GetHeight()==800)
+assert(AT.char.levelGuideWidth==1100 and AT.char.levelGuideHeight==800)
+g.scripts.OnEvent(g,"QUEST_TURNED_IN",115)
+assert(AT.char.levelGuideTurnIns[115] and place(g.result,"Westfall").count==2)
+AT.ToggleLevelGuide();assert(not g:IsShown())
+assert(loadfile("NQT/LevelGuide.lua"))("NQT",AT)
+AT.ToggleLevelGuide()
+assert(env.NQTLevelGuide:GetWidth()==1100 and env.NQTLevelGuide:GetHeight()==800 and not env.NQTLevelGuide.inQuestLog:GetChecked())
+assert(UISpecialFrames[1]=="NQTLevelGuide")
+print("PASS compact tabs and lists; ten-plus maximized rows; wheel capture; stock map in front; opt-in service pins")
+print("PASS illustrated window: launch, real map tiles, selection, filters, group toggle, level event, and close")
+
+local real={}
+assert(loadfile("NQT/LevelGuideData.lua"))("NQT",real)
+assert(loadfile("NQT/LevelGuideGivers.lua"))("NQT",real)
+assert(real.LevelGuideItemStarts[2][1]==16305 and real.LevelGuideItemStarts[2][2][1][7]=="Sharptalon")
+assert(real.LevelGuideItemStarts[2][2][1][1]==1440 and next(real.LevelGuideNPCServices))
+assert(loadfile("NQT/DungeonCatalog.lua"))("NQT",real)
+local count=0
+for id,r in pairs(real.ForeverLevelGuideQuests) do
+    assert(type(r[9])=="string" and r[2]>0 and r[1]>=0)
+    count=count+1
+end
+assert(count==5600 and real.ForeverLevelGuideQuests[96393][9]=="Old Ironforge Incursion")
+assert(real.ForeverDungeonForQuest(95789)=="The Drowned City")
+print("PASS standalone catalog: 5,600 quest records; named Forever dungeon reference")
+
+assert(loadfile("NQT/LevelGuide.lua"))("NQT",real)
+local offline=real.BuildLevelGuide(36,1)
+local drowned=place(offline,"The Drowned City")
+assert(drowned.leads>=3 and drowned.count==0)
+for _,q in ipairs(drowned.quests) do
+    assert(real.ForeverDungeonForQuest(q.id)=="The Drowned City")
+end
+local routes=real.FilterLevelGuide(offline,"forYou")
+assert(#routes>8 and routes[1].total>=8 and routes[1].leads>0,
+    "a standalone, empty-log character must see and rank full-catalog options")
+print("PASS real catalog with no active quests or Questie: ranked zones, eligible dungeon coverage, and strict membership")
+assert(real.IsForeverOutdoorQuest(93604)==true)
+local razorfen=place(real.BuildLevelGuide(43,1),"Razorfen Downs")
+for _,q in ipairs(razorfen.quests) do assert(q.id~=93604) end
+for _,qid in ipairs({94617,99257}) do
+    local d=real.ForeverLevelGuideQuests[qid]
+    local soloScore=real.ScoreLevelGuideQuest(qid,d,40,1,{status="In range"})
+    local partyScore=real.ScoreLevelGuideQuest(qid,d,40,3,{status="In range"})
+    assert(soloScore.kind=="collect" and partyScore.kind=="collect" and partyScore.work<soloScore.work)
+end
+assert(real.ScoreLevelGuideQuest(1878,real.ForeverLevelGuideQuests[1878],44,1,{status="Pick up"}).potential==0)
+assert(real.ScoreLevelGuideQuest(1707,real.ForeverLevelGuideQuests[1707],44,1,{status="Pick up"}).potential>0)
+print("PASS Blizzard hotfix cases: outdoor quest, exact shared-loot items, exact zero-XP repeatable")
+assert(loadfile("NQT/LevelGuideGivers.lua"))("NQT",real)
+local n=0
+for _,rows in pairs(real.LevelGuideQuestGivers) do
+    n=n+1;assert(#rows>0 and rows[1][1]>0 and type(rows[1][6])=="string")
+end
+assert(n>=1900)
+-- Alternates match on identity, not just name. Native trivial status also overrides levels.
+AT.ForeverLevelGuideQuests[121]=levelRecord(25,40,"Westfall cull",{{1,500,14}})
+AT.ForeverLevelGuideQuests[122]=levelRecord(22,40,"Westfall cull",{{1,505,14}})
+AT.ForeverLevelGuideQuests[123]=levelRecord(20,40,"Gray by client",{{1,507,2}})
+AT.ForeverLevelGuideQuests[124]=levelRecord(20,40,"Wrong faction native offer",{{1,508,2}},1,"aa2aaaaa4e0ab3b2")
+playerLevel,done[101]=20,false
+offers[1436][#offers[1436]+1]=124
+C_QuestLog.IsQuestTrivial=function(id) return id==123 end
+assert(loadfile("NQT/LevelGuide.lua"))("NQT",AT)
+local w=place(AT.BuildLevelGuide(20,1),"Westfall")
+local seen={}
+for _,q in ipairs(w.quests) do seen[q.id]=q end
+assert(seen[101] and not seen[121] and seen[122] and seen[123] and not seen[123].fits and not seen[123].availableHere and not seen[124])
+print("PASS giver data, native tracking lifecycle, alternate-level dedup, faction and native gray filtering")
+LibQuestieDB={
+ flavor={key="Forever"},
+ Quest={Get=function(q,k) if q==117 and k=="startedBy" then return {{711}} end end},
+ Npc={Get=function(n,k)
+    if n~=711 then return end
+    return ({name="Stormwind Quest Giver",friendlyToFaction="A",spawns={[1519]={{50,60}}}})[k]
+ end}
+}
+names[1453]="Stormwind City"
+local stock=place(AT.BuildLevelGuide(24,1),"Stockade")
+assert(stock.quests[1].giver.name=="Stormwind Quest Giver" and stock.quests[1].giver.map==1453)
+LibQuestieDB.Npc.Get=function(n,k)
+    return ({name="Ambiguous Quest Giver",friendlyToFaction="A",spawns={[1519]={{50,60},{20,40}}}})[k]
+end
+assert(not place(AT.BuildLevelGuide(24,1),"Stockade").quests[1].giver)
+LibQuestieDB=nil
+print("PASS half-window map, click filters, outdoor dungeon starter waypoint, and provider ambiguity guard")
+assert(loadfile("NQT/LevelGuideZoneRanges.lua"))("NQT",real)
+assert(loadfile("NQT/LevelGuideObjectiveText.lua"))("NQT",real)
+local imported=0
+for _ in pairs(real.LevelGuideZoneRanges) do imported=imported+1 end
+assert(imported==42 and real.LevelGuideZoneRanges[2548][1]==35 and real.LevelGuideZoneRanges[2548][2]==45)
+local river=place(real.BuildLevelGuide(36,1),"Riverglades")
+assert(river.rangeKnown and river.lo==35 and river.hi==45)
+local full=real.GetLevelGuideObjectiveText(387)
+assert(full:find("0/10",1,true) and full:find("0/8",1,true) and #full>40)
+print("PASS OpenMap independent zone ranges; bundled unheld counts and authentic live objective lines")

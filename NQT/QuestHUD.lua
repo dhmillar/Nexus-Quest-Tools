@@ -4,14 +4,14 @@ local hud, refreshPending, currentZone, currentDungeon, viewedZone, model
 local ALL_ZONES,ALL_DUNGEONS={},{}
 local popupOpen,completedView,toolbarOpen=false,false,false
 local preferredCompleted,resolveStatusOnSelection=false,false
-local selectedDungeon,dungeonOpen
+local selectedDungeon
 local searchWords,searchOpen={},false
 local itemSearchQuestID,settingItemSearch,itemSearchCollapsed
 local observedObjectives, highlights={},{}
 local partyRetained,partyTurnedIn={},{}
 local removedQuests={}
-local inlineParty=false
-local questTooltip,tooltipTicker,hover,addDropTooltip
+local inlineParty=true
+local questTooltip,tooltipTicker,hover
 local themes={
     { name="Map", map=true, accent={.95,.76,.40}, ink={.90,.83,.64}, row={.20,.13,.067,.40},
       rail={.13,.085,.045,.92}, font="GameFontNormalLarge" },
@@ -34,7 +34,7 @@ local function is(v,t) return ordinary(v) and type(v)==t end
 local function id(v) return is(v,"number") and v>0 and v<math.huge and v%1==0 end
 local function call(fn,...)
     if type(fn)~="function" then return end
-    local ok,a,b,c,d,e=pcall(fn,...); if ok then return a,b,c,d,e end
+    local ok,a,b,c,d,e,f=pcall(fn,...); if ok then return a,b,c,d,e,f end
 end
 local function field(row,k)
     if is(row,"table") and ordinary(row[k]) then return row[k] end
@@ -186,11 +186,13 @@ local function nativeDungeonIndex()
     return names
 end
 local function dungeonFor(row,index,db,zones,poiName,currentName)
+    if call(AT.IsForeverOutdoorQuest,row.id)==true then return end
+    -- Exact Forever quest IDs outrank generic client tags and pickup headers.
+    local verified=call(AT.ForeverDungeonForQuest,row.id)
+    if verified then return verified end
     local tag=field(call(Q.GetQuestTagInfo,row.id),"tagID")
     local tags=Enum and Enum.QuestTag
     if tags and (tag~=nil and (tag==tags.Raid or tag==tags.Raid10 or tag==tags.Raid25 or tag==tags.HeroicRaid)) then return end
-    local verified=call(AT.ForeverDungeonForQuest,row.id)
-    if verified then return verified end
     local function canonical(n) return call(AT.ForeverDungeonName,nil,n) or n end
     local name
     if zones then
@@ -381,6 +383,10 @@ local function build(zoneID,zoneName)
                     row.partyPending=row.party and row.party.pending or false
                 end
                 if not id(row.level) then row.level=call(Q.GetQuestDifficultyLevel,qid) end
+                if not id(row.level) then
+                    local facts=AT.ForeverQuestFacts and AT.ForeverQuestFacts[qid]
+                    if facts and id(facts[2]) then row.level=facts[2] end
+                end
                 local suggested=field(entry,"suggestedGroup")
                 if not id(suggested) or suggested<=1 then suggested=call(Q.GetSuggestedGroupSize,qid) end
                 if id(suggested) and suggested>1 then
@@ -395,6 +401,7 @@ local function build(zoneID,zoneName)
                 row.targetMap=target
                 local instance=dungeonFor(row,nameIndex,db,zones,insidePOI[qid] and instanceName or nil,instanceName)
                 if instance then
+                    row.dungeon=instance
                     local bucket=result.dungeons[instance]
                     if not bucket then bucket={key=instance,name=instance,rows={}};result.dungeons[instance]=bucket end
                     bucket.rows[qid]={row=row,kind="dungeon"}
@@ -429,7 +436,7 @@ local function build(zoneID,zoneName)
         if is(row.header,"string") and zonesByName[row.header] then
             associate(zonesByName[row.header],row.header,row,"category")
         end
-        if not associated[row.id] then associate("at-other","Other quests",row,"unassigned") end
+        if not associated[row.id] and not row.dungeon then associate("at-other","Other quests",row,"unassigned") end
     end
     if party then
         local nextRetention,keep={},{}
@@ -476,6 +483,7 @@ local function build(zoneID,zoneName)
     return result
 end
 AT.BuildQuestHUDModel=build
+function AT.GetLevelGuideQuestLog() return model and model.rows end
 
 local function progressChanged(qid)
     local current=Q and call(Q.GetQuestObjectives,qid)
@@ -680,7 +688,7 @@ local function drawQuestHover()
     if tip.ClearLines then tip:ClearLines() end
     local snapshot=call(AT.GetQuestPartySnapshot,state.qid,true)
     local usingStock=false
-    if snapshot and not row.partyOnly and tip.SetQuestPartyProgress and C_TooltipInfo
+    if snapshot and not snapshot.hasSharedResolution and not row.partyOnly and tip.SetQuestPartyProgress and C_TooltipInfo
         and C_TooltipInfo.GetQuestPartyProgress then
         usingStock=call(tip.SetQuestPartyProgress,tip,state.qid,false,false)==true
     end
@@ -701,7 +709,6 @@ local function drawQuestHover()
         tip:AddLine(description,1,.76,.38,true)
     end
     addPartyTooltip(tip,snapshot,usingStock)
-    if not row.partyOnly and addDropTooltip then addDropTooltip(tip,state.qid) end
     if not row.partyOnly then
         tip:AddLine("Click: open on map  |  Ctrl-click: queue  |  Right-click: exclude",.48,.91,.82,true)
     end
@@ -735,30 +742,9 @@ local function openRowMenu(row)
     })
 end
 
-local function addRow(n)
-    local b=CreateFrame("Button",nil,hud.content)
-    b:RegisterForClicks("RightButtonUp")
-    b.fill=box(b);b.fill:SetAllPoints(b)
-    b.mark=box(b,"ARTWORK");b.mark:SetPoint("TOPLEFT");b.mark:SetPoint("BOTTOMLEFT");b.mark:SetWidth(2)
-    b.title=text(b);b.title:SetPoint("TOPLEFT",12,-9);b.title:SetWordWrap(false)
-    b.detail=text(b,"GameFontHighlightSmall");b.detail:SetPoint("TOPLEFT",12,-29);b.detail:SetWordWrap(false)
-    b.objectives={}
-    -- Use actual mouse-enabled frames. A FontString has no frame level and
-    -- cannot reliably act as a secure overlay's geometry/input target.
-    local titleHit=CreateFrame("Button",nil,b)
-    titleHit:RegisterForClicks("LeftButtonUp","RightButtonUp")
-    titleHit:EnableMouse(true)
-    b.titleHit=titleHit
-    local npcHit=CreateFrame("Button",nil,b)
-    npcHit:RegisterForClicks("LeftButtonUp")
-    npcHit:EnableMouse(true)
-    -- Absorb clicks when the secure layer is unavailable, without opening
-    -- the quest, invoking a protected Lua call, or changing the target.
-    npcHit:SetScript("OnClick",function() end)
-    npcHit:Hide()
-    b.npcHit=npcHit
+local function makeQuestItemTile(b,n)
     local item=CreateFrame("Button",nil,b)
-    item:SetSize(30,30);item:SetPoint("TOPRIGHT",-12,-28)
+    item:SetSize(30,30);item:SetPoint("TOPRIGHT",-12,-28-(n-1)*33)
     item.icon=box(item,"ARTWORK");item.icon:SetAllPoints(item)
     item.border=box(item,"BACKGROUND");item.border:SetPoint("TOPLEFT",-1,1);item.border:SetPoint("BOTTOMRIGHT",1,-1)
     item.count=text(item,"GameFontNormalSmall");item.count:SetPoint("BOTTOMRIGHT",-2,0)
@@ -774,6 +760,34 @@ local function addRow(n)
         if GameTooltip and GameTooltip:IsOwned(self) then GameTooltip:Hide() end
     end)
     item:Hide()
+    return item
+end
+
+local function addRow(n)
+    local b=CreateFrame("Button",nil,hud.content)
+    b:RegisterForClicks("RightButtonUp")
+    b.fill=box(b);b.fill:SetAllPoints(b)
+    b.mark=box(b,"ARTWORK");b.mark:SetPoint("TOPLEFT");b.mark:SetPoint("BOTTOMLEFT");b.mark:SetWidth(2)
+    b.title=text(b);b.title:SetPoint("TOPLEFT",12,-9);b.title:SetWordWrap(false)
+    b.detail=text(b,"GameFontHighlightSmall");b.detail:SetPoint("TOPLEFT",12,-29);b.detail:SetWordWrap(false)
+    b.objectives={}
+    b.objectiveMobIcons,b.objectiveMobHits={},{}
+    -- Use actual mouse-enabled frames. A FontString has no frame level and
+    -- cannot reliably act as a secure overlay's geometry/input target.
+    local titleHit=CreateFrame("Button",nil,b)
+    titleHit:RegisterForClicks("LeftButtonUp","RightButtonUp")
+    titleHit:EnableMouse(true)
+    b.titleHit=titleHit
+    local npcHit=CreateFrame("Button",nil,b)
+    npcHit:RegisterForClicks("LeftButtonUp")
+    npcHit:EnableMouse(true)
+    -- Absorb clicks when the secure layer is unavailable, without opening
+    -- the quest, invoking a protected Lua call, or changing the target.
+    npcHit:SetScript("OnClick",function() end)
+    npcHit:Hide()
+    b.npcHit=npcHit
+    local item=makeQuestItemTile(b,1)
+    b.itemTiles={item}
     b.item=item
     b.badge=text(b,"GameFontNormalSmall");b.badge:SetPoint("TOPLEFT",11,-9)
     b.groupIcon=box(b,"ARTWORK")
@@ -848,17 +862,52 @@ local function describe(e)
         return nil
     end
 end
-local function verifiedQuestItem(qid,index)
-    local qt=Q and Q.GetLogIndexForQuestID
-    local liveIndex=call(qt,qid) or index
-    if not id(liveIndex) or not Q then return end
-    local entry=call(Q.GetInfo,liveIndex)
-    if field(entry,"questID")~=qid then return end
-    local link,icon,count=call(GetQuestLogSpecialItemInfo,liveIndex)
-    if is(link,"string") and (is(icon,"number") or is(icon,"string")) then return link,icon,count end
+local function questItemID(link)
+    if not is(link,"string") then return end
+    return tonumber(link:match("|Hitem:(%d+)") or link:match("^item:(%d+)$"))
 end
-local function questItem(row)
-    if not row.partyOnly then return verifiedQuestItem(row.id,row.logIndex) end
+
+local function questItemList(qid,index)
+    local results,seen={},{}
+    if not Q then return results end
+    local liveIndex=call(Q.GetLogIndexForQuestID,qid)
+    if not id(liveIndex) or field(call(Q.GetInfo,liveIndex),"questID")~=qid then liveIndex=index end
+    local function add(link,icon,count)
+        local item=questItemID(link)
+        if not id(item) or seen[item] then return end
+        if not is(icon,"number") and not is(icon,"string") then
+            icon=call(C_Item and C_Item.GetItemIconByID or GetItemIcon,item)
+        end
+        if not is(icon,"number") and not is(icon,"string") then icon=134400 end
+        seen[item]=true
+        results[#results+1]={link=link,icon=icon,count=count,token="item:"..item}
+    end
+    if id(liveIndex) and field(call(Q.GetInfo,liveIndex),"questID")==qid then
+        add(call(GetQuestLogSpecialItemInfo,liveIndex))
+    end
+    if call(Q.IsOnQuest,qid)~=true or call(AT.IsQuestReadyForTurnIn or Q.ReadyForTurnIn,qid)==true then return results end
+    local function addVerifiedUses(pack)
+        for _,record in ipairs(pack and pack[qid] or {}) do
+            local item,expectedSpell=unpack(record)
+            if not seen[item] then
+                local count=call(C_Item and C_Item.GetItemCount or GetItemCount,item,false,false)
+                if id(count) then
+                    local _,spell=call(C_Item and C_Item.GetItemSpell or GetItemSpell,item)
+                    if id(spell) and spell==expectedSpell then add("item:"..item,nil,count) end
+                end
+            end
+        end
+    end
+    addVerifiedUses(AT.ForeverObservedQuestUses)
+    addVerifiedUses(AT.ForeverProvidedQuestUses)
+    addVerifiedUses(AT.ForeverInstructedQuestUses)
+    return results
+end
+
+local function verifiedQuestItem(qid,index,token)
+    for _,r in ipairs(questItemList(qid,index)) do
+        if not token or r.token==token then return r.link,r.icon,r.count end
+    end
 end
 
 local function fontOffset()
@@ -951,6 +1000,30 @@ local function standaloneProviderDropItem(qid,wanted)
     return match
 end
 
+local function factDropItem(qid,objective,wanted)
+    local facts=AT.ForeverQuestFacts and AT.ForeverQuestFacts[qid]
+    if not facts then return end
+    local required=field(objective,"numRequired")
+    local named,possible,unresolved
+    for i=3,#facts do
+        local item,amount=unpack(facts[i])
+        local name=call(C_Item and C_Item.GetItemNameByID,item)
+        if is(name,"string") and name~="" then
+            if name==wanted then
+                if named and named~=item then return nil,true end
+                named=item
+            end
+        elseif id(required) and required==amount then
+            if possible and possible~=item then unresolved=true end
+            possible=item
+        end
+    end
+    if named then return named end
+    -- Cold cache: only map by quantity when the quest has one known item
+    -- objective. Never guess a mapping among multiple same-count items.
+    if #facts==3 and not unresolved then return possible end
+end
+
 local function objectiveDropItem(db,qid,objective,label)
     if field(objective,"type")~="item" then return end
     local exact=field(objective,"itemID")
@@ -970,7 +1043,10 @@ local function objectiveDropItem(db,qid,objective,label)
     if not is(objectives,"table") then
         local match,ambiguous=standaloneProviderDropItem(qid,wanted)
         if ambiguous then return end
-        return match or observedDropItem(qid,wanted)
+        if match then return match end
+        local fact,uncertain=factDropItem(qid,objective,wanted)
+        if uncertain then return end
+        return fact or observedDropItem(qid,wanted) or call(AT.GetKnownQuestDropItem,qid,wanted)
     end
     local match
     for _,entry in pairs(objectives) do
@@ -984,7 +1060,7 @@ local function objectiveDropItem(db,qid,objective,label)
             end
         end
     end
-    return match or observedDropItem(qid,wanted)
+    return match or observedDropItem(qid,wanted) or call(AT.GetKnownQuestDropItem,qid,wanted)
 end
 local function fmtDrop(value) return ("%d%%"):format(math.ceil(value-1e-10)) end
 local function questieDropRange(db,item)
@@ -1016,56 +1092,136 @@ local function observedRecord(item)
         low=not low and pct or math.min(low,pct)
         high=not high and pct or math.max(high,pct)
     end
-    if low then return low,high,rows end
+    if low then return low,high end
 end
 
 local function objectiveDropSuffix(db,qid,objective,label)
     local item=objectiveDropItem(db,qid,objective,label)
     if not id(item) then return "" end
+    local grouped=call(IsInGroup)==true
+    local pack=AT.ForeverQuestDropSamples
+    if grouped then pack=AT.ForeverGroupedQuestDropSamples end
+    local samples=pack and pack[qid]
+    local rows=samples and samples[item]
+    if rows then
+        local low,high
+        for _,row in ipairs(rows) do
+            local rate=grouped and row[2]/row[3]*100 or row[2]/100
+            low=not low and rate or math.min(low,rate)
+            high=not high and rate or math.max(high,rate)
+        end
+        if low then
+            local a,b=fmtDrop(low),fmtDrop(high)
+            return " ("..(a==b and a or a.."\226\128\147"..b)..")",rows,grouped and "eg-group" or "eg"
+        end
+    end
     local lo,hi=questieDropRange(db,item)
     if lo then
         local a,b=fmtDrop(lo),fmtDrop(hi)
         return " ("..(a==b and a or a.."\226\128\147"..b)..")"
     end
-    local low,high,rows=observedRecord(item)
+    local low,high=observedRecord(item)
     if not low then return "" end
     local a,b=fmtDrop(low),fmtDrop(high)
-    return " ("..(a==b and a or a.."\226\128\147"..b)..")",rows
+    return " ("..(a==b and a or a.."\226\128\147"..b)..")"
 end
 
-addDropTooltip=function(tip,qid)
-    if not (AT.db.rankQuestDropRates~=false and AT.ObservedQuestDrops) then return end
-    local objectives=call(Q.GetQuestObjectives,qid)
-    if not is(objectives,"table") then return end
-    local db=module("QuestieDB")
-    local credited=false
-    for _,o in ipairs(objectives) do
-        local label=field(o,"text")
-        if is(label,"string") then
-            local _,rows=objectiveDropSuffix(db,qid,o,label)
-            if rows then
-                if not credited then
-                    tip:AddLine("Data from Everloot (https://everloot.app), CC BY-SA 4.0.",.70,.83,.93,true)
-                    tip:AddLine("Observed rates per eligible loot window; not guaranteed.",.70,.83,.93,true)
-                    credited=true
-                end
-                tip:AddLine(dropName(label),.86,.92,.95,true)
-                for _,e in ipairs(rows) do
-                    tip:AddLine(("%s #%d: %d/%d windows, %d installs (%s)"):format(
-                        e[6]==1 and "Object" or "NPC",e[1],e[2],e[3],e[4],AT.ObservedQuestDrops.dates[e[5]]),.70,.83,.93,true)
-                end
-            end
+local objectiveMobTip
+local function hideObjectiveMobTip(self)
+    if objectiveMobTip and objectiveMobTip.owner==self then
+        objectiveMobTip.owner=nil
+        objectiveMobTip:Hide()
+    end
+    if GameTooltip and GameTooltip.IsOwned and GameTooltip:IsOwned(self) then GameTooltip:Hide() end
+end
+local function showObjectiveMobTip(owner)
+    local name=owner.mobName
+    if not name then
+        if GameTooltip then
+            GameTooltip:SetOwner(owner,"ANCHOR_RIGHT")
+            GameTooltip:SetText("More mobs that drop this item")
+            GameTooltip:Show()
         end
+        return
+    end
+    if not objectiveMobTip then
+        local tip=CreateFrame("Frame",nil,UIParent,"BackdropTemplate")
+        tip:SetFrameStrata("TOOLTIP")
+        tip:SetClampedToScreen(true)
+        tip:EnableMouse(false)
+        if tip.SetBackdrop then
+            tip:SetBackdrop({bgFile="Interface\\Buttons\\WHITE8X8",edgeFile="Interface\\Tooltips\\UI-Tooltip-Border",
+                edgeSize=12,insets={left=3,right=3,top=3,bottom=3}})
+            tip:SetBackdropColor(.035,.037,.042,.97)
+            tip:SetBackdropBorderColor(.76,.64,.40,.95)
+        end
+        tip.portrait=box(tip,"ARTWORK")
+        tip.portrait:SetSize(48,48);tip.portrait:SetPoint("TOPLEFT",tip,"TOPLEFT",9,-9)
+        tip.mob=text(tip,"GameFontNormal")
+        tip.mob:SetPoint("TOPLEFT",tip,"TOPLEFT",66,-15)
+        tip.mob:SetWordWrap(true)
+        tip.instruction=text(tip,"GameFontHighlightSmall")
+        tip.instruction:SetPoint("TOPLEFT",tip.mob,"BOTTOMLEFT",0,-5)
+        tip.instruction:SetText("Click to set Auto Macro")
+        objectiveMobTip=tip
+    end
+    local tip=objectiveMobTip
+    tip.owner=owner
+    tip:ClearAllPoints();tip:SetPoint("BOTTOMLEFT",owner,"TOPRIGHT",6,6)
+    tip.mob:SetText(name)
+    local pixels=call(tip.mob.GetUnboundedStringWidth,tip.mob)
+    local labelWidth=math.max(120,math.min(225,is(pixels,"number") and pixels or 175))
+    tip.mob:SetWidth(labelWidth)
+    local labelHeight=call(tip.mob.GetStringHeight,tip.mob)
+    tip:SetSize(77+labelWidth,math.max(66,35+(is(labelHeight,"number") and labelHeight or 14)))
+    tip.portrait:SetTexture(132094)
+    if id(owner.displayID) and SetPortraitTextureFromCreatureDisplayID then
+        local ok,result=pcall(SetPortraitTextureFromCreatureDisplayID,tip.portrait,owner.displayID)
+        if not ok or result==false then tip.portrait:SetTexture(132094) end
+    end
+    tip:Show()
+end
+local function chooseQuestMob(name)
+    if not AT.SetQuestMobTarget then return end
+    local ok,why=AT.SetQuestMobTarget(name)
+    if not ok and why and UIErrorsFrame and UIErrorsFrame.AddMessage then
+        UIErrorsFrame:AddMessage(why,1,.3,.3,1)
     end
 end
-
+local function objectiveMobIsCurrent(self,b)
+    return self.questId and self.questId==b.qid and (not self.IsVisible or self:IsVisible())
+end
+local function wireObjectiveMobHover(button,b)
+    button:SetScript("OnEnter",function(self)
+        if not objectiveMobIsCurrent(self,b) then return end
+        stopQuestHover()
+        showObjectiveMobTip(self)
+    end)
+    button:SetScript("OnLeave",hideObjectiveMobTip)
+    button:SetScript("OnHide",hideObjectiveMobTip)
+end
+local function setObjectiveMob(button,qid,name,overflow)
+    local display=name and call(AT.GetQuestMobDisplayID,name,true) or nil
+    if button.questId~=qid or button.mobName~=name or button.displayID~=display then
+        hideObjectiveMobTip(button)
+    end
+    button.questId,button.mobName,button.overflow,button.displayID=qid,name,overflow,display
+end
+local function resetObjectiveMobButtons(buttons,first)
+    for i=first or 1,#buttons do
+        local button=buttons[i]
+        hideObjectiveMobTip(button)
+        button.questId,button.mobName,button.overflow,button.displayID=nil,nil,nil,nil
+        button:Hide()
+    end
+end
 
 local function renderObjectives(b,row,width,theme,hasItem,hasDetail)
     local ready=row.complete and not row.partyOnly
     local list=not ready and not row.partyOnly and call(Q.GetQuestObjectives,row.id)
     local offset=math.max(0,fontOffset())
     local top=hasDetail and 42 or 24
-    local used,height=0,top+2*offset
+    local used,height,iconsUsed,hitsUsed=0,top+2*offset,0,0
     local function add(label,indent,r,g,blue)
         used=used+1
         local f=b.objectives[used]
@@ -1084,17 +1240,123 @@ local function renderObjectives(b,row,width,theme,hasItem,hasDetail)
         height=height+lineHeight+2
         return f,lineTop,lineHeight
     end
+    local inlineMobSize=18
+    local function addObjectiveMobIcon(name,overflow,x,y)
+        iconsUsed=iconsUsed+1
+        local icon=b.objectiveMobIcons[iconsUsed]
+        if not icon then
+            icon=CreateFrame("Button",nil,b)
+            icon:SetSize(inlineMobSize,inlineMobSize)
+            icon:RegisterForClicks("LeftButtonUp")
+            icon:EnableMouse(true)
+            icon:SetFrameLevel(b:GetFrameLevel()+2)
+            icon.image=box(icon,"ARTWORK");icon.image:SetAllPoints(icon)
+            icon.count=text(icon,"GameFontNormalSmall")
+            icon.count:SetPoint("CENTER")
+            wireObjectiveMobHover(icon,b)
+            icon:SetScript("OnClick",function(self)
+                if not objectiveMobIsCurrent(self,b) then return end
+                hideObjectiveMobTip(self)
+                if self.mobName then chooseQuestMob(self.mobName)
+                elseif self.overflow and MenuUtil and MenuUtil.CreateContextMenu then
+                    local qid,overflow=self.questId,self.overflow
+                    MenuUtil.CreateContextMenu(self,function(_,root)
+                        for _,mobName in ipairs(overflow) do
+                            local exact=mobName
+                            root:CreateButton(exact,function()
+                                if b.qid==qid and (not b.IsVisible or b:IsVisible()) then chooseQuestMob(exact) end
+                            end)
+                        end
+                    end)
+                end
+            end)
+            b.objectiveMobIcons[iconsUsed]=icon
+        end
+        setObjectiveMob(icon,row.id,name,overflow)
+        icon:ClearAllPoints();icon:SetPoint("TOPLEFT",b,"TOPLEFT",x,-y)
+        icon.count:SetShown(overflow~=nil)
+        if overflow then
+            icon.count:SetText("+"..#overflow)
+            if icon.renderKey~="more" then icon.image:SetColorTexture(.17,.22,.24,.96);icon.renderKey="more" end
+            icon:SetWidth(#overflow>=10 and 22 or 18)
+        else
+            icon:SetWidth(inlineMobSize)
+            local display=icon.displayID
+            local key=id(display) and display or "generic"
+            if icon.renderKey~=key then
+                icon.image:SetTexture(132094)
+                if id(display) and SetPortraitTextureFromCreatureDisplayID then
+                    local ok,result=pcall(SetPortraitTextureFromCreatureDisplayID,icon.image,display)
+                    if not ok or result==false then icon.image:SetTexture(132094) end
+                end
+                icon.renderKey=key
+            end
+        end
+        icon:Show()
+    end
+    local function addObjectiveMobHit(label,name,indent,y,h)
+        hitsUsed=hitsUsed+1
+        local hit=b.objectiveMobHits[hitsUsed]
+        if not hit then
+            hit=CreateFrame("Button",nil,b)
+            hit:RegisterForClicks("LeftButtonUp","RightButtonUp")
+            hit:EnableMouse(true)
+            hit:SetFrameLevel(b:GetFrameLevel()+2)
+            wireObjectiveMobHover(hit,b)
+            hit:SetScript("OnClick",function(self,key)
+                if not objectiveMobIsCurrent(self,b) then return end
+                hideObjectiveMobTip(self)
+                if key=="RightButton" then openRowMenu(b)
+                elseif self.mobName then chooseQuestMob(self.mobName) end
+            end)
+            b.objectiveMobHits[hitsUsed]=hit
+        end
+        setObjectiveMob(hit,row.id,name)
+        local cap=label:GetWidth()
+        local pixels=call(label.GetStringWidth,label) or call(label.GetUnboundedStringWidth,label)
+        local hitWidth=is(pixels,"number") and pixels>0 and math.min(cap,pixels+3) or cap
+        hit:ClearAllPoints()
+        hit:SetPoint("TOPLEFT",b,"TOPLEFT",12+indent,-y)
+        hit:SetSize(hitWidth,h)
+        hit:Show()
+    end
+    local function addObjectiveWithMobs(label,names,done)
+        local stride=inlineMobSize+3
+        local cap=math.max(90,width-(hasItem and 62 or 24))
+        local cols=math.max(1,math.min(4,math.floor((cap-95)/stride)))
+        local direct=#names
+        local overflow
+        if #names>math.min(3,cols) and cols>1 and MenuUtil and MenuUtil.CreateContextMenu then
+            direct=math.min(3,cols-1)
+            overflow={}
+            for i=direct+1,#names do overflow[#overflow+1]=names[i] end
+        end
+        local units=direct+(overflow and 1 or 0)
+        local indent=5+math.min(cols,units)*stride+(overflow and (#overflow>=10 and 7 or 3) or 0)
+        local objective,y,h
+        if done then objective,y,h=add(label,indent,.64,.78,.68)
+        else objective,y,h=add(label,indent) end
+        addObjectiveMobHit(objective,names[1],indent,y,h)
+        for i=1,direct do
+            addObjectiveMobIcon(names[i],nil,12+(i-1)%cols*stride,y+math.floor((i-1)/cols)*stride)
+        end
+        if overflow then addObjectiveMobIcon(nil,overflow,12+direct*stride,y) end
+        height=math.max(height,y+math.ceil(units/cols)*stride+2)
+    end
     if ready then
         local map,x,y,npc,npcOnly=call(AT.GetReadyQuestTurnInPoint,row.id)
+        local area,coords
         if id(map) and is(x,"number") and x>=0 and x<=1 and is(y,"number") and y>=0 and y<=1 then
-            local area=mapName(map)
-            local coords=string.format("%.1f, %.1f",x*100,y*100)
-            if not is(area,"string") or area=="" then area=nil end
-            if not is(npc,"string") or npc=="" then npc=nil end
-            add(area and (area.."  |  "..coords) or coords,0)
-            if npc then
-                local token=npcOnly==true and call(AT.GetRankQuestNPCMacro,npc)
-                local label,lineTop,lineHeight=add(npc,0,.93,.74,.38)
+            area=mapName(map)
+            coords=string.format("%.1f, %.1f",x*100,y*100)
+        end
+        if not is(area,"string") or area=="" then area=nil end
+        if not coords then area,npc,npcOnly=call(AT.GetReadyQuestTurnInArea,row.id) end
+        if area or coords then add(area and coords and (area.."  |  "..coords) or area or coords,0) end
+        if is(npc,"string") and npc~="" then
+            local token=npcOnly==true and call(AT.GetRankQuestNPCMacro,npc)
+            local label,lineTop,lineHeight=add(npc,0,.93,.74,.38)
+            if npcOnly==true then
                 local cap=math.max(90,width-(hasItem and 62 or 24))
                 local pixels=call(label.GetUnboundedStringWidth,label) or call(label.GetStringWidth,label)
                 local hitWidth=is(pixels,"number") and pixels>0 and math.min(cap,pixels+4) or cap
@@ -1107,65 +1369,48 @@ local function renderObjectives(b,row,width,theme,hasItem,hasDetail)
         end
     end
     local partyEnabled=AT.db.questPartyProgress~=false
-    local showParty=partyEnabled and (row.partyPending or inlineParty and not ready)
-    local showBreakdown=showParty and (inlineParty or ready or row.partyOnly)
+    local showParty=partyEnabled and inlineParty and row.partyPending
     local function partyLine(line,indent)
         if theme.questie then add(line,indent,.56,.90,.87)
         else add(line,indent,.12,.35,.32) end
     end
-    if showBreakdown and not row.partyOnly and is(list,"table") and #list>0 then
-        partyLine("Your objectives",0)
-    end
     if is(list,"table") then
-        local db=AT.db.rankQuestDropRates~=false and module("QuestieDB")
+        local db=module("QuestieDB")
         for _,o in ipairs(list) do
             local label=field(o,"text")
             if is(label,"string") and label~="" then
-                if AT.db.rankQuestDropRates~=false and (db or AT.ObservedQuestDrops) then
+                local kill=call(AT.GetQuestKillMobName,row.id,o,label)
+                local item=AT.GetQuestDropMobNames and objectiveDropItem(db,row.id,o,label)
+                if AT.db.rankQuestDropRates~=false and (db or AT.ObservedQuestDrops or AT.ForeverQuestDropSamples or AT.ForeverGroupedQuestDropSamples) then
                     label=label..objectiveDropSuffix(db,row.id,o,label)
                 end
                 local done=field(o,"finished")==true
-                local bullet=theme.questie and " - " or (done and "|cff8bd1a2+|r " or "|cffb4bbbd- |r")
-                if done then add(bullet..label,0,.64,.78,.68) else add(bullet..label,0) end
+                local bullet=done and not theme.questie and "|cff8bd1a2+|r " or ""
+                local names=call(AT.GetQuestDropMobNames,item)
+                if kill then addObjectiveWithMobs(bullet..label,{kill},done)
+                elseif names and #names>0 then addObjectiveWithMobs(bullet..label,names,done)
+                elseif done then add(bullet..label,0,.64,.78,.68)
+                else add(bullet..label,0) end
             end
         end
     end
     if showParty then
-        local wroteParty=false
         for _,member in ipairs(row.party and row.party.members or {}) do
             local counts=member.counts or member.lastCounts
             local current,total=0,0
             for _,o in ipairs(counts or {}) do current,total=current+o.current,total+o.total end
             if total>current then
-                if not wroteParty and showBreakdown then partyLine("Party objectives",0) end
-                wroteParty=true
                 local qualifier=member.lastCounts and " (last reported)" or member.countsPartial and " (reported objectives)" or ""
-                partyLine(member.name.."  "..current.."/"..total..qualifier,showBreakdown and 7 or 0)
-                if showBreakdown then
-                    for i,o in ipairs(counts or {}) do
-                        local left=o.total-o.current
-                        if left>0 then
-                            local label=(is(o.desc,"string") and o.desc~="" and o.desc) or ("Objective "..i)
-                            partyLine(left.." remaining - "..label,17)
-                        end
-                    end
-                end
+                partyLine(member.name.."  "..current.."/"..total..qualifier,0)
             end
-        end
-        if not wroteParty and inlineParty then
-            local unavailable=false
-            for _,m in ipairs(row.party and row.party.members or {}) do
-                if m.status=="Progress unavailable" then unavailable=true;break end
-            end
-            if not row.party then partyLine("Party objectives: no party data",0)
-            elseif unavailable then partyLine("Party objectives: exact counts unavailable",0)
-            else partyLine("Party objectives: no remaining counts reported",0) end
         end
     end
     for i=used+1,#b.objectives do
         b.objectives[i]:Hide()
         b.objectives[i]:SetText("")
     end
+    resetObjectiveMobButtons(b.objectiveMobIcons,iconsUsed+1)
+    resetObjectiveMobButtons(b.objectiveMobHits,hitsUsed+1)
     local minimum=hasItem and 66 or (hasDetail and 49 or 30+offset)
     return math.max(height+3,minimum)
 end
@@ -1203,14 +1448,6 @@ local function displayTitle(label,row,theme)
     label:SetTextColor(r,g,b)
 end
 
-local function railButton(n)
-    local b=button(hud.railContent,"",0,-(n-1)*26,99,23,function(self)
-        if AT.BrowseQuestHUD then AT.BrowseQuestHUD(self.zoneKey) end
-    end)
-    b.label:ClearAllPoints();b.label:SetPoint("LEFT",7,0);b.label:SetWidth(85);b.label:SetWordWrap(false)
-    hud.rail[n]=b
-    return b
-end
 local function applyAtlas(region,atlas,useNativeSize)
     if not region.SetAtlas then return false end
     if C_Texture and C_Texture.GetAtlasInfo and not call(C_Texture.GetAtlasInfo,atlas) then return false end
@@ -1218,39 +1455,118 @@ local function applyAtlas(region,atlas,useNativeSize)
     return ok and result~=false
 end
 
-local function arrangeDungeonMenu(theme,offset)
-    hud.dungeonFrame:SetShown(dungeonOpen and true or false)
-    if not dungeonOpen then return end
-    local list={}
-    for key in pairs(model.dungeons) do list[#list+1]=key end
-    table.sort(list)
-    local step=26+offset
-    local total=#list+1
-    for i=1,total do
-        local option=hud.dungeonRows[i]
-        if not option then
-            option=button(hud.dungeonContent,"",0,0,204,23,function(self)
-                selectedDungeon,dungeonOpen=self.dungeonKey,false
-                resolveStatusOnSelection=true
-                hud.scroll:SetVerticalScroll(0)
-                AT.RefreshQuestHUD()
-            end)
-            option.label:ClearAllPoints()
-            option.label:SetPoint("LEFT",7,0);option.label:SetWidth(189);option.label:SetWordWrap(false)
-            hud.dungeonRows[i]=option
+local zoneMenuLayout={buttonFromTop=35,buttonHeight=20,gap=3,bottom=3}
+local function arrangeZonesMenu(theme,offset,allZones)
+    local menu=hud.zoneMenu
+    menu:SetShown(popupOpen)
+    if not popupOpen then
+        for _,option in ipairs(hud.scopeRows) do option:Hide() end
+        for _,option in ipairs(hud.zoneRows) do option:Hide() end
+        return
+    end
+    local step=26+math.max(0,offset)
+    local inner=214
+    local function style(option,chosen,count)
+        if not option.questCount then
+            option.questCount=text(option,"GameFontNormalSmall")
+            option.questCount:SetPoint("RIGHT",option,"RIGHT",-9,0)
+            option.questCount:SetJustifyH("RIGHT")
+            option.questCount:SetWordWrap(false)
         end
-        option.dungeonKey=list[i-1] or ALL_DUNGEONS
-        option:ClearAllPoints();option:SetPoint("TOPLEFT",hud.dungeonContent,"TOPLEFT",0,-(i-1)*step)
-        option:SetSize(204,step-3)
-        option.label:SetText(option.dungeonKey==ALL_DUNGEONS and "All Dungeons" or option.dungeonKey)
+        applyTypography(option.questCount,theme,10,"GameFontHighlightSmall")
+        option.questCount:SetTextColor(unpack(theme.accent))
+        option.questCount:SetText(tostring(count))
+        local measured=call(option.questCount.GetUnboundedStringWidth,option.questCount)
+        local countWidth=math.max(28,is(measured,"number") and math.ceil(measured) or 0)
+        option.questCount:SetWidth(countWidth)
+        option.label:SetWidth(inner-26-countWidth)
         applyTypography(option.label,theme,10,"GameFontHighlightSmall")
-        local chosen=option.dungeonKey==selectedDungeon
-        color(option.fill,chosen and .24 or .11,chosen and .30 or .17,.21,.9)
+        option.label:SetTextColor(unpack(theme.ink))
+        color(option.fill,chosen and .28 or .13,chosen and .37 or .17,chosen and .31 or .21,.96)
         option:Show()
     end
-    for i=total+1,#hud.dungeonRows do hud.dungeonRows[i]:Hide() end
-    hud.dungeonFrame:SetHeight(math.max(37,math.min(245,12+total*step)))
-    setExtent(hud.dungeonScroll,hud.dungeonContent,total*step)
+    -- Match the quest-log total: count your held quests in both statuses,
+    -- not party-only reminders. Deduplicate quest IDs across dungeon buckets.
+    local function ownedCount(bucket,seen)
+        local count=0
+        for qid,entry in pairs(bucket and bucket.rows or {}) do
+            if not entry.row.partyOnly and (not seen or not seen[qid]) then
+                count=count+1
+                if seen then seen[qid]=true end
+            end
+        end
+        return count
+    end
+    local allDungeonCount,seenDungeons=0,{}
+    for _,bucket in pairs(model.dungeons) do
+        allDungeonCount=allDungeonCount+ownedCount(bucket,seenDungeons)
+    end
+    local counts={ownedCount(model.currentDungeon or model.zones[model.current]),model.total,allDungeonCount}
+    local choices={not selectedDungeon and not viewedZone,allZones,selectedDungeon==ALL_DUNGEONS}
+    for i,option in ipairs(hud.scopeRows) do
+        option:ClearAllPoints()
+        option:SetPoint("TOPLEFT",menu,"TOPLEFT",6,-6-(i-1)*step)
+        option:SetSize(inner,step-3)
+        style(option,choices[i],counts[i])
+    end
+    local zones,dungeons={},{}
+    for key,bucket in pairs(model.zones) do
+        if key~=model.current and next(bucket.rows) then zones[#zones+1]={key=key,name=bucket.name,count=ownedCount(bucket)} end
+    end
+    for key,bucket in pairs(model.dungeons) do
+        if next(bucket.rows) then dungeons[#dungeons+1]={key=key,name=bucket.name,count=ownedCount(bucket)} end
+    end
+    local function alphabetical(a,b) return a.name==b.name and tostring(a.key)<tostring(b.key) or a.name<b.name end
+    table.sort(zones,alphabetical)
+    table.sort(dungeons,alphabetical)
+    local y,used=0,0
+    local function section(title,list,dungeon)
+        title:ClearAllPoints();title:SetPoint("TOPLEFT",hud.zoneMenuContent,"TOPLEFT",7,-y-2)
+        applyTypography(title,theme,10,"GameFontNormalSmall")
+        title:SetTextColor(unpack(theme.accent));title:Show()
+        y=y+step
+        if #list==0 then
+            local empty=dungeon and hud.noDungeons or hud.noZones
+            empty:ClearAllPoints();empty:SetPoint("TOPLEFT",hud.zoneMenuContent,"TOPLEFT",12,-y-1)
+            applyTypography(empty,theme,10,"GameFontDisableSmall");empty:Show()
+            y=y+step
+        end
+        for _,entry in ipairs(list) do
+            used=used+1
+            local option=hud.zoneRows[used]
+            if not option then
+                option=button(hud.zoneMenuContent,"",0,0,inner,step-3,function(self)
+                    if not popupOpen or self.choice==nil then return end
+                    if self.isDungeon then hud.selectDungeon(self.choice)
+                    elseif AT.BrowseQuestHUD then AT.BrowseQuestHUD(self.choice) end
+                end)
+                option.label:ClearAllPoints()
+                option.label:SetPoint("LEFT",9,0);option.label:SetWordWrap(false)
+                hud.zoneRows[used]=option
+            end
+            option.choice,option.isDungeon=entry.key,dungeon
+            option:ClearAllPoints();option:SetPoint("TOPLEFT",hud.zoneMenuContent,"TOPLEFT",0,-y)
+            option:SetSize(inner,step-3)
+            option.label:SetText(entry.name)
+            style(option,(dungeon and selectedDungeon or viewedZone)==entry.key,entry.count)
+            y=y+step
+        end
+    end
+    hud.noZones:Hide();hud.noDungeons:Hide()
+    section(hud.zonesHeading,zones,false)
+    section(hud.dungeonsHeading,dungeons,true)
+    for i=used+1,#hud.zoneRows do local row=hud.zoneRows[i];row.choice=nil;row:Hide() end
+    local top=12+3*step
+    -- The menu is anchored just below Zones. Use only the available panel
+    -- height; short lists end at their last row instead of leaving empty space.
+    local menuInset=zoneMenuLayout.buttonFromTop+zoneMenuLayout.buttonHeight+zoneMenuLayout.gap
+    local available=hud:GetHeight()-menuInset-zoneMenuLayout.bottom-top-6
+    local height=math.max(1,math.min(y,available))
+    hud.zoneMenuScroll:ClearAllPoints()
+    hud.zoneMenuScroll:SetPoint("TOPLEFT",menu,"TOPLEFT",6,-top)
+    hud.zoneMenuScroll:SetSize(inner,height)
+    menu:SetHeight(top+height+6)
+    setExtent(hud.zoneMenuScroll,hud.zoneMenuContent,y)
 end
 
 local function lowerSearch(value)
@@ -1317,10 +1633,12 @@ local function groupQuestEntries(result,entries,scope)
         end
         for qid,e in pairs(bucket.rows) do
             local rank=priority or (zoneBranchPriority[e.kind] or 0)
+            local exactDungeon=prefix=="dungeon" and call(AT.ForeverDungeonForQuest,qid)==name
             local old=best[qid]
-            if not old or hits>old.hits or (hits==old.hits and
-                (rank>old.rank or (rank==old.rank and key<old.key))) then
-                best[qid]={key=key,name=name,hits=hits,rank=rank}
+            if not old or exactDungeon and not old.exactDungeon
+                or exactDungeon==old.exactDungeon and (hits>old.hits or (hits==old.hits and
+                (rank>old.rank or (rank==old.rank and key<old.key)))) then
+                best[qid]={key=key,name=name,hits=hits,rank=rank,exactDungeon=exactDungeon}
             end
         end
     end
@@ -1328,7 +1646,7 @@ local function groupQuestEntries(result,entries,scope)
         for _,bucket in pairs(result.zones) do consider(bucket,"zone") end
     end
     for _,bucket in pairs(result.dungeons) do
-        consider(bucket,"dungeon",scope=="all-zones" and 5 or 50)
+        consider(bucket,"dungeon",50)
     end
     local byKey,groups={},{}
     for _,e in ipairs(entries) do
@@ -1367,7 +1685,6 @@ local function arrange()
     end
     hud.rule:SetShown(a.map and not nativeArt or false)
     color(hud.rule,unpack(a.accent))
-    color(hud.railBack,unpack(a.rail))
     hud.eyebrow:SetTextColor(unpack(a.accent))
     hud.eyebrow:SetText("Rank Quest")
     applyTypography(hud.zoneName,a,12,a.font)
@@ -1436,7 +1753,7 @@ local function arrange()
     hud.count:ClearAllPoints()
     hud.count:SetPoint("TOPLEFT",hud.body,"TOPLEFT",13,-82+contentShift)
     color(hud.searchBack,a.map and .10 or .045,a.map and .065 or .055,a.map and .035 or .065,.94)
-    for _,control in ipairs({hud.palette,hud.statusFilter,hud.collapse,hud.smaller,hud.larger,hud.zoneButton,hud.dungeonButton,hud.tab,hud.drawer}) do
+    for _,control in ipairs({hud.palette,hud.statusFilter,hud.collapse,hud.smaller,hud.larger,hud.zoneButton,hud.guideButton,hud.tab}) do
         applyTypography(control.label,a,10,"GameFontHighlightSmall")
     end
     local paletteWidth=call(hud.palette.label.GetUnboundedStringWidth,hud.palette.label)
@@ -1445,37 +1762,32 @@ local function arrange()
     local minimum=82+offset*4
     hud.statusFilter:SetWidth(is(statusWidth,"number") and math.max(minimum,math.ceil(statusWidth+14)) or minimum)
     local partyEnabled=not AT.db or AT.db.questPartyProgress~=false
-    for _,control in ipairs({hud.collapse,hud.palette,hud.statusFilter,hud.smaller,hud.larger,hud.zoneButton,hud.dungeonButton}) do
+    for _,control in ipairs({hud.palette,hud.statusFilter,hud.smaller,hud.larger,hud.zoneButton,hud.guideButton}) do
         control:SetShown(toolbarOpen)
     end
+    hud.collapse:Show()
     hud.partyToggle:SetShown(toolbarOpen and partyEnabled)
     local titleWidth=hud:GetWidth()-13-10-24-8-hud.palette:GetWidth()-hud.statusFilter:GetWidth()
         -(partyEnabled and (hud.partyToggle:GetWidth()+4) or 0)-6
-    local labelWidth=math.max(1,toolbarOpen and titleWidth or hud:GetWidth()-26)
+    local labelWidth=math.max(1,toolbarOpen and titleWidth or hud:GetWidth()-50)
     hud.eyebrow:SetWidth(labelWidth)
     -- When expanded, the drag/toggle surface ends before the first button.
-    hud.header:SetWidth(toolbarOpen and labelWidth+13 or hud:GetWidth())
+    hud.header:SetWidth(labelWidth+13)
     color(hud.partyToggle.fill,inlineParty and .095 or .11,inlineParty and .45 or .17,inlineParty and .39 or .21,.96)
     hud.partyToggle.icon:SetAlpha(inlineParty and 1 or .67)
     applyTypography(hud.eyebrow,a,toolbarOpen and 10 or 18,toolbarOpen and "GameFontHighlightSmall" or a.font,not toolbarOpen)
     applyTypography(hud.count,a,10,"GameFontDisableSmall")
     applyTypography(hud.empty,a,10,"GameFontHighlightSmall")
-    applyTypography(hud.localTab.label,a,10,"GameFontHighlightSmall")
-    applyTypography(hud.allTab.label,a,10,"GameFontHighlightSmall")
-
-    hud.dungeonButton.label:SetText("Dungeons")
-    color(hud.dungeonButton.fill,selectedDungeon and .19 or .11, selectedDungeon and .28 or .17,.21,.9)
-    hud.drawer:SetShown(not a.questie)
-    local expanded=not a.questie and AT.db.questHUDRailOpen~=false
-    hud.railFrame:SetShown(expanded or (a.questie and popupOpen))
-    hud.drawer.label:SetText(expanded and "<" or ">")
+    color(hud.zoneButton.fill,popupOpen and .23 or .11,popupOpen and .33 or .17,.21,.96)
     hud.scroll:ClearAllPoints()
-    hud.scroll:SetPoint("TOPLEFT",hud.body,"TOPLEFT",expanded and 144 or (a.questie and 13 or 31),-102+contentShift)
+    hud.scroll:SetPoint("TOPLEFT",hud.body,"TOPLEFT",13,-102+contentShift)
     hud.scroll:SetPoint("BOTTOMRIGHT",hud.body,"BOTTOMRIGHT",-13,15)
-    local entries,others={},{}
+    local entries={}
     if itemSearchQuestID then
-        local row=model.rows[itemSearchQuestID]
-        if row then entries[1]={row=row,kind="unassigned"} end
+        for qid in pairs(itemSearchQuestID) do
+            local row=model.rows[qid]
+            if row and not row.partyOnly then entries[#entries+1]={row=row,kind="unassigned"} end
+        end
     elseif searching then
         for qid,haystack in pairs(questSearchIndex(model)) do
             if matchesSearch(haystack) then entries[#entries+1]={row=model.rows[qid],kind="unassigned"} end
@@ -1499,29 +1811,6 @@ local function arrange()
         if la~=lb then return la<lb end
         return qa.title==qb.title and qa.id<qb.id or qa.title<qb.title
     end)
-    for key,bucket in pairs(model.zones) do
-        if key~=model.current and next(bucket.rows) then others[#others+1]=bucket end
-    end
-    table.sort(others,function(a,b) return a.name==b.name and tostring(a.key)<tostring(b.key) or a.name<b.name end)
-    local railWidth=a.questie and 170 or 119
-    local buttonWidth=railWidth-8
-    local railGap=26+offset
-    hud.railFrame:ClearAllPoints()
-    hud.railFrame:SetWidth(railWidth)
-    if a.questie then
-        hud.railFrame:SetPoint("TOPRIGHT",hud.zoneButton,"BOTTOMRIGHT",0,-3)
-        hud.railFrame:SetHeight(math.min(245,82+#others*railGap))
-        color(hud.railBack,.035,.035,.042,.96)
-    else
-        hud.railFrame:SetPoint("TOPLEFT",hud.body,"TOPLEFT",20,-94+contentShift)
-        hud.drawer:ClearAllPoints()
-        hud.drawer:SetPoint("TOPLEFT",hud.body,"TOPLEFT",0,-94+contentShift)
-        hud.drawer:SetPoint("BOTTOMLEFT",hud.body,"BOTTOMLEFT",0,3)
-        hud.railFrame:SetPoint("BOTTOMLEFT",hud.body,"BOTTOMLEFT",20,3)
-    end
-    hud.railContent:SetWidth(buttonWidth)
-    hud.localTab:SetSize(buttonWidth,23)
-    hud.allTab:SetSize(buttonWidth,23)
     hud.shownZone=not allZones and selected and selected.key
     hud.zoneName:SetText(searching and "Search Results" or allZones and "All Zones" or (selected and selected.name or "Finding your zone"))
     local groupWord=(selectedDungeon or currentDungeonView) and "dungeon" or "zone"
@@ -1530,26 +1819,6 @@ local function arrange()
     hud.empty:SetShown(#entries==0)
     hud.empty:ClearAllPoints()
     hud.empty:SetPoint("TOPLEFT",hud.scroll,"TOPLEFT",11,-16)
-    hud.localTab.label:SetText("CURRENT ZONE")
-    if viewedZone or selectedDungeon then color(hud.localTab.fill,unpack(a.row))
-    else color(hud.localTab.fill, a.accent[1]*.30,a.accent[2]*.30,a.accent[3]*.30,1) end
-    if allZones then color(hud.allTab.fill,a.accent[1]*.30,a.accent[2]*.30,a.accent[3]*.30,1)
-    else color(hud.allTab.fill,unpack(a.row)) end
-    for n,bucket in ipairs(others) do
-        local b=hud.rail[n] or railButton(n)
-        b.zoneKey=bucket.key
-        b:ClearAllPoints()
-        b:SetPoint("TOPLEFT",hud.railContent,"TOPLEFT",0,-(n-1)*railGap)
-        b:SetSize(buttonWidth,railGap-3)
-        b.label:SetWidth(buttonWidth-14)
-        applyTypography(b.label,a,10,"GameFontHighlightSmall")
-        b.label:SetText(bucket.name)
-        if b.zoneKey==viewedZone then color(b.fill,a.accent[1]*.30,a.accent[2]*.30,a.accent[3]*.30,1)
-        else color(b.fill,unpack(a.row)) end
-        b:Show()
-    end
-    for n=#others+1,#hud.rail do hud.rail[n]:Hide() end
-    setExtent(hud.railScroll,hud.railContent,#others*railGap)
     local pinnedID=call(AT.GetQuestHUDManualFocus)
     local width=math.max(180,hud.scroll:GetWidth()-8)
     hud.content:SetWidth(width)
@@ -1566,8 +1835,9 @@ local function arrange()
         -- stay in their collapsible branches. Don't duplicate promoted rows.
         for _,g in ipairs(groups) do
             local remaining={}
+            local keepInDungeonBranch=groupScope=="all-zones" and g.key:sub(1,8)=="dungeon:"
             for _,e in ipairs(g.entries) do
-                if questSortPriority(e.row,activeID)<2 and not itemSearchQuestID then
+                if not keepInDungeonBranch and questSortPriority(e.row,activeID)<2 and not itemSearchQuestID then
                     priorityGroups[e]=g.name
                 else
                     remaining[#remaining+1]=e
@@ -1581,6 +1851,11 @@ local function arrange()
             end
         end
         table.sort(groups,function(a,b)
+            if groupScope=="all-zones" then
+                local ap=a.entries[1] and questSortPriority(a.entries[1].row,activeID) or 2
+                local bp=b.entries[1] and questSortPriority(b.entries[1].row,activeID) or 2
+                if ap~=bp then return ap<bp end
+            end
             local al=a.entries[1] and questSortLevel(a.entries[1].row) or math.huge
             local bl=b.entries[1] and questSortLevel(b.entries[1].row) or math.huge
             if al~=bl then return al<bl end
@@ -1590,7 +1865,7 @@ local function arrange()
         for _,g in ipairs(groups) do
             if #g.entries>0 then
                 local key=groupScope..":"..g.key
-                local isClosed=(itemSearchQuestID and itemSearchCollapsed==true)
+                local isClosed=(itemSearchQuestID and itemSearchCollapsed and itemSearchCollapsed[key]==true)
                     or (not itemSearchQuestID and is(closed,"table") and closed[key]==true)
                 visual[#visual+1]={group=g,stateKey=key,closed=isClosed}
                 if not isClosed then
@@ -1609,7 +1884,7 @@ local function arrange()
                 branch=button(hud.content,"",0,0,outerWidth,23,function(self)
                     if not self.branchKey then return end
                     if itemSearchQuestID then
-                        itemSearchCollapsed=not itemSearchCollapsed
+                        itemSearchCollapsed[self.branchKey]=not itemSearchCollapsed[self.branchKey]
                         stopQuestHover()
                         arrange()
                         return
@@ -1649,15 +1924,21 @@ local function arrange()
             b.turnInLabel,b.turnInName=nil,nil
             b.npcHit:Hide()
             b:ClearAllPoints();b:SetPoint("TOPLEFT",hud.content,"TOPLEFT",indent,-yOffset)
-            local link,icon,count=questItem(q)
-            b.item.link,b.item.rankQuestIndex=link,q.logIndex
-            b.item:SetShown(link~=nil)
-            if link then
-                b.item.icon:SetTexture(icon)
-                color(b.item.border,unpack(a.accent))
-                applyTypography(b.item.count,a,10,"GameFontNormalSmall")
-                b.item.count:SetText(id(count) and count>1 and tostring(count) or "")
+            local items=not q.partyOnly and questItemList(q.id,q.logIndex) or {}
+            for i=1,math.max(#items,#b.itemTiles) do
+                local tile=b.itemTiles[i] or makeQuestItemTile(b,i)
+                b.itemTiles[i]=tile
+                local selected=items[i]
+                tile.link,tile.rankQuestIndex=selected and selected.link,q.logIndex
+                tile:SetShown(selected~=nil)
+                if selected then
+                    tile.icon:SetTexture(selected.icon)
+                    color(tile.border,unpack(a.accent))
+                    applyTypography(tile.count,a,10,"GameFontNormalSmall")
+                    tile.count:SetText(id(selected.count) and selected.count>1 and tostring(selected.count) or "")
+                end
             end
+            local link=b.item.link
             local excluded=call(AT.IsQuestExcluded,q.id)==true
             local statusTag=q.order and ("#" .. q.order) or (excluded and "OFF" or "")
             local circle=b.circle
@@ -1721,9 +2002,12 @@ local function arrange()
             local minimized=AT.char and AT.char.rankQuestMinimized and AT.char.rankQuestMinimized[q.id]
             local rowHeight
             if minimized then
+                resetObjectiveMobButtons(b.objectiveMobIcons)
+                resetObjectiveMobButtons(b.objectiveMobHits)
                 for _,objective in ipairs(b.objectives) do objective:Hide();objective:SetText("") end
                 rowHeight=link and 66 or (detail and 49 or 30+offset)
             else rowHeight=renderObjectives(b,q,width,a,link~=nil,detail~=nil) end
+            if #items>0 then rowHeight=math.max(rowHeight,64+(#items-1)*33) end
             b:SetSize(width,rowHeight)
             yOffset=yOffset+rowHeight+3
             b:Show()
@@ -1733,13 +2017,13 @@ local function arrange()
     for n=shownRows+1,#hud.rows do hud.rows[n].qid=nil;hud.rows[n].item.link=nil;hud.rows[n]:Hide() end
     for n=shownGroups+1,#hud.branches do hud.branches[n].branchKey=nil;hud.branches[n]:Hide() end
     setExtent(hud.scroll,hud.content,yOffset)
-    arrangeDungeonMenu(a,offset)
+    arrangeZonesMenu(a,offset,allZones)
     if AT.SetRankQuestItemTargets then AT.SetRankQuestItemTargets(hud.rows,hud.scroll,verifiedQuestItem) end
 end
 local function browse(z)
     resolveStatusOnSelection=true
     viewedZone=z
-    selectedDungeon,dungeonOpen=nil,false
+    selectedDungeon=nil
     popupOpen=false
     if hud then hud.scroll:SetVerticalScroll(0) end
     arrange()
@@ -1872,7 +2156,7 @@ function AT.RefreshQuestHUD()
     if not AT.db or not AT.db.enabled or not AT.db.questHUDEnabled then
         if AT.SetRankQuestItemTargets then AT.SetRankQuestItemTargets() end
         hud.search:ClearFocus()
-        popupOpen,toolbarOpen=false,false; selectedDungeon,dungeonOpen=nil,false; hud:Hide(); observedObjectives,highlights,partyRetained,partyTurnedIn={},{},{},{}; stopQuestHover(); AT.SyncBlizzardQuestHUD(); return
+        popupOpen,toolbarOpen=false,false; selectedDungeon=nil; hud:Hide(); observedObjectives,highlights,partyRetained,partyTurnedIn={},{},{},{}; stopQuestHover(); AT.SyncBlizzardQuestHUD(); return
     end
     hud:Show()
     local pos,name=playerZone()
@@ -1882,7 +2166,7 @@ function AT.RefreshQuestHUD()
         currentZone,currentDungeon=pos,instanceKey
         if viewedZone~=ALL_ZONES then viewedZone=nil end
         popupOpen=false
-        hud.railScroll:SetVerticalScroll(0)
+        hud.zoneMenuScroll:SetVerticalScroll(0)
         hud.scroll:SetVerticalScroll(0)
     end
     model=build(pos,name)
@@ -1896,28 +2180,36 @@ function AT.RefreshQuestHUD()
     end
     if not AT.db.questHUDCollapsed then arrange() else
         if AT.SetRankQuestItemTargets then AT.SetRankQuestItemTargets() end
-        popupOpen,dungeonOpen,toolbarOpen=false,false,false;stopQuestHover()
+        popupOpen,toolbarOpen=false,false;stopQuestHover()
     end
     AT.SyncBlizzardQuestHUD()
 end
 
-function AT.SearchRankQuestItem(qid)
-    if not (hud and AT.db and AT.db.enabled~=false and AT.db.questHUDEnabled
-        and is(qid,"number") and qid>0 and qid%1==0) then return false end
-    local title=call(Q and Q.GetTitleForQuestID,qid)
-    if not is(title,"string") or title=="" then
-        local row=model and model.rows[qid]
-        title=row and row.title
+function AT.SearchRankQuestItem(qid,itemLabel)
+    if not (hud and AT.db and AT.db.enabled~=false and AT.db.questHUDEnabled) then return false end
+    local targets,count,only={},0,nil
+    local list=id(qid) and {[qid]=true} or qid
+    if not is(list,"table") then return false end
+    for quest in pairs(list) do
+        if id(quest) then targets[quest]=true;count=count+1;only=quest end
     end
-    if not is(title,"string") or title=="" then return false end
+    if count==0 then return false end
+    local title
+    if count==1 then
+        local row=model and model.rows[only]
+        title=call(Q and Q.GetTitleForQuestID,only)
+        if not is(title,"string") or title=="" then title=row and row.title or ("Quest #"..only) end
+    else
+        title=is(itemLabel,"string") and itemLabel~="" and itemLabel or "Linked quests"
+    end
     local search=hud.search
     AT.db.questHUDCollapsed=false
-    itemSearchQuestID,settingItemSearch,itemSearchCollapsed=qid,true,false
+    itemSearchQuestID,settingItemSearch,itemSearchCollapsed=targets,true,{}
     search:SetText(title)
     settingItemSearch=nil
     search:ClearFocus()
     searchOpen=true
-    popupOpen,dungeonOpen=false,false
+    popupOpen=false
     hud.scroll:SetVerticalScroll(0)
     AT.RefreshQuestHUD()
     return true
@@ -1956,10 +2248,13 @@ local function releaseOnOutsideClick()
     -- GLOBAL_MOUSE_DOWN can arrive with no button focus yet, before the
     -- button's own mouse-up click. Use the displayed HUD hit area as well.
     local inside=containsMouse(hud,target) or pointerOver(hud.body)
-        or (hud.railFrame:IsShown() and pointerOver(hud.railFrame))
-        or (hud.dungeonFrame:IsShown() and pointerOver(hud.dungeonFrame))
+        or (hud.zoneMenu:IsShown() and pointerOver(hud.zoneMenu))
     if toolbarOpen and not inside then
-        toolbarOpen,popupOpen,dungeonOpen=false,false,false
+        toolbarOpen,popupOpen=false,false
+        arrange()
+    elseif popupOpen and not (containsMouse(hud.zoneMenu,target) or pointerOver(hud.zoneMenu)
+        or containsMouse(hud.zoneButton,target) or pointerOver(hud.zoneButton)) then
+        popupOpen=false
         arrange()
     end
     local search=hud.search
@@ -1990,6 +2285,17 @@ function AT.InitQuestHUD()
     header:SetPoint("TOPLEFT",body,"TOPLEFT",0,0)
     header:SetSize(hud:GetWidth(),34);header:EnableMouse(true);header:RegisterForDrag("LeftButton")
     local armed,dragged,moving
+    local function hideHeaderTip(self)
+        if GameTooltip and GameTooltip.IsOwned and GameTooltip:IsOwned(self) then GameTooltip:Hide() end
+    end
+    header:SetScript("OnEnter",function(self)
+        if toolbarOpen or not GameTooltip then return end
+        GameTooltip:SetOwner(self,"ANCHOR_CURSOR")
+        GameTooltip:SetText("Click to show Settings")
+        GameTooltip:Show()
+    end)
+    header:SetScript("OnLeave",hideHeaderTip)
+    header:SetScript("OnHide",hideHeaderTip)
     header:SetScript("OnMouseDown",function(_,mouseButton)
         armed=mouseButton=="LeftButton"
         dragged=false
@@ -2000,10 +2306,12 @@ function AT.InitQuestHUD()
         armed=false
         if not clicked or not pointerOver(header) then return end
         toolbarOpen=not toolbarOpen
-        if not toolbarOpen then popupOpen,dungeonOpen=false,false end
+        if toolbarOpen then hideHeaderTip(header) end
+        if not toolbarOpen then popupOpen=false end
         arrange()
     end)
     header:SetScript("OnDragStart",function()
+        hideHeaderTip(header)
         dragged=true
         if AT.db.rankQuestLocked then return end
         if AT.SuspendRankQuestItems then AT.SuspendRankQuestItems(true) end
@@ -2035,7 +2343,7 @@ function AT.InitQuestHUD()
     local openSearch=button(body,"",0,0,30,28,function(self)
         if GameTooltip and GameTooltip.IsOwned and GameTooltip:IsOwned(self) then GameTooltip:Hide() end
         searchOpen=true
-        popupOpen,dungeonOpen=false,false
+        popupOpen=false
         arrange()
         search:SetFocus()
     end)
@@ -2069,7 +2377,7 @@ function AT.InitQuestHUD()
         searchOpen=query~=""
         if not searchOpen then self:ClearFocus() end
         for token in lowerSearch(query):gmatch("%S+") do searchWords[#searchWords+1]=token end
-        popupOpen,dungeonOpen=false,false
+        popupOpen=false
         if hud.scroll then hud.scroll:SetVerticalScroll(0);arrange() end
     end)
     search:SetScript("OnEditFocusLost",dismissEmptySearch)
@@ -2090,7 +2398,7 @@ function AT.InitQuestHUD()
     local palette=button(body,"Map",0,0,68,20,function()
         local t=AT.db.questHUDTheme or 2
         AT.db.questHUDTheme=t%#themes+1
-        popupOpen,dungeonOpen=false,false
+        popupOpen=false
         arrange()
     end)
     palette:ClearAllPoints();palette:SetPoint("RIGHT",collapse,"LEFT",-4,0)
@@ -2122,8 +2430,8 @@ function AT.InitQuestHUD()
         local tip=GameTooltip
         if not tip then return end
         tip:SetOwner(self,"ANCHOR_BOTTOM")
-        tip:SetText(inlineParty and "Hide inline party progress" or "Show inline party progress")
-        tip:AddLine("Shows remaining objectives WoW reports for other party members.",.78,.89,.90,true)
+        tip:SetText(inlineParty and "Hide party counts" or "Show party counts")
+        tip:AddLine("Toggles compact counts on quest rows. Hover a quest for details.",.78,.89,.90,true)
         tip:Show()
     end)
     partyToggle:SetScript("OnLeave",function(self)
@@ -2140,68 +2448,79 @@ function AT.InitQuestHUD()
     local more=button(body,"+",0,0,22,20,function() changeFont(1) end)
 
     hud.smaller,hud.larger=less,more
-    local zoneButton=button(body,"Zones",0,0,68,20,function()
-        selectedDungeon,dungeonOpen=nil,false
-        if logCache and not logCache.full then logDirty=true end
-        local theme=themes[AT.db.questHUDTheme] or themes[2]
-        if theme.questie then popupOpen=not popupOpen
-        else AT.db.questHUDRailOpen=AT.db.questHUDRailOpen==false end
-        AT.RefreshQuestHUD()
+    local zoneButton=button(body,"Zones",0,0,78,zoneMenuLayout.buttonHeight,function()
+        popupOpen=not popupOpen
+        if popupOpen then
+            if logCache and not logCache.full then logDirty=true end
+            hud.zoneMenuScroll:SetVerticalScroll(0)
+            AT.RefreshQuestHUD()
+        else arrange() end
     end)
-    zoneButton:ClearAllPoints();zoneButton:SetPoint("TOPRIGHT",body,"TOPRIGHT",-13,-35)
+    zoneButton:ClearAllPoints();zoneButton:SetPoint("TOPRIGHT",body,"TOPRIGHT",-13,-zoneMenuLayout.buttonFromTop)
+    zoneButton.label:ClearAllPoints();zoneButton.label:SetPoint("CENTER",-6,0)
+    local chevron=text(zoneButton,"GameFontHighlightSmall")
+    chevron:SetPoint("RIGHT",-7,0);chevron:SetText("▾")
     hud.zoneButton=zoneButton
-    local dungeonButton=button(body,"Dungeons",0,0,88,20,function()
-        dungeonOpen=not dungeonOpen
-        popupOpen=false
-        if dungeonOpen then hud.dungeonScroll:SetVerticalScroll(0) end
-        arrange()
+    local guideButton=button(body,"",0,0,22,20,function()
+        if popupOpen then popupOpen=false;arrange() end
+        call(AT.ToggleLevelGuide)
     end)
-    dungeonButton:ClearAllPoints();dungeonButton:SetPoint("RIGHT",zoneButton,"LEFT",-4,0)
-    hud.dungeonButton=dungeonButton
-    more:ClearAllPoints();more:SetPoint("RIGHT",dungeonButton,"LEFT",-5,0)
+    guideButton:ClearAllPoints();guideButton:SetPoint("RIGHT",zoneButton,"LEFT",-5,0)
+    local guideIcon=guideButton:CreateTexture(nil,"ARTWORK")
+    guideIcon:SetSize(15,15);guideIcon:SetPoint("CENTER")
+    guideIcon:SetTexture("Interface\\Icons\\INV_Misc_Book_09")
+    guideIcon:SetTexCoord(.07,.93,.07,.93)
+    guideButton:SetScript("OnEnter",function(self)
+        if not GameTooltip then return end
+        GameTooltip:SetOwner(self,"ANCHOR_TOP")
+        GameTooltip:SetText("Level Guide")
+        GameTooltip:AddLine("Questing recommendations, zone levels and dungeons.",.83,.87,.86,true)
+        GameTooltip:Show()
+    end)
+    guideButton:SetScript("OnLeave",function(self)
+        if GameTooltip and GameTooltip.IsOwned and GameTooltip:IsOwned(self) then GameTooltip:Hide() end
+    end)
+    hud.guideButton=guideButton
+    more:ClearAllPoints();more:SetPoint("RIGHT",guideButton,"LEFT",-4,0)
     less:ClearAllPoints();less:SetPoint("RIGHT",more,"LEFT",-4,0)
-    -- The title drag hit area extends behind this row. Keep all controls above it.
-    for _,control in ipairs({collapse,palette,statusFilter,partyToggle,less,more,dungeonButton,zoneButton}) do
+    for _,control in ipairs({collapse,palette,statusFilter,partyToggle,less,more,guideButton,zoneButton}) do
         control:RegisterForClicks("LeftButtonUp")
         if control.SetFrameLevel and header.GetFrameLevel then control:SetFrameLevel(header:GetFrameLevel()+2) end
     end
-    local dungeonFrame=CreateFrame("Frame",nil,body)
-    dungeonFrame:SetSize(216,37)
-    dungeonFrame:SetPoint("TOPRIGHT",dungeonButton,"BOTTOMRIGHT",0,-3)
-    if dungeonFrame.SetFrameLevel and body.GetFrameLevel then dungeonFrame:SetFrameLevel(body:GetFrameLevel()+13) end
-    local dungeonBack=box(dungeonFrame);dungeonBack:SetAllPoints(dungeonFrame);color(dungeonBack,.033,.043,.048,.97)
-    local dungeonScroll=wheelFrame(dungeonFrame,48)
-    dungeonScroll:SetPoint("TOPLEFT",dungeonFrame,"TOPLEFT",6,-6)
-    dungeonScroll:SetPoint("BOTTOMRIGHT",dungeonFrame,"BOTTOMRIGHT",-6,6)
-    local dungeonContent=CreateFrame("Frame",nil,dungeonScroll)
-    dungeonContent:SetSize(204,2)
-    dungeonScroll:SetScrollChild(dungeonContent)
-    hud.dungeonFrame,hud.dungeonScroll,hud.dungeonContent,hud.dungeonRows=dungeonFrame,dungeonScroll,dungeonContent,{}
-    dungeonFrame:Hide()
+    local menu=CreateFrame("Frame",nil,body)
+    menu:SetSize(226,120);menu:SetPoint("TOPRIGHT",zoneButton,"BOTTOMRIGHT",0,-zoneMenuLayout.gap)
+    menu:EnableMouse(true)
+    menu:SetClampedToScreen(true)
+    menu:SetFrameStrata("HIGH")
+    if menu.SetFrameLevel and body.GetFrameLevel then menu:SetFrameLevel(body:GetFrameLevel()+13) end
+    local menuBack=box(menu);menuBack:SetAllPoints(menu);color(menuBack,.033,.043,.048,.98)
+    local menuScroll=wheelFrame(menu,48)
+    local menuContent=CreateFrame("Frame",nil,menuScroll)
+    menuContent:SetSize(214,2);menuScroll:SetScrollChild(menuContent)
+    hud.zoneMenu,hud.zoneMenuScroll,hud.zoneMenuContent,hud.zoneRows=menu,menuScroll,menuContent,{}
+    hud.selectDungeon=function(key)
+        viewedZone,selectedDungeon,popupOpen=nil,key,false
+        resolveStatusOnSelection=true
+        hud.scroll:SetVerticalScroll(0)
+        arrange()
+    end
+    hud.scopeRows={}
+    local function scope(i,title,callback)
+        local row=button(menu,title,6,-6,214,23,callback)
+        row.label:ClearAllPoints();row.label:SetPoint("LEFT",9,0);row.label:SetWordWrap(false)
+        row:Hide()
+        hud.scopeRows[i]=row
+    end
+    scope(1,"Current Zone",function() if popupOpen then browse(nil) end end)
+    scope(2,"All Zones",function() if popupOpen then browse(ALL_ZONES) end end)
+    scope(3,"All Dungeons",function() if popupOpen then hud.selectDungeon(ALL_DUNGEONS) end end)
+    hud.zonesHeading=text(menuContent,"GameFontNormalSmall");hud.zonesHeading:SetText("ZONES")
+    hud.dungeonsHeading=text(menuContent,"GameFontNormalSmall");hud.dungeonsHeading:SetText("DUNGEONS")
+    hud.noZones=text(menuContent,"GameFontDisableSmall");hud.noZones:SetText("No other zones")
+    hud.noDungeons=text(menuContent,"GameFontDisableSmall");hud.noDungeons:SetText("No dungeon quests")
+    menu:Hide()
     hud.tab=button(hud,"Rank Quest  +",0,0,116,24,toggle)
     hud.tab:ClearAllPoints();hud.tab:SetPoint("TOPRIGHT",hud,"TOPRIGHT",0,0)
-    local drawer=button(body,">",0,-94,19,80,function()
-        selectedDungeon,dungeonOpen=nil,false
-        AT.db.questHUDRailOpen=AT.db.questHUDRailOpen==false
-        arrange()
-    end)
-    drawer:SetPoint("BOTTOMLEFT",body,"BOTTOMLEFT",0,3)
-    hud.drawer=drawer
-    local rail=CreateFrame("Frame",nil,body)
-    rail:SetPoint("TOPLEFT",body,"TOPLEFT",20,-68)
-    rail:SetPoint("BOTTOMLEFT",body,"BOTTOMLEFT",20,3); rail:SetWidth(119)
-    hud.railFrame=rail
-    if rail.SetFrameLevel and body.GetFrameLevel then rail:SetFrameLevel(body:GetFrameLevel()+12) end
-    hud.railBack=box(rail);hud.railBack:SetAllPoints(rail)
-    hud.localTab=button(rail,"CURRENT ZONE",3,-4,111,23,function() browse(nil) end)
-    hud.allTab=button(rail,"ALL ZONES",3,-30,111,23,function() browse(ALL_ZONES) end)
-    hud.rail={}
-    hud.railScroll=wheelFrame(rail,48)
-    hud.railScroll:SetPoint("TOPLEFT",rail,"TOPLEFT",3,-57)
-    hud.railScroll:SetPoint("BOTTOMRIGHT",rail,"BOTTOMRIGHT",-4,4)
-    hud.railContent=CreateFrame("Frame",nil,hud.railScroll)
-    hud.railContent:SetSize(99,2)
-    hud.railScroll:SetScrollChild(hud.railContent)
     hud.scroll=wheelFrame(body,66)
     if hud.scroll.HookScript and AT.InvalidateRankQuestItems then hud.scroll:HookScript("OnVerticalScroll",AT.InvalidateRankQuestItems) end
     hud.scroll:SetPoint("TOPLEFT",body,"TOPLEFT",115,-72)
@@ -2226,7 +2545,7 @@ function AT.InitQuestHUD()
     hud:SetScript("OnSizeChanged",pushRefresh)
     local watcher=CreateFrame("Frame")
     for _,event in ipairs({"PLAYER_ENTERING_WORLD","QUEST_ACCEPTED","QUEST_REMOVED","QUEST_COMPLETE","QUEST_TURNED_IN","QUEST_LOG_UPDATE",
-        "QUEST_WATCH_UPDATE","GROUP_ROSTER_UPDATE","QUEST_DATA_LOAD_RESULT","PLAYER_REGEN_ENABLED","PLAYER_LEVEL_UP","PLAYER_MAP_CHANGED","ZONE_CHANGED","ZONE_CHANGED_INDOORS","ZONE_CHANGED_NEW_AREA","SUPER_TRACKING_CHANGED","GLOBAL_MOUSE_DOWN"}) do
+        "QUEST_WATCH_UPDATE","BAG_UPDATE_DELAYED","GET_ITEM_INFO_RECEIVED","GROUP_ROSTER_UPDATE","QUEST_DATA_LOAD_RESULT","PLAYER_REGEN_ENABLED","PLAYER_LEVEL_UP","PLAYER_MAP_CHANGED","ZONE_CHANGED","ZONE_CHANGED_INDOORS","ZONE_CHANGED_NEW_AREA","SUPER_TRACKING_CHANGED","GLOBAL_MOUSE_DOWN"}) do
         pcall(watcher.RegisterEvent,watcher,event)
     end
     watcher:SetScript("OnEvent",function(_,event,first,second)

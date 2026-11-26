@@ -554,6 +554,7 @@ local function run()
     local db = AT.db
     if not db or not Q or (InCombatLockdown and InCombatLockdown()) then return end
     if not db.enabled then manualHUDQuest,retiringManual=nil,nil; release(); return end
+    if AT.GetLevelGuideRoutePoint and call(AT.GetLevelGuideRoutePoint) then return end
     local ids, watchedIDs = snapshot()
     if db.hideCompleted then
         for _, id in ipairs(watchedIDs) do
@@ -649,6 +650,8 @@ end
 -- watch list is full or the UI watch API has not caught up with the queue.
 function AT.GetQuestNavigationID()
     if not Q or not AT.db or not AT.db.enabled then return end
+    local guideQuest=call(AT.GetLevelGuideRoutePoint)
+    if validID(guideQuest) then return guideQuest,"guide" end
     local manual=AT.GetQuestHUDManualFocus()
     if manual then return manual,"hud" end
     local order = trackingOrder()
@@ -717,6 +720,64 @@ local function forgetTurnInMap(quest)
 end
 
 
+-- EG Link records actual turn-in offers. Do not guess a destination from a
+-- generic waypoint or choose between two distinct recorded finishers.
+-- Independently checked reference turn-ins; never route to these without a
+-- native pin. For 26 and 161 the exact quest names the NPC, whose position is
+-- independently observed in Forever by Efficient Games on other quests.
+-- https://www.wowhead.com/forever/quest=26/a-lesson-to-learn
+-- https://www.wowhead.com/forever/quest=161/a-dark-threat-looms
+-- Data from Efficient Games (https://efficient.games), licensed under CC BY 4.0.
+-- Westfall 103/104/140 coordinates adapted from AllTheThings (MIT).
+-- https://github.com/ATTWoWAddon/AllTheThings ; license notice in README.
+local referenceTurnIns={
+    [26]={{1450,.5622,.305,1,11802,0,"Dendrite Starblaze"}},
+    [103]={{1436,.300,.860,1,392,0,"Captain Grayson"}},
+    [104]={{1436,.300,.860,1,392,0,"Captain Grayson"}},
+    [140]={{1436,.2597,.1690,2,33,0,"Locked Chest"}},
+    [161]={{1437,.5014,.1827,1,1073,1,"Ashlan Stonesmirk"}},
+    [623]={{1445,.688,.532,1,2616,1,"Privateer Groy"}},
+}
+local function observedTurnIn(id,map,x,y,reference)
+    local source
+    if reference then
+        source=referenceTurnIns[id] or (AT.ForeverQuestNPCReferences and AT.ForeverQuestNPCReferences[id])
+            or (AT.ForeverATTQuestNPCReferences and AT.ForeverATTQuestNPCReferences[id])
+            or (AT.ForeverVerifiedEndpointReferences and AT.ForeverVerifiedEndpointReferences[id])
+    else
+        source=AT.ObservedQuestTurnIns and AT.ObservedQuestTurnIns[id]
+    end
+    if not isType(source,"table") then return end
+    local faction=call(UnitFactionGroup,"player")
+    local side=faction=="Alliance" and 1 or faction=="Horde" and 2 or -1
+    local found
+    for _,p in ipairs(source) do
+        local m,px,py,kind,entity,access=unpack(p)
+        if validID(m) and xyValid(px,py) and (access==0 or access==side)
+            and (not map or map==m and math.abs(x-px)<=.012 and math.abs(y-py)<=.012) then
+            if not found then found=p
+            elseif found[1]~=m or found[4]~=kind or found[5]~=entity
+                or math.abs(found[2]-px)>.012 or math.abs(found[3]-py)>.012 then return end
+        end
+    end
+    if not found then return end
+    local m,px,py,kind,entity,_,name=unpack(found)
+    if kind==1 then
+        local locale=call(GetLocale)
+        if locale~="enUS" and locale~="enGB" then name=nil end
+        for _,unit in ipairs({"npc","target","mouseover"}) do
+            local guid=call(UnitGUID,unit)
+            local npc=isType(guid,"string") and tonumber(guid:match("^Creature%-%d+%-%d+%-%d+%-%d+%-(%d+)%-"))
+            if npc==entity then
+                local actual=call(UnitName,unit)
+                if isType(actual,"string") and actual~="" then name=actual;break end
+            end
+        end
+    end
+    if not isType(name,"string") or name=="" then name=nil end
+    return m,px,py,name,kind==1 and name~=nil
+end
+
 local function resolveTurnInPoint(id,viewMap,wantName)
     local visited={}
     local function chain(map)
@@ -744,6 +805,27 @@ local function resolveTurnInPoint(id,viewMap,wantName)
     local origins=AT.char and AT.char.zoneQuestOrigins
     if not m then m,x,y=chain(field(origins,id)) end
     if not m then m,x,y=chain(nativeTurnInMaps[id]) end
+    -- A reference may tell us where to ask the client, not where to route.
+    if not m then
+        local faction=call(UnitFactionGroup,"player")
+        local side=faction=="Alliance" and 1 or faction=="Horde" and 2 or -1
+        local budget=8
+        local function queryHints(pack)
+            for _,p in ipairs(pack and pack[id] or {}) do
+                local map,access=p[1],p[6]
+                if validID(map) and not visited[map] and (access==0 or access==side) then
+                    visited[map]=true
+                    budget=budget-1
+                    m,x,y=nativeTurnIn(id,map)
+                    if m or budget==0 then return true end
+                end
+            end
+        end
+        if not queryHints(AT.ObservedQuestTurnIns) and not queryHints(referenceTurnIns)
+            and not queryHints(AT.ForeverQuestNPCReferences) and not queryHints(AT.ForeverATTQuestNPCReferences) then
+            queryHints(AT.ForeverVerifiedEndpointReferences)
+        end
+    end
     if m then rememberTurnInMap(id,m) end
     if m and not wantName then return m,x,y end
     local db,dist,zones=questieModule("QuestieDB"),questieModule("DistanceUtils"),questieModule("ZoneDB")
@@ -763,6 +845,14 @@ local function resolveTurnInPoint(id,viewMap,wantName)
             if qm==m and math.abs(qx-x)<=.001 and math.abs(qy-y)<=.001 then return m,x,y,name,npcOnly end
         end
     end
+    local knownMap,kx,ky,label,npcOnly=observedTurnIn(id,m,x,y)
+    if knownMap then
+        return m or knownMap,x or kx,y or ky,wantName and label or nil,wantName and npcOnly or nil
+    end
+    if wantName then
+        local ref,rx,ry,npc,clickable=observedTurnIn(id,m,x,y,true)
+        if ref then return m or ref,x or rx,y or ry,npc,clickable,not m end
+    end
     return m,x,y
 end
 
@@ -772,6 +862,19 @@ function AT.GetQuestTurnInPoint(id,viewMap)
 end
 
 -- Displaying a destination should never select the quest, watch it, or change GPS.
+-- This reference can label a ready quest even if no floor pin is available.
+-- Never return it as a waypoint or expose untranslated macro target names.
+function AT.GetReadyQuestTurnInArea(id)
+    if not completed(id) or call(Q.IsOnQuest,id)==false then return end
+    local locale=call(GetLocale)
+    if locale~="enUS" and locale~="enGB" then return end
+    local row=AT.ForeverTurnInAreaReferences and AT.ForeverTurnInAreaReferences[id]
+    if not row then return end
+    local faction=call(UnitFactionGroup,"player")
+    local side=faction=="Alliance" and 1 or faction=="Horde" and 2 or -1
+    if row[4]==0 or row[4]==side then return row[1],row[2],row[3] end
+end
+
 function AT.GetReadyQuestTurnInPoint(id,viewMap)
     if not completed(id) or call(Q.IsOnQuest,id)==false then return end
     return resolveTurnInPoint(id,viewMap,true)
@@ -828,7 +931,8 @@ function AT.GetFocusedQuestRouteTargets(mapID)
     return id,targets
 end
 function AT.GetFocusedQuestRoutePoint()
-    local focus = AT.GetQuestNavigationID()
+    local focus,source = AT.GetQuestNavigationID()
+    if source=="guide" then return AT.GetLevelGuideRoutePoint() end
     if not focus then return end
     if AT.IsQuestTurnInNavigation(focus) then
         return focus, AT.GetQuestTurnInPoint(focus)

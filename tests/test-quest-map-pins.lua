@@ -2,7 +2,14 @@ local AT={db={enabled=true,showQuestMapPins=true,showObservedQuestGivers=false}}
 local hidden={}
 function issecretvalue(v)return v==hidden end
 local map, faction, questie, instance=1433,"Alliance",false,false
-local excluded,ready={[11]=true},{[21]=true}
+local excluded,ready={[11]=true,[16]=true},{[21]=true}
+local requests=0
+C_QuestLine={RequestQuestLinesForMap=function() requests=requests+1 end,
+ GetAvailableQuestLines=function(m) if m==1433 then return {
+ {questID=12,isQuestStart=true,x=.345,y=.43,startMapID=1433},
+ {questID=13,isQuestStart=true,isHidden=true,x=.33,y=.445},
+ {questID=14,isQuestStart=true,x=.33,y=.415,startMapID=900},
+ } end end}
 local custom={
     {questID=10,isQuestStart=true,x=.29,y=.41},
     {questID=11,isQuestStart=true,x=.2,y=.2},
@@ -15,7 +22,7 @@ C_QuestLog={
  GetQuestsOnMap=function(m)return m==1433 and custom or {} end,
  GetTitleForQuestID=function(q)return "Quest "..q end,
  IsOnQuest=function(q)return q>=20 end,
- IsQuestFlaggedCompleted=function(q)return excluded[q] end,
+ IsQuestFlaggedCompleted=function(q)return excluded[q] or false end,
  ReadyForTurnIn=function(q)return ready[q] or false end,
  GetNumQuestLogEntries=function()return 1 end,
  GetInfo=function()return {questID=23,isHeader=false}end,
@@ -35,6 +42,9 @@ function IsInInstance()return instance end
 assert(loadfile("NQT/ForeverTownPins.lua"))("NQT",AT)
 local known=AT.ObservedTownPins
 assert(known[1433] and #known[1433]>0,"ship licensed observed service pack")
+assert(AT.ObservedQuestStarts[1434] and AT.ObservedQuestTurnIns[189],"ship known starter and finisher data")
+assert(AT.ObservedQuestTurnIns[98209][1][7]=="Thundris Windweaver","Bloom of the Heavens uses the verified English creature name")
+AT.ObservedQuestStarts={[1433]={{15,.27,.45,1},{16,.24,.45,1},{17,.26,.40,2},{18,.88,.88,0}}}
 AT.ObservedTownPins={[1433]={{1,100,1,.35,.41},{1,200,2,.36,.41},{2,500,1,.251,.478},{3,600,0,.37,.41},{4,700,1,.38,.41}}}
 local frames={}
 local function make(parent)
@@ -80,13 +90,25 @@ AT.InitQuestMapPins()
 local driver=frames[1]
 local function tick()driver.evt.OnUpdate(driver,.4)end
 tick()
-local world,mini
-for _,x in ipairs(frames) do if x.parent==canvas then world=x elseif x.parent==Minimap then mini=x end end
-assert(world and mini and world.shown and mini.shown)
-for _,x in ipairs(frames) do if x.parent==world and x.atPin then assert(x.atPin.quest~=10,"do not duplicate an existing stock pin") end end
-instance=true;tick();assert(not mini.shown,"do not project on instance minimaps")
-instance=false;questie=true;tick();assert(not mini.shown and not world.shown)
+local world
+for _,x in ipairs(frames) do if x.parent==canvas then world=x end end
+assert(world and world.shown)
+local marks={}
+for _,x in ipairs(frames) do
+ assert(x.parent~=Minimap,"no minimap pin frames should be created")
+ if x.parent==world and x.atPin and x.atPin.quest then
+  marks[x.atPin.quest]=true
+ end
+end
+assert(not marks[10],"do not duplicate an existing stock pin")
+assert(marks[12] and marks[15] and marks[18] and not marks[11] and not marks[13] and not marks[14] and not marks[16] and not marks[17])
+assert(requests==1)
+AT.ForeverQuestFacts={[15]={40,42}}
+function UnitLevel()return 20 end
+AT.RefreshQuestMapPins();tick()
+for _,x in ipairs(frames) do assert(not x.atPin or x.atPin.quest~=15,"hide recorded starts below the known minimum level") end
+questie=true;tick();assert(not world.shown)
 questie=false;AT.db.showQuestMapPins=false;tick();assert(not world.shown)
-AT.db.showQuestMapPins=true;tick();assert(world.shown and mini.shown)
-WorldMapFrame.shown=false;tick();assert(not world.shown and mini.shown)
-print("PASS standalone map and minimap pin rendering, stock-pin dedupe, faction and quest eligibility, service pack, toggle and instance guards")
+AT.db.showQuestMapPins=true;tick();assert(world.shown)
+WorldMapFrame.shown=false;tick();assert(not world.shown)
+print("PASS world-map-only starts and service pins, zero minimap frames, native dedupe, level, faction and completion filtering")

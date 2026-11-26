@@ -11,7 +11,7 @@ local function call(fn,...)
     local ok,a,b,c,d,e,f=pcall(fn,...)
     if ok then return a,b,c,d,e,f end
 end
-local pending, active, completeLog={}, {}, false
+local pending, active, completeLog, scanned={}, {}, false, false
 local painted=setmetatable({},{__mode="k"})
 local turninLimit=250
 local function enabled()
@@ -78,7 +78,7 @@ local function objectiveIDs(qid,index,db)
     return set,true
 end
 local function scan()
-    active,completeLog={},false
+    active,completeLog,scanned={},false,false
     if not enabled() or not C_QuestLog then pending={};return end
     local shown,total=call(C_QuestLog.GetNumQuestLogEntries)
     if not isa(shown,"number") or shown<0 or shown>1000 or not isa(total,"number") or total<0 or total>1000 then return end
@@ -120,6 +120,7 @@ local function scan()
     -- Count mismatch includes collapsed/hidden quests. Never expand, guess,
     -- or use a partial log to tell a player an item can be discarded.
     completeLog=count==total and covered
+    scanned=true
     local timestamp=call(GetTime)
     if isa(timestamp,"number") then
         for qid,entry in pairs(pending) do
@@ -131,11 +132,30 @@ local function scan()
         pending=observed
     else pending={} end
 end
-local function remember(qid)
+local function releasedQuest(item)
+    local saved=AT.char and AT.char.leftoverQuestReleases
+    return isa(saved,"table") and saved[item] or nil
+end
+
+local function remember(qid,removed)
     if not enabled() or not id(qid) then return end
     local entry=pending[qid]
-    local items=entry and entry.items
-    if not items or not next(items) then return end
+    local items={}
+    for item in pairs(entry and entry.items or {}) do items[item]=true end
+    local facts=AT.ForeverQuestFacts and AT.ForeverQuestFacts[qid]
+    for i=3,#(facts or {}) do items[facts[i][1]]=true end
+    if not next(items) then return end
+    if removed then
+        if not isa(AT.char.leftoverQuestReleases,"table") then AT.char.leftoverQuestReleases={} end
+        local saved=AT.char.leftoverQuestReleases
+        for item in pairs(items) do
+            if saved[item] or (saved.count or 0)<turninLimit then
+                if not saved[item] then saved.count=(saved.count or 0)+1 end
+                saved[item]=qid
+            end
+        end
+        return
+    end
     if not isa(AT.char.leftoverQuestTurnins,"table") then AT.char.leftoverQuestTurnins={} end
     local ledger=AT.char.leftoverQuestTurnins
     for item in pairs(items) do
@@ -145,16 +165,40 @@ local function remember(qid)
     end
 end
 function AT.GetLeftoverQuestBagHint(bag,slot)
-    if not enabled() or not completeLog or not C_Container or not C_QuestLog or not C_Item
+    if not enabled() or not scanned or not C_Container or not C_QuestLog or not C_Item
         or not isa(bag,"number") or bag<0 or bag>(NUM_BAG_SLOTS or 4) or bag%1~=0 or not id(slot) then return end
     local item=call(C_Container.GetContainerItemID,bag,slot)
-    if not id(item) or active[item] then return end
+    if not id(item) or active[item] or item==3898
+        or AT.ForeverProtectedQuestItems and AT.ForeverProtectedQuestItems[item] then return end
     local info=call(C_Container.GetContainerItemQuestInfo,bag,slot)
     if not isa(info,"table") then return end
     local starter=info.questID
     if not clean(starter) or (starter~=nil and starter~=0) or field(info,"isActive")~=false then return end
     local ledger=AT.char.leftoverQuestTurnins
     local quest=isa(ledger,"table") and ledger[item]
+    local direct=AT.GetForeverObjectiveQuests and AT.GetForeverObjectiveQuests(item)
+    local removed=releasedQuest(item)
+    local review
+    -- Some Forever clients do not report repeatability for a removed quest.
+    -- A positive removal record can still support amber review, never trash.
+    if id(removed) and call(C_QuestLog.IsOnQuest,removed)==false
+        and call(C_QuestLog.IsQuestFlaggedCompleted,removed)==false then
+        local repeatable=call(C_QuestLog.IsRepeatableQuest,removed)
+        if clean(repeatable) and repeatable~=true then review=removed end
+    end
+    for qid in pairs(direct or {}) do
+        local on=call(C_QuestLog.IsOnQuest,qid)
+        local repeatable=call(C_QuestLog.IsRepeatableQuest,qid)
+        local done=call(C_QuestLog.IsQuestFlaggedCompleted,qid)
+        if not clean(on) or on~=false or not clean(repeatable) or not clean(done)
+            or repeatable~=false and not (review==qid and repeatable==nil) then return end
+        if done==true then
+            if not id(quest) or qid<quest then quest=qid end
+        elseif done~=false or review~=qid then return end
+    end
+    -- Only exact standalone links can supplement incomplete metadata from
+    -- Questie or hidden headers, and only when the bag API says inactive.
+    if not completeLog and not review and not (direct and next(direct)) then return end
     local db=questieDB()
     local data=db and call(db.GetItem,db,item)
     if isa(data,"table") then
@@ -168,25 +212,32 @@ function AT.GetLeftoverQuestBagHint(bag,slot)
                 if not id(qid) then return end
                 local isOn=call(C_QuestLog.IsOnQuest,qid)
                 local repeatable=call(C_QuestLog.IsRepeatableQuest,qid)
-                if not clean(isOn) or isOn~=false or not clean(repeatable) or repeatable~=false then return end
+                if not clean(isOn) or isOn~=false or not clean(repeatable)
+                    or repeatable~=false and not (review==qid and repeatable==nil) then return end
                 local ids,known=objectiveIDs(qid,nil,db)
                 local done=call(C_QuestLog.IsQuestFlaggedCompleted,qid)
                 if known and ids[item] then
-                    if not clean(done) or done~=true then return end
-                    if not id(quest) then quest=qid end
+                    if not clean(done) then return end
+                    if done==true then
+                        if not id(quest) then quest=qid end
+                    elseif done~=false or review~=qid then return end
                 elseif not known then return end
             end
         end
     end
+    local reviewOnly=id(review)
+    if reviewOnly then quest=review end
     if not id(quest) then return end
     local done=call(C_QuestLog.IsQuestFlaggedCompleted,quest)
     local isOn=call(C_QuestLog.IsOnQuest,quest)
     local repeatable=call(C_QuestLog.IsRepeatableQuest,quest)
-    if not clean(done) or done~=true or not clean(isOn) or isOn~=false or not clean(repeatable) or repeatable~=false then return end
+    if not clean(done) or (reviewOnly and done~=false or not reviewOnly and done~=true)
+        or not clean(isOn) or isOn~=false or not clean(repeatable)
+        or repeatable~=false and not (reviewOnly and repeatable==nil) then return end
     local _,_,_,_,_,class=call(C_Item.GetItemInfoInstant,item)
     local questClass=Enum and Enum.ItemClass and Enum.ItemClass.Questitem or 12
     if not clean(class) or class~=questClass then return end
-    return quest,item
+    return quest,item,reviewOnly and "review" or "turned-in"
 end
 -- Verified item relationship only. Do not feed this into the trash classifier:
 -- a provided quest item is not evidence that every later use is known.
@@ -225,8 +276,11 @@ local function hint(tip,bag,slot)
         tip:AddLine(...)
         added=true
     end
-    local quest=AT.GetLeftoverQuestBagHint(bag,slot)
-    if quest then
+    local quest,_,category=AT.GetLeftoverQuestBagHint(bag,slot)
+    if category=="review" then
+        append("Rank Quest: review before discarding",1,.74,.32)
+        append("Its quest is no longer in your log and was not turned in. Keep this item if you plan to take that quest again.",.9,.89,.86,true)
+    elseif quest then
         append("Rank Quest: leftover quest item",1,.74,.32)
         append("Its recorded quest was turned in; no current quest in the checked log uses it. A future quest may still need it.",.9,.89,.86,true)
     end
@@ -249,9 +303,14 @@ local function hint(tip,bag,slot)
                 else status="Status not available" end
                 local title=call(C_QuestLog.GetTitleForQuestID,qid)
                 if not isa(title,"string") or title=="" then
-                    title=verifiedQuestRefs[item] and verifiedQuestRefs[item][qid] or ("Quest #"..qid)
+                    local english=call(GetLocale)
+                    local knownTitle=item==3248 and qid==252 and (english=="enUS" or english=="enGB") and "Translation to Ello"
+                    title=verifiedQuestRefs[item] and verifiedQuestRefs[item][qid] or knownTitle or ("Quest #"..qid)
                 end
-                append(title.." (#"..qid.."): "..status,.88,.92,.93,true)
+                local origins=AT.ForeverQuestItemOrigins and AT.ForeverQuestItemOrigins[item]
+                local role=origins and origins[qid]
+                local relation=role==1 and "Reward from " or role==2 and "Provided by " or ""
+                append(relation..title.." (#"..qid.."): "..status,.88,.92,.93,true)
             end
             if selected and AT.SearchRankQuestItem then append("Ctrl-click to find this quest in Rank Quest.",.67,.85,.83,true) end
         elseif item then
@@ -273,13 +332,17 @@ local function paint(button)
     if not button then return end
     local mark=painted[button]
     local bag,slot=call(button.GetBagID,button),call(button.GetID,button)
-    if not AT.GetLeftoverQuestBagHint(bag,slot) then if mark then mark:Hide() end;return end
+    local quest,_,category=AT.GetLeftoverQuestBagHint(bag,slot)
+    if not quest then if mark then mark:Hide() end;return end
     if not mark then
         if not button.CreateTexture or (InCombatLockdown and InCombatLockdown()) then return end
         mark=button:CreateTexture(nil,"OVERLAY",nil,7)
         mark:SetSize(15,15);mark:SetPoint("TOPRIGHT",button,"TOPRIGHT",-1,-1)
         mark:SetTexture("Interface/AddOns/NQT/LeftoverTrash.tga")
         painted[button]=mark
+    end
+    if mark.SetVertexColor then
+        if category=="review" then mark:SetVertexColor(1,.65,.27) else mark:SetVertexColor(1,1,1) end
     end
     mark:Show()
 end
@@ -355,14 +418,21 @@ function AT.InitQuestLeftovers()
         "BAG_OPEN","PLAYER_REGEN_ENABLED","PLAYER_ENTERING_WORLD","ADDON_LOADED"}) do pcall(frame.RegisterEvent,frame,event) end
     local scheduled
     local function refresh() scheduled=nil;AT.RefreshQuestLeftovers() end
-    frame:SetScript("OnEvent",function(_,event,qid)
-        if event=="QUEST_TURNED_IN" then remember(qid) end
+    frame:SetScript("OnEvent",function(_,event,qid,isReplay)
+        if event=="QUEST_TURNED_IN" then remember(qid)
+        elseif event=="QUEST_REMOVED" and not isReplay then remember(qid,true) end
         -- Hide every old badge immediately before the next inventory/log pass.
         for _,mark in pairs(painted) do mark:Hide() end
-        completeLog=false
+        completeLog,scanned=false,false
         if scheduled then return end
         scheduled=true
-        if C_Timer and C_Timer.After then C_Timer.After(0,refresh) else refresh() end
+        if C_Timer and C_Timer.After then
+            C_Timer.After(0,refresh)
+            if event=="QUEST_REMOVED" or event=="QUEST_TURNED_IN" then
+                -- The quest event can arrive before the bag's active-item bit changes.
+                C_Timer.After(.3,refresh)
+            end
+        else refresh() end
     end)
     AT.RefreshQuestLeftovers()
 end
@@ -428,15 +498,15 @@ local function associatedQuest(bag,slot)
     local item=call(C_Container.GetContainerItemID,bag,slot)
     if not id(item) then return end
     local db=questieDB()
-    local matched,ambiguous,seen=nil,false,{}
-    local refs={}
+    local matched,seen=nil,{}
+    local refs,heldRefs={},{}
     local info=call(C_Container.GetContainerItemQuestInfo,bag,slot)
     local questItem=field(info,"isQuestItem")==true
     local itemName=questItem and call(C_Item and C_Item.GetItemNameByID,item)
     local textMatches={}
     local function register(qid)
         refs[qid]=true
-        if matched and matched~=qid then ambiguous=true end
+        heldRefs[qid]=true
         matched=qid
     end
     local function inspect(qid,index)
@@ -471,8 +541,9 @@ local function associatedQuest(bag,slot)
         and call(C_QuestLog.IsOnQuest,linked)==true then register(linked) end
     local inspected=0
     for _ in pairs(seen) do inspected=inspected+1 end
-    if kind(total,"number") and total==inspected then
-        for qid in pairs(textMatches) do register(qid) end
+    if kind(total,"number") and total==inspected and not matched then
+        local nameOnly=next(textMatches)
+        if nameOnly and not next(textMatches,nameOnly) then register(nameOnly) end
     end
     -- Exact backlinks also let us inspect held quests beneath collapsed headings.
     -- A backlink alone (especially a starter/reward) never authorizes opening.
@@ -483,11 +554,25 @@ local function associatedQuest(bag,slot)
             inspect(qid)
         end
     end
+    -- Standalone typed objectives are positive backlinks, including quests
+    -- under collapsed headers. They do not authorize any discard marker.
+    for qid in pairs(AT.GetForeverObjectiveQuests and AT.GetForeverObjectiveQuests(item) or {}) do
+        refs[qid]=true
+        if call(C_QuestLog.IsOnQuest,qid)==true then register(qid) end
+    end
     for qid in pairs(verifiedQuestRefs[item] or {}) do
         refs[qid]=true
         if call(C_QuestLog.IsOnQuest,qid)==true then register(qid) end
     end
-    if ambiguous then return nil,refs,item end
+    local origins=AT.ForeverQuestItemOrigins and AT.ForeverQuestItemOrigins[item]
+    if questItem and kind(origins,"table") then
+        for qid in pairs(origins) do
+            refs[qid]=true
+            if call(C_QuestLog.IsOnQuest,qid)==true then register(qid) end
+        end
+    end
+    local firstHeld=next(heldRefs)
+    if firstHeld and next(heldRefs,firstHeld) then return heldRefs,refs,item end
     return matched,refs,item
 end
 
@@ -497,11 +582,15 @@ local hookedFrames=setmetatable({},{__mode="k"})
 local function onClick(button,mouse,down)
     if mouse~="LeftButton" or down==true or not AT.db or AT.db.enabled==false
         or call(IsControlKeyDown)~=true or call(IsShiftKeyDown)==true or call(IsAltKeyDown)==true
-        or call(IsModifiedClick)~=true or call(InCombatLockdown)==true
+        or call(InCombatLockdown)==true
         or call(CursorHasItem)==true or call(SpellIsTargeting)==true then return end
     local bag,slot=call(button.GetBagID,button),call(button.GetID,button)
-    local quest=associatedQuest(bag,slot)
-    if quest and AT.SearchRankQuestItem then AT.SearchRankQuestItem(quest) end
+    local quest,refs,item=associatedQuest(bag,slot)
+    if quest and AT.SearchRankQuestItem then
+        AT.SearchRankQuestItem(quest,call(C_Item and C_Item.GetItemNameByID,item))
+    elseif refs and next(refs) and AT.Say then
+        AT.Say("No linked quest is in your log. Hover the item to see the known quest links.")
+    end
 end
 local function installButton(button)
     if not button or hookedButtons[button] or type(button.HookScript)~="function"

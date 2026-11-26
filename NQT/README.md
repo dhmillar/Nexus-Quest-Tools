@@ -224,7 +224,7 @@ Built-in game APIs handle the normal quest log. The optional Questie integration
 These lookups cannot cause an item to be marked safe to discard. No Wowhead database or drop-rate table is bundled.
 ### Optional drop-rate observations
 Data from Everloot (https://everloot.app), CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/).
-EverlootDrops.lua is the separately licensed adapted data. It holds only NPC/object IDs, item IDs, and observed counts; no game-file layer or install pseudonyms. Snapshots: https://everloot.app/database/download (November 14, 2026) and https://everloot.app/docs/api/rollups-drops (data as of November 26, 2026). Keep the credit and share this adapted data on the same license. Filters: public observations from at least three installs for NPC and object sources. For each item and source type, smaller samples fill gaps only when no source has at least 20 eligible windows. Newer observations replace older ones for the same source unless the older sample is the only one with at least 20 windows. Rates are rounded up for display; a range indicates that different sources have different rates. Counts were not pooled. An absent rate is unknown, not zero. Observed rates per eligible loot window are estimates, not game constants. Hover a quest to see the counts and snapshot dates.
+EverlootDrops.lua is the separately licensed adapted data. It holds only NPC/object IDs, item IDs, and observed counts; no game-file layer or install pseudonyms. Snapshots: https://everloot.app/database/download (November 14, 2026) and https://everloot.app/docs/api/rollups-drops (data as of November 26, 2026). Keep the credit and share this adapted data on the same license. Filters: public observations from at least three installs for NPC and object sources. For each item and source type, smaller samples fill gaps only when no source has at least 20 eligible windows. Newer observations replace older ones for the same source unless the older sample is the only one with at least 20 windows. Rates are rounded up for display; a range indicates that different sources have different rates. Counts were not pooled. An absent rate is unknown, not zero. Observed rates per eligible loot window are estimates, not game constants.
 
 ## Standalone map pins versus Questie Forever defaults
 
@@ -235,3 +235,39 @@ Additional observed service pins: 12 innkeeper, 39 flight-master and 51 mailbox 
 Data from Efficient Games (https://efficient.games), licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/). The separate ForeverTownPins.lua data is adapted from https://github.com/JIVESCORP/eg-link-output-wowf/tree/main/data/wowf (Forever builds 1.60.1.70959, 1.60.1.71037, 1.60.1.71091). Numeric positions and service interactions only; no names or quest prose. Filtered to supported categories and coherent coordinates; observed giver inclusion requires the location across two snapshots.
 
 Audit: Questie Forever 12.15.0 defaults enable quest/available starter-item/object/monster/event/turn-in pins, party objectives, NPC patrol paths, map and minimap icons, world-map coordinates, map controls and next-chain/NPC quest tooltips. It also enables innkeepers, flight masters, mailboxes, meeting stones; most other services are off by default. Fresh Questie allows repeatable, event, dungeon, raid and PvP quests where eligible, not AQ/SoD extras. This preview does not claim full parity: broad remote availability and prerequisite/phase logic, starter-item source pins, complete per-mob/object spawns, party-only map points, patrol paths and full service/meeting-stone coverage still need verified data. You can keep Questie for those and use Rank Quest normally.
+
+
+### Additional quest turn-in reference coordinates
+
+Selected turn-in references adapt coordinates from [AllTheThings WoW Addon](https://github.com/ATTWoWAddon/AllTheThings), Forever source snapshot 0b14eb6ccb55d16c48531bed794735bf97100441, verified against the exact Forever quest and entity records. These references are not native GPS pins.
+
+```
+MIT License
+
+Copyright (c) 2026 AllTheThings WoW Addon
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+### Supplemental quest endpoint pack
+ForeverVerifiedEndpoints.lua is adapted under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) from [wow-completionist-data](https://github.com/danielalanbates/wow-completionist-data/tree/64feae0e472c5b615e72e682ce470df03d485056) by Daniel Bates and contributors and [Warcraft Wiki](https://warcraft.wiki.gg) contributors. The Lua file records applicable Wiki revision IDs; view them via https://warcraft.wiki.gg/index.php?oldid= plus the revision number. Numeric locations use corroborated [Efficient Games](https://efficient.games) Forever observations (CC BY 4.0) where available. NQT selected, cross-checked and normalized this subset; it contains no third-party quest text. Coordinates are fallback references; NQT uses the client to verify navigation pins for these entries.
+
+### Quest mob names and drops
+
+Rank Quest shows known corpse-drop mobs under the item. Click a listed mob or a verified kill objective to set the exact saved Auto Macro name; this doesn't target, mark, or ping the mob. The saved-name lock and combat restrictions still apply. Hover the owned action-bar macro to see its saved name and any available mob details. The bundled English creature names, observed classifications and levels, and named quest corpse-drop links in `QuestMobData.lua` were adapted from [Efficient Games' live Forever data](https://github.com/JIVESCORP/eg-link-output-wowf/tree/1339ce5600bbc2b12e8f1081e584f548f62fa57f/data/wowf) under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Drop-source names are observations, not an exhaustive list.

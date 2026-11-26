@@ -13,6 +13,10 @@ local catalog={
     [2974]={"Blackmaw Hold",{92065,92066,92067,92069,92070,92343,92344,96246,97173,97198,97327,99187}},
     [3001]={"Shaper's Terrace",{95790,95924,95925,95926,95928,97049}},
 }
+-- Blizzard Nov. 17 hotfix explicitly removed dungeon membership.
+function AT.IsForeverOutdoorQuest(questID)
+    return questID==93604
+end
 local quests,names={},{}
 local function ordinary(value)
     return not issecretvalue or not issecretvalue(value)

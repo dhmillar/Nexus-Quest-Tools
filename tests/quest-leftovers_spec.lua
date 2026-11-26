@@ -63,5 +63,30 @@ Questie=nil;log={9};owned[11]=109;AT.RefreshQuestLeftovers()
 log={};now=101;AT.RefreshQuestLeftovers();done[9]=true;watcher.event(nil,"QUEST_TURNED_IN",9)
 combat=true;deferred();assert(AT.GetLeftoverQuestBagHint(0,11)==9 and not buttons[11].mark)
 combat=false;watcher.event(nil,"PLAYER_REGEN_ENABLED");deferred();assert(buttons[11].mark.shown)
+-- With Questie absent, exact item backlinks and native inactive state
+-- allow a turned-in item even when an unrelated row lacks metadata.
+owned[1]=701;owned[2]=3898
+AT.ForeverQuestFacts={[30]={0,0,{701,1}},[31]={0,0,{701,1}}}
+AT.GetForeverObjectiveQuests=function(item) if item==701 then return {[30]=true,[31]=true} end end
+log={234};done[30]=true;done[31]=false
+AT.RefreshQuestLeftovers()
+assert(not AT.GetLeftoverQuestBagHint(0,1),"do not trash an unmet known quest use")
+done[31]=true
+AT.RefreshQuestLeftovers()
+assert(AT.GetLeftoverQuestBagHint(0,1)==30 and buttons[1].mark.shown)
+assert(not AT.GetLeftoverQuestBagHint(0,2),"Library Scrip must not be tagged")
+AT.ForeverProtectedQuestItems={[701]=true}
+assert(not AT.GetLeftoverQuestBagHint(0,1),"known rewards and source items protected")
+AT.ForeverProtectedQuestItems=nil
+log={31};done[31]=false;AT.RefreshQuestLeftovers()
+assert(not AT.GetLeftoverQuestBagHint(0,1),"held quest keeps item")
+log={234};watcher.event(nil,"QUEST_REMOVED",31);deferred()
+local nativeRepeatable=C_QuestLog.IsRepeatableQuest
+C_QuestLog.IsRepeatableQuest=function(q) if q~=31 then return nativeRepeatable(q) end end
+AT.RefreshQuestLeftovers()
+local q,_,category=AT.GetLeftoverQuestBagHint(0,1)
+assert(q==31 and category=="review","verified removal is amber even when the client omits repeatability")
+assert(AT.char.leftoverQuestReleases[701]==31,"keep removal evidence in character data on reload")
+log={31};AT.RefreshQuestLeftovers();assert(not AT.GetLeftoverQuestBagHint(0,1),"accepting the quest again clears the badge")
 AT.db.questLeftoverMarks=false;AT.RefreshQuestLeftovers();assert(not buttons[11].mark.shown and not AT.GetLeftoverQuestBagHint(0,11))
 print("PASS existing duplicates, native active/starter/secret, DB starter/reward/repeatable/active/missing locks, stale bag/log, verified observed turn-in, combat deferral and toggle")

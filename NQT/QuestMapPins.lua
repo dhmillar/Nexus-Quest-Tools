@@ -1,11 +1,11 @@
 
 local _,AT=...
-local floor,abs,sqrt,sin,cos=math.floor,math.abs,math.sqrt,math.sin,math.cos
-local Q,M=C_QuestLog,C_Map
-local world,mini,driver,coords
-local worldButtons,miniButtons={},{}
+local floor,abs=math.floor,math.abs
+local Q=C_QuestLog
+local world,driver,coords
+local worldButtons={}
 local dirty=true
-local miniZone,miniPoints
+local requestedLines={}
 local ticker=.35
 local service={ [1]="Innkeeper",[2]="Flight master",[3]="Mailbox",[4]="Observed quest giver" }
 local symbols={
@@ -52,8 +52,54 @@ local function title(q)
     local label=read(Q and Q.GetTitleForQuestID,q)
     return is(label,"string") and label~="" and label or ("Quest #"..q)
 end
-local function defaultZone(q)
-    return field(read(M and M.GetMapInfo,q),"mapType")==3
+local function startPoints(map,includeKnown)
+    local points,seen={},{}
+    if not id(map) then return points end
+    local function eligible(q)
+        return id(q) and exact(Q and Q.IsOnQuest,q)~=true and exact(Q and Q.IsQuestFlaggedCompleted,q)~=true
+    end
+    local function add(q,x,y,known,name)
+        if not eligible(q) or not coord(x,y) or seen[q] then return end
+        seen[q]=true
+        points[#points+1]={kind="start",x=x,y=y,title=is(name,"string") and name~="" and name or title(q),quest=q,known=known}
+    end
+    local mapQuests=read(Q and Q.GetQuestsOnMap,map)
+    if is(mapQuests,"table") then
+        for _,p in ipairs(mapQuests) do
+            if field(p,"isQuestStart")==true then add(field(p,"questID"),field(p,"x"),field(p,"y")) end
+        end
+    end
+    local lines=C_QuestLine
+    if lines then
+        local t=read(GetTime)
+        if not requestedLines[map] or num(t) and num(requestedLines[map]) and t-requestedLines[map]>=30 then
+            requestedLines[map]=t or true
+            read(lines.RequestQuestLinesForMap,map)
+        end
+        local available=read(lines.GetAvailableQuestLines,map)
+        for _,p in ipairs(is(available,"table") and available or {}) do
+            local actual=field(p,"startMapID")
+            if field(p,"isQuestStart")==true and field(p,"isHidden")~=true and field(p,"inProgress")~=true
+                and (not id(actual) or actual==map) then
+                add(field(p,"questID"),field(p,"x"),field(p,"y"),false,field(p,"questName"))
+            end
+        end
+    end
+    if includeKnown then
+        local faction=read(UnitFactionGroup,"player")
+        local side=faction=="Alliance" and 1 or faction=="Horde" and 2 or -1
+        local level=read(UnitLevel,"player")
+        for _,p in ipairs(AT.ObservedQuestStarts and AT.ObservedQuestStarts[map] or {}) do
+            local q,x,y,access=unpack(p)
+            local facts=AT.ForeverQuestFacts and AT.ForeverQuestFacts[q]
+            local eligibleLevel=not facts or facts[1]==0 or not id(level) or level>=facts[1]
+            -- These are recorded NPC/object offers, not blanket quest-giver markers.
+            -- Suppress accepted and completed quests; other prerequisites may still apply.
+            if eligibleLevel and (access==0 or access==side) and exact(Q and Q.IsOnQuest,q)==false
+                and exact(Q and Q.IsQuestFlaggedCompleted,q)==false then add(q,x,y,true) end
+        end
+    end
+    return points
 end
 
 local function snapshot(map)
@@ -65,6 +111,9 @@ local function snapshot(map)
         local key=tostring(kind)..":"..(token or (floor(x*10000)..":"..floor(y*10000)))
         if seen[key] then return end
         seen[key]=true;list[#list+1]={kind=kind,x=x,y=y,title=name,quest=type(kind)=="string" and token or nil,report=report}
+    end
+    for _,p in ipairs(startPoints(map,true)) do
+        add("start",p.x,p.y,p.title,p.quest,p.known and "known-start" or nil)
     end
     local quests=read(Q and Q.GetQuestsOnMap,map)
     if is(quests,"table") then
@@ -171,9 +220,10 @@ local function makeButton(overlay,pool,i,mouse)
                 GameTooltip:SetOwner(self,"ANCHOR_RIGHT");GameTooltip:SetText(p.title)
                 GameTooltip:AddLine((meanings[p.kind] or service[p.kind]) or "",.87,.79,.64)
                 GameTooltip:AddLine(("%.1f, %.1f"):format(p.x*100,p.y*100),.82,.85,.9)
-                if p.report then
+                if p.report=="known-start" then
+                    GameTooltip:AddLine("Recorded quest start. Eligibility may vary.",.82,.85,.9,true)
+                elseif p.report then
                     GameTooltip:AddLine(p.kind==4 and "Previously observed here. Availability not verified." or "Approximate interaction location; access may vary.",.82,.85,.9,true)
-                    GameTooltip:AddLine("Data from Efficient Games (https://efficient.games), CC BY 4.0.",.7,.8,.9,true)
                 end
                 GameTooltip:Show()
             end)
@@ -229,11 +279,13 @@ local function worldMapTick()
         return
     end
     mapCoordinates(map)
-    if world and not dirty and world.mapID==mapID and world.canvas==canvas and world.w==w and world.h==h and world:IsShown() then return end
+    local now=read(GetTime)
+    local refresh=world and num(now) and num(world.atRefresh) and now-world.atRefresh>=5
+    if world and not dirty and not refresh and world.mapID==mapID and world.canvas==canvas and world.w==w and world.h==h and world:IsShown() then return end
     if not world then world=CreateFrame("Frame",nil,canvas);world:EnableMouse(false) end
     world:SetParent(canvas);world:ClearAllPoints();world:SetAllPoints(canvas)
     world:SetFrameLevel(canvas:GetFrameLevel()+17)
-    world.mapID,world.canvas,world.w,world.h=mapID,canvas,w,h
+    world.mapID,world.canvas,world.w,world.h,world.atRefresh=mapID,canvas,w,h,now
     hidePool(worldButtons)
     local native={}
     if type(map.EnumeratePinsByTemplate)=="function" then
@@ -257,49 +309,13 @@ local function worldMapTick()
     end
     world:Show()
 end
-local function miniMapTick()
-    local m=Minimap
-    if not (enabled() and m and exact(m.IsVisible,m)==true and not exact(IsInInstance)) then
-        if mini then mini:Hide() end;miniPoints=nil;return
-    end
-    local map=read(M and M.GetBestMapForUnit,"player")
-    local pos=id(map) and defaultZone(map) and read(M.GetPlayerMapPosition,map,"player")
-    local x,y=vec(pos)
-    local mw,mh=read(M and M.GetMapWorldSize,map)
-    local range=read(C_Minimap and C_Minimap.GetViewRadius)
-    local w,h=read(m.GetWidth,m),read(m.GetHeight,m)
-    if not (coord(x,y) and num(mw) and num(mh) and mw>0 and mh>0 and num(range) and range>0
-        and num(w) and num(h) and w>=42 and h>=42) then if mini then mini:Hide() end;return end
-    local facing=0
-    local rotating=exact(C_CVar and C_CVar.GetCVarBool or GetCVarBool,"rotateMinimap")
-    if rotating==true and exact(C_Minimap and C_Minimap.IsRotateMinimapIgnored)~=true then
-        facing=read(GetPlayerFacing)
-        if not num(facing) then if mini then mini:Hide() end;return end
-    end
-    if dirty or miniZone~=map or not miniPoints then miniZone,miniPoints=map,snapshot(map) end
-    if not mini then mini=CreateFrame("Frame",nil,m);mini:EnableMouse(false);mini:SetAllPoints(m);mini:SetFrameLevel(m:GetFrameLevel()+6) end
-    hidePool(miniButtons)
-    local n,scale=0,math.min(w,h)*.47/range
-    local sine,cosine=sin(facing),cos(facing)
-    for _,p in ipairs(miniPoints) do
-        local east,north=(p.x-x)*mw,(y-p.y)*mh
-        local d=sqrt(east*east+north*north)
-        if d<range*.90 then
-            n=n+1
-            put(mini,miniButtons,n,p,"CENTER",(east*cosine+north*sine)*scale,(-east*sine+north*cosine)*scale,false)
-            if n>=20 then break end
-        end
-    end
-    if n>0 then mini:Show() else mini:Hide() end
-end
-
 function AT.RefreshQuestMapPins()
     dirty=true
 end
 function AT.InitQuestMapPins()
     if driver or not CreateFrame then return end
     driver=CreateFrame("Frame")
-    for _,e in ipairs({"PLAYER_ENTERING_WORLD","ZONE_CHANGED_NEW_AREA","QUEST_LOG_UPDATE","QUEST_ACCEPTED","QUEST_TURNED_IN","QUEST_REMOVED","ADDON_LOADED","TAXIMAP_OPENED"}) do
+    for _,e in ipairs({"PLAYER_ENTERING_WORLD","ZONE_CHANGED_NEW_AREA","QUEST_LOG_UPDATE","QUEST_ACCEPTED","QUEST_TURNED_IN","QUEST_REMOVED","QUESTLINE_UPDATE","PLAYER_LEVEL_UP","ADDON_LOADED","TAXIMAP_OPENED"}) do
         pcall(driver.RegisterEvent,driver,e)
     end
     driver:SetScript("OnEvent",AT.RefreshQuestMapPins)
@@ -308,6 +324,6 @@ function AT.InitQuestMapPins()
         elapsed=elapsed+t
         if elapsed<ticker then return end
         elapsed=0
-        worldMapTick();miniMapTick();dirty=false
+        worldMapTick();dirty=false
     end)
 end
