@@ -139,12 +139,21 @@ local function object()
  function obj:SetVertexColor() end
  function obj:SetBlendMode() end
  function obj:SetAlpha(v) self.alpha=v end
+ function obj:GetFont() return "Fonts/FRIZQT__.TTF",self.fontSize or 14 end
+ function obj:SetFont(_,size) self.fontSize=size;return true end
+ function obj:GetUnboundedStringWidth() return #(self.text or "")*(self.fontSize or 14)*.53 end
  function obj:GetScript(k) return self.scripts[k] end
  function obj:SetPropagateMouseWheel(v) self.wheelPropagates=v end
  function obj:SetFrameStrata(v) self.strata=v end
  function obj:HookScript(k,f) self:SetScript(k,f) end
  function obj:SetDrawLayer(layer,sub) self.sublevel=sub end
  function obj:SetTexCoord(...) self.texCoord={...} end
+ function obj:SetOrientation(v) self.orientation=v end
+ function obj:SetThumbTexture(v) self.thumb=object();self.thumb.texture=v end
+ function obj:GetThumbTexture() return self.thumb end
+ function obj:SetMinMaxValues(a,b) self.minimum,self.maximum=a,b end
+ function obj:SetValueStep(v) self.step=v end
+ function obj:SetValue(v) self.value=v;if self.scripts.OnValueChanged then self.scripts.OnValueChanged(self,v) end end
  function obj:SetNormalTexture(asset) self.normal=object();self.normal.texture=asset end
  function obj:SetPushedTexture(asset) self.pushed=object();self.pushed.texture=asset end
  function obj:SetHighlightTexture() end
@@ -202,8 +211,8 @@ end
 g.inQuestLog:SetChecked(false);g.inQuestLog.scripts.OnClick(g.inQuestLog)
 assert(not g.hideHeld and AT.char.levelGuideHideHeld==false)
 assert(g.badges[1].label.text=="4 Kill" and g.heroFact.text:find("6 quests",1,true))
-assert(math.abs(g.art:GetWidth()/g.canvas:GetWidth()-.465)<.03 and g.art:GetHeight()>300)
-assert(g.badges[1]:GetWidth()<=76)
+assert(math.abs(g.art:GetWidth()/g.canvas:GetWidth()-.50)<.03 and g.art:GetHeight()>300)
+assert(g.badges[1]:GetWidth()>=77 and g.badges[1]:GetHeight()==28 and not g.badges[1].indicator and not g.badges[1].bar)
 assert(g.quests[1].mouseWheel and not g.quests[1].wheelPropagates and g.areas[1].mouseWheel and not g.areas[1].wheelPropagates)
 assert(not g.art.wheelPropagates and not g.objectives.scroll.wheelPropagates)
 assert(not g.npcMenu:IsShown() and #g.npcChecks==15)
@@ -211,7 +220,11 @@ for _,c in ipairs(g.npcChecks) do assert(not c:GetChecked()) end
 AT.LevelGuideNPCServices={[1436]={{3,1,.4,.5,"Test repair"},{3,2,.2,.6,"Other faction repair"}}}
 g.npcButton.scripts.OnClick();assert(g.npcMenu:IsShown())
 g.npcChecks[3]:SetChecked(true);g.npcChecks[3].scripts.OnClick(g.npcChecks[3]);assert(#g.art.services==1 and g.art.serviceMarks[1].shown)
+assert(g.npcCheckLabels[3].text=="Repair (1)" and g.art.serviceStatus.text=="1 NPC icon")
+assert(g.art.serviceMarks[1]:GetFrameLevel()>g.art:GetFrameLevel()+4)
 g.npcChecks[3]:SetChecked(false);g.npcChecks[3].scripts.OnClick(g.npcChecks[3]);assert(#g.art.services==0 and not g.art.serviceMarks[1].shown)
+g.npcChecks[15]:SetChecked(true);g.npcChecks[15].scripts.OnClick(g.npcChecks[15]);assert(g.art.serviceStatus.text=="No enabled NPC services recorded here")
+g.npcChecks[15]:SetChecked(false);g.npcChecks[15].scripts.OnClick(g.npcChecks[15])
 g.npcButton.scripts.OnClick()
 g.badges[1].scripts.OnClick()
 assert(g.questKind=="kill" and g.heroName.text=="Westfall" and g.heroFact.text:find("4 matching",1,true))
@@ -230,9 +243,22 @@ assert(giverRow and giverRow.waypoint.shown and giverRow.detail.text:find("Giver
 assert(giverRow.detail.text:find("Westfall 45.0, 72.0",1,true))
 giverRow.scripts.OnClick(giverRow,"LeftButton")
 assert(g.selectedQuest==101 and g.art.pin.shown and not activeWaypoint and not AT.GetLevelGuideRoutePoint())
-assert(g.objectives.shown and g.objectives.title.text=="Westfall cull" and g.objectives.text.text=="Kills: 0/8")
+assert(g.objectives.shown and g.objectives.title.text=="Westfall cull" and g.objectives.rows[1].text.text=="Kills: 0/8")
+assert(g.objectives.start.text:find("Giver of Westfall  |  Westfall 45.0, 72.0",1,true))
+AT.QuestMobData={creatures={[500]={"Gnoll Scout",2,3,"normal",435}}}
+SetPortraitTextureFromCreatureDisplayID=function(texture,id) texture.display=id end
+C_Item={GetItemNameByID=function(id) if id==111 then return "Acorns" end end,GetItemIconByID=function(id) if id==111 then return 133999 end end}
+g.scripts.OnEvent(g,"QUEST_LOG_UPDATE")
+assert(g.objectives.rows[1].icon.display==435 and g.objectives.rows[1].text.text=="Gnoll Scout: 0/8")
+local itemRows,live=AT.GetLevelGuideObjectiveRows(115)
+assert(live and itemRows[1].text=="Acorns: 2/7" and itemRows[1].icon==133999 and itemRows[2].kind=="other")
+local pickup,offLog=AT.GetLevelGuideObjectiveRows(102)
+assert(not offLog and pickup[1].text=="Acorns: 0/8" and pickup[1].icon==133999)
 assert(giverRow.waypoint.caption.text=="Track")
-assert(g.art.pin.shown and g.art.pin:GetWidth()>12)
+assert(g.art.pin.shown and g.art.pin.marker:GetWidth()==12 and g.art.pin.ring)
+local pointer=g.art.pin
+pointer.scripts.OnUpdate(pointer,1.1);assert(pointer.marker.alpha<.35 and pointer.ring.alpha>=.68)
+pointer.scripts.OnUpdate(pointer,1.1);assert(pointer.marker.alpha>.95 and pointer.marker:GetWidth()==12)
 
 local native,nativeText=AT.GetLevelGuideObjectiveText(115)
 assert(nativeText and native=="Acorns: 2/7\nRescue trapped guards: 0/2")
@@ -260,6 +286,7 @@ assert(not detail.shown,"stale detail must hide when a map has no compatible art
 C_Map.GetMapArtID=function() return 7000 end
 g.art.artKey=nil
 g.scripts.OnEvent(g,"QUEST_LOG_UPDATE")
+assert(g.partyChoice.caption.text=="Solo")
 assert(not g.partyMenu:IsShown());g.partyChoice.scripts.OnClick();assert(g.partyMenu:IsShown())
 g.group[3].scripts.OnClick(g.group[3]);assert(not g.partyMenu:IsShown())
 assert(g.size==3 and AT.char.levelGuidePartySize==3)
@@ -270,6 +297,13 @@ assert(g.areas[1].index.text=="")
 assert(g.quests[1].waypoint.shown and g.quests[1].detail.text:find("Outside Dungeon Giver",1,true))
 g.quests[1].scripts.OnClick(g.quests[1],"LeftButton")
 assert(g.art.pin.shown and g.art.destination.map==1436 and not activeWaypoint)
+assert(g.objectives.start.text:find("Outside Dungeon Giver  |  Westfall 31.0, 42.0",1,true))
+local savedGiver=AT.LevelGuideQuestGivers[109];AT.LevelGuideQuestGivers[109]=nil
+_G.ForeverDungeonJournal_NS={QUEST_START_MAPS={[109]={mapID=1436,x=.32,y=.43,label="Journal Giver - Westfall"}},ARROW_NPC_IDS={["Journal Giver"]=84}}
+g.scripts.OnEvent(g,"QUEST_LOG_UPDATE")
+assert(g.quests[1].detail.text:find("Journal Giver",1,true) and g.objectives.start.text:find("Westfall 32.0, 43.0",1,true))
+AT.LevelGuideQuestGivers[109]=savedGiver;_G.ForeverDungeonJournal_NS=nil
+g.scripts.OnEvent(g,"QUEST_LOG_UPDATE")
 g.quests[1].waypoint.scripts.OnClick()
 local qid,giverMap=AT.GetLevelGuideRoutePoint()
 assert(qid==109 and giverMap==1436)
@@ -281,6 +315,9 @@ local original=AT.LevelGuideQuestGivers[109];AT.LevelGuideQuestGivers[109]=nil
 g.scripts.OnEvent(g,"QUEST_LOG_UPDATE")
 local q=g.quests[1]
 assert(q.record.giver.pickup and q.waypoint.shown and q.detail.text:find("Crate Raider",1,true))
+q.scripts.OnClick(q,"LeftButton")
+local areaOnSelection=false;for _,circle in pairs(g.art.areaRing) do if circle.shown then areaOnSelection=true end end
+assert(areaOnSelection and g.art.destination.pickup and not AT.GetLevelGuideRoutePoint(),"selecting an item-start quest highlights its area without Track")
 q.waypoint.scripts.OnClick()
 assert(g.art.destination.pickup and g.art.pin.shown and not activeWaypoint and not AT.GetLevelGuideRoutePoint())
 local dots=0;for _,d in pairs(g.art.areaRing) do if d.shown then dots=dots+1 end end
@@ -308,12 +345,14 @@ local before=g.questLimit
 g.grip.scripts.OnMouseDown(g.grip,"LeftButton");assert(g.started=="BOTTOMRIGHT")
 g:SetSize(1100,800);g.scripts.OnSizeChanged()
 g.grip.scripts.OnMouseUp(g.grip,"LeftButton")
-assert(g.stopped and AT.char.levelGuideWidth==1100 and AT.char.levelGuideHeight==800 and g.contentZoom>1.20 and g.canvas:GetWidth()<1100)
+assert(g.stopped and AT.char.levelGuideWidth==1100 and AT.char.levelGuideHeight==800 and g.contentZoom>1.03 and g.canvas:GetWidth()<1100)
 local maximize=g.maximizeButton
 local mast
 for _,f in ipairs(frames) do if f.parent==g.canvas and f.scripts.OnDragStart then mast=f end end
 assert(mast and mast.mouseEnabled and maximize.mouseEnabled)
-assert(maximize:GetWidth()==32 and maximize:GetHeight()==32 and maximize.clicks[1]=="LeftButtonUp")
+assert(maximize:GetWidth()==g.closeButton:GetWidth() and maximize:GetHeight()==g.closeButton:GetHeight() and maximize.clicks[1]=="LeftButtonUp")
+assert(g.inQuestLog.point[2]<g.scaleButton.point[2] and g.scaleButton.point[2]<g.partyChoice.point[2])
+assert(g.scaleButton:GetWidth()==g.partyChoice:GetWidth() and g.scaleButton:GetHeight()==g.partyChoice:GetHeight())
 assert(maximize:GetFrameLevel()>mast:GetFrameLevel(),"drag surface must not intercept the click")
 assert(maximize.point[2].template=="UIPanelCloseButton" and maximize.point[2]:GetFrameLevel()==maximize:GetFrameLevel())
 assert(maximize.normal.texture:find("LevelGuideWindowControls",1,true) and maximize.normal.texCoord[1]==0)
@@ -323,23 +362,57 @@ local function clickTitleControl()
     target.scripts.OnClick(target,"LeftButton")
 end
 clickTitleControl()
-assert(maximize.normal.texCoord[1]==.5)
-local qp=g.questPage
+assert(maximize.normal.texCoord[1]==.25)
+assert(not g.scaleMenu:IsShown() and g.scaleSlider.value==100 and g.scaleSlider.minimum==70 and g.scaleSlider.maximum==160)
+g.scaleButton.scripts.OnClick()
+assert(g.scaleMenu:IsShown() and not g.partyMenu:IsShown() and g.scaleMenu.parent==g and g.scaleButton.caption.text=="Scale")
+local sliderWidth=g.scaleSlider:GetWidth()
+local menuPoint=g.scaleMenu.point
+local normalZoom=g.contentZoom
+g.scaleSlider:SetValue(80)
+assert(g.contentZoom<normalZoom and AT.char.levelGuideScale==80 and g.scaleLabel.text=="80%")
+g.scaleSlider:SetValue(70)
+assert(g.areaLimit>20 and g.questLimit==20,"minimum scale shows 20 rows")
+assert(g.scaleSlider:GetWidth()==sliderWidth and g.scaleMenu.point==menuPoint,"slider geometry must not follow canvas scale")
+g.scaleSlider:SetValue(160)
+assert(g.contentZoom>normalZoom and g.areaLimit>g.questLimit and g.questLimit<=10)
+g.scaleSlider:SetValue(100)
+g.tabs.zones.scripts.OnClick()
+assert(g.areaLimit>g.questLimit and g.questLimit==10,"100% shows ten rows with the zone search toolbar present")
+assert(g.areas[1].point[4]+g.areas[1]:GetWidth()<g.art.point[4] and g.art.point[4]+g.art:GetWidth()<g.quests[1].point[4])
+assert(g.objectives.point[4]==g.quests[1].point[4] and g.objectives.point[5]<g.quests[g.questLimit].point[5])
+local railW=g.areaPanel:GetWidth()+g.art:GetWidth()+g.questPanel:GetWidth()
+assert(math.abs(g.areaPanel:GetWidth()/railW-.20)<.006 and math.abs(g.art:GetWidth()/railW-.52)<.006 and math.abs(g.questPanel:GetWidth()/railW-.28)<.006)
+assert(g.areaPanel.point[5]==g.art.point[5] and g.areaPanel:GetHeight()==g.art:GetHeight())
+assert(g.questPanel.point[5]==g.art.point[5] and math.abs(g.questPanel:GetHeight()/(g.questPanel:GetHeight()+g.objectives:GetHeight())-.70)<.006)
+assert(g.objectives.point[5]-g.objectives:GetHeight()==g.art.point[5]-g.art:GetHeight())
+assert(g.objectives.shown and g.objectives.empty.shown and not g.objectives.scroll.shown)
+assert(g.areaTitle.text=="Location" and g.questTitle.text=="Quests")
+assert(g.quests[1].point[5]-g.quests[2].point[5]>=32)
+g.tabs.forYou.scripts.OnClick()
+g.scaleSlider:SetValue(100)
+g.scaleButton.scripts.OnClick()
+assert(not g.scaleMenu:IsShown())
+local qp=g.questOffset
  g.quests[1].scripts.OnMouseWheel(g.quests[1],-1)
- assert(g.questPage>=qp)
-assert(g.areaLimit>=10 and g.questLimit>=10 and g.areas[1].point[4]<g.quests[1].point[4]
+ assert(g.questOffset>=qp)
+ assert(not g.areaPrev and not g.areaNext and not g.questPrev and not g.questNext and not g.areaPages and not g.questPages)
+ assert(g.areaSurface:GetHeight()==g.areaPanel:GetHeight())
+assert(g.areaLimit>g.questLimit and g.questLimit==10 and g.areas[1].point[4]<g.quests[1].point[4]
    and g.areas[1].point[5]==g.quests[1].point[5] and g.detailsHeight>=104)
-assert(g.maximized and not g.grip.shown and g:GetWidth()==1912 and g:GetHeight()==1072 and g.contentZoom<=1.12)
+assert(g.maximized and not g.grip.shown and g:GetWidth()==1912 and g:GetHeight()==1072 and g.contentZoom>1.38)
 clickTitleControl()
 assert(maximize.normal.texCoord[1]==0)
 assert(not g.maximized and g.grip.shown and g:GetWidth()==1100 and g:GetHeight()==800)
 assert(AT.char.levelGuideWidth==1100 and AT.char.levelGuideHeight==800)
 g.scripts.OnEvent(g,"QUEST_TURNED_IN",115)
 assert(AT.char.levelGuideTurnIns[115] and place(g.result,"Westfall").count==2)
-AT.ToggleLevelGuide();assert(not g:IsShown())
+g.scaleSlider:SetValue(125)
+AT.ToggleLevelGuide();assert(not g:IsShown() and not g.scaleMenu:IsShown())
 assert(loadfile("NQT/LevelGuide.lua"))("NQT",AT)
 AT.ToggleLevelGuide()
 assert(env.NQTLevelGuide:GetWidth()==1100 and env.NQTLevelGuide:GetHeight()==800 and not env.NQTLevelGuide.inQuestLog:GetChecked())
+assert(env.NQTLevelGuide.scaleSlider.value==125 and AT.char.levelGuideScale==125,"interface scale survives guide recreation")
 assert(UISpecialFrames[1]=="NQTLevelGuide")
 print("PASS compact tabs and lists; ten-plus maximized rows; wheel capture; stock map in front; opt-in service pins")
 print("PASS illustrated window: launch, real map tiles, selection, filters, group toggle, level event, and close")
@@ -416,7 +489,7 @@ assert(stock.quests[1].giver.name=="Stormwind Quest Giver" and stock.quests[1].g
 LibQuestieDB.Npc.Get=function(n,k)
     return ({name="Ambiguous Quest Giver",friendlyToFaction="A",spawns={[1519]={{50,60},{20,40}}}})[k]
 end
-assert(not place(AT.BuildLevelGuide(24,1),"Stockade").quests[1].giver)
+local named=place(AT.BuildLevelGuide(24,1),"Stockade").quests[1].giver; assert(named.name=="Ambiguous Quest Giver" and not named.map)
 LibQuestieDB=nil
 print("PASS half-window map, click filters, outdoor dungeon starter waypoint, and provider ambiguity guard")
 assert(loadfile("NQT/LevelGuideZoneRanges.lua"))("NQT",real)
@@ -429,3 +502,38 @@ assert(river.rangeKnown and river.lo==35 and river.hi==45)
 local full=real.GetLevelGuideObjectiveText(387)
 assert(full:find("0/10",1,true) and full:find("0/8",1,true) and #full>40)
 print("PASS OpenMap independent zone ranges; bundled unheld counts and authentic live objective lines")
+
+-- Exercise visible markers with real Riverglades records rather than just test fixtures.
+local mockLayer=C_Map.GetMapArtLayers
+C_Map.GetMapArtLayers=function(id) return mockLayer(id==2548 and 1436 or id) end
+names[2548]="Riverglades"
+local originalFaction=UnitFactionGroup
+UnitFactionGroup=function() return "Alliance" end
+playerLevel=41
+real.ToggleLevelGuide()
+local rv=assert(env.NQTLevelGuide)
+rv.tabs.zones.scripts.OnClick();rv.search:SetText("Riverglades")
+assert(rv.mapHeading.text:find("Riverglades",1,true))
+for _,kind in ipairs({1,2,3}) do local box=rv.npcChecks[kind];box:SetChecked(true);box.scripts.OnClick(box) end
+local rendered={}
+for _,mark in pairs(rv.art.serviceMarks) do if mark.shown then rendered[mark.service.name]=true end end
+assert(rendered["Gretchen Mayberry"] and rendered["Innkeeper Zizplink"] and not rendered["Grakna"])
+assert(rv.art.serviceStatus.shown and #rv.art.services>=3)
+UnitFactionGroup=originalFaction
+print("PASS real Riverglades service pins: Alliance flight path, neutral inn, no Horde path, category coverage and status")
+
+rv.search:SetText("")
+assert(rv.areas[2].place)
+local nextPlace=rv.areas[2].place.id
+rv.areaSurface.scripts.OnMouseWheel(rv.areaSurface,-1)
+assert(rv.areas[1].place.id==nextPlace,"Location wheel should move one row")
+local samplePlace=place(rv.result,"Riverglades")
+for idx=1,24 do
+  samplePlace.quests[idx]={id=600000+idx,name="Fixture quest "..idx,kind="kill",min=35,potential=1,efficiency=1,fits=true,availableHere=true,status="In range"}
+end
+rv.search:SetText("Riverglades")
+assert(rv.quests[2].record)
+local nextQuest=rv.quests[2].record.id
+rv.questSurface.scripts.OnMouseWheel(rv.questSurface,-1)
+assert(rv.quests[1].record.id==nextQuest,"Quest wheel should move one row")
+print("PASS independent one-row scroll in both full-height guide lists")

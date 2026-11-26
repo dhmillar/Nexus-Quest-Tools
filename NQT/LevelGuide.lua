@@ -314,12 +314,14 @@ local function dungeonGiverFromProvider(q,side,database,categories)
     if Questie and Questie.IsForever and Questie.API and Questie.API.isReady and QuestieLoader then
         zoneDB=safe(QuestieLoader.ImportModule,QuestieLoader,"ZoneDB")
     end
-    local found
+    local found,identity,ambiguous
     for _,npc in ipairs(starts) do
         if positive(npc) then
             local f=questField(npcs,npc,"friendlyToFaction")
             local name=questField(npcs,npc,"name")
-            if validName(name) and (f=="AH" or f=="A" and side==1 or f=="H" and side==2) then
+            if validName(name) and (f=="AH" or f=="A" and side==1 or f=="H" and side==2 or f==nil and #starts==1) then
+                if identity and identity.npc~=npc then ambiguous=true end
+                identity=identity or {name=name,npc=npc}
                 local spawns=questField(npcs,npc,"spawns")
                 for area,points in pairs(type(spawns)=="table" and spawns or {}) do
                     local place=categories[area]
@@ -329,8 +331,9 @@ local function dungeonGiverFromProvider(q,side,database,categories)
                             local x,y=field(xy,1),field(xy,2)
                             if number(x) and number(y) and validPoint(x/100,y/100) then
                                 x,y=x/100,y/100
-                                if found and (found.npc~=npc or found.map~=map or abs(found.x-x)+abs(found.y-y)>.015) then return end
-                                found=found or {map=map,x=x,y=y,name=name,npc=npc}
+                                if found and (found.npc~=npc or found.map~=map or abs(found.x-x)+abs(found.y-y)>.015) then
+                                    ambiguous=true
+                                else found=found or {map=map,x=x,y=y,name=name,npc=npc} end
                             end
                         end
                     end
@@ -338,7 +341,24 @@ local function dungeonGiverFromProvider(q,side,database,categories)
             end
         end
     end
-    return found
+    if not ambiguous then return found or identity end
+    if identity and #starts==1 then return identity end
+end
+local function journalQuestStart(q,side)
+    local journal=field(_G,"ForeverDungeonJournal_NS")
+    local row=field(field(journal,"QUEST_START_MAPS"),q)
+    local map,x,y=field(row,"mapID"),field(row,"x"),field(row,"y")
+    if not positive(map) or not validPoint(x,y) then return end
+    local faction=field(row,"faction")
+    if faction=="Alliance" and side~=1 or faction=="Horde" and side~=2 then return end
+    local name=field(row,"targetName")
+    local ids=field(journal,"ARROW_NPC_IDS")
+    if not validName(name) then
+        local text=field(row,"label")
+        local candidate=validName(text) and (text:match("^(.-)%s+%-%s+") or text)
+        if validName(candidate) and positive(field(ids,candidate)) then name=candidate end
+    end
+    if validName(name) then return {map=map,x=x,y=y,name=name,npc=field(ids,name)} end
 end
 local function chooseItemStart(q,p)
     local r=AT.LevelGuideItemStarts and AT.LevelGuideItemStarts[q]
@@ -346,7 +366,7 @@ local function chooseItemStart(q,p)
     local best,bestRank
     for _,a in ipairs(r[2]) do
         local map=a[1]
-        local rank=positive(map) and ((map==p.artMap or map==p.map or positive(p.map) and outdoor(map)==p.map) and 3 or 2) or 1
+        local rank=positive(map) and validPoint(a[2],a[3]) and ((map==p.artMap or map==p.map or positive(p.map) and outdoor(map)==p.map) and 3 or 2) or 1
         if not bestRank or rank>bestRank then best,bestRank=a,rank end
     end
     return {item=r[1],map=best and best[1],x=best and best[2],y=best and best[3],radius=best and best[4],
@@ -376,15 +396,34 @@ local function chooseGiver(q,p,side,fallback,database,categories)
         consider(AT.LevelGuideMoreOffers and AT.LevelGuideMoreOffers[q])
         if not known then known,ambiguous=prior,wasAmbiguous end
     end
-    if known and not ambiguous then return known end
-    if p.kind=="dungeon" then
-        local alternate=dungeonGiverFromProvider(q,side,database,categories)
-        if alternate then return alternate end
+    if not known or ambiguous then
+        local endpointRows={}
+        for _,r in ipairs(AT.ForeverVerifiedEndpointReferences and AT.ForeverVerifiedEndpointReferences[q] or {}) do
+            if r[6]==0 then endpointRows[#endpointRows+1]={r[1],r[2],r[3],r[4],r[5],r[7]} end
+        end
+        if #endpointRows>0 then
+            local prior,wasAmbiguous=known,ambiguous
+            known,ambiguous=nil,false;consider(endpointRows)
+            if not known then known,ambiguous=prior,wasAmbiguous end
+        end
+    end
+    if known and not ambiguous and validName(known.name) then return known end
+    local alternate=p.kind=="dungeon" and dungeonGiverFromProvider(q,side,database,categories) or nil
+    if alternate and validPoint(alternate.x,alternate.y) then return alternate end
+    if known and not ambiguous then
+        if alternate and alternate.npc==known.npc then known.name=alternate.name end
+        return known
     end
     local pickup=chooseItemStart(q,p)
-    if pickup then return pickup end
-    -- A live offer may be available even without an NPC identity.
-    if fallback and positive(fallback.map) and validPoint(fallback.x,fallback.y) then return fallback end
+    if pickup and positive(pickup.map) and validPoint(pickup.x,pickup.y) then return pickup end
+    local journal=p.kind=="dungeon" and journalQuestStart(q,side) or nil
+    if journal and (not alternate or alternate.name==journal.name) then return journal end
+    -- A native offer has a real pin even if the client leaves the giver anonymous.
+    if fallback and positive(fallback.map) and validPoint(fallback.x,fallback.y) then
+        if not validName(fallback.name) and alternate then return {map=fallback.map,x=fallback.x,y=fallback.y,name=alternate.name,npc=alternate.npc} end
+        return fallback
+    end
+    return alternate or pickup
 end
 function AT.BuildLevelGuide(playerLevel,size)
     local reported=safe(UnitLevel,"player")
@@ -798,14 +837,17 @@ local npcIcons={
     {"Transmogrifiers","T","Interface\\Icons\\INV_Misc_PocketWatch_01"},
 }
 local function guideServicePoints(map,options)
-    local list,seen={},{}
-    if not positive(map) then return list end
+    local list,seen,counts={},{},{}
+    if not positive(map) then return list,counts end
     local function add(kind,x,y,name)
-        if options[kind]~=true or not validPoint(x,y) or #list>=280 then return end
+        if not npcIcons[kind] or not validPoint(x,y) then return end
         local token=kind..":"..floor(x*115)..":"..floor(y*115)
         if seen[token] then return end
         seen[token]=true
-        list[#list+1]={kind=kind,x=x,y=y,name=validName(name) and name or npcIcons[kind][1]}
+        counts[kind]=(counts[kind] or 0)+1
+        if options[kind] and #list<600 then
+            list[#list+1]={kind=kind,x=x,y=y,name=validName(name) and name or npcIcons[kind][1]}
+        end
     end
     local faction=safe(UnitFactionGroup,"player")
     local side=faction=="Alliance" and 1 or faction=="Horde" and 2 or -1
@@ -817,9 +859,12 @@ local function guideServicePoints(map,options)
         end
     end
     for _,r in ipairs(AT.LevelGuideNPCServices and AT.LevelGuideNPCServices[map] or {}) do
-        if r[2]==0 or r[2]==side then add(r[1],r[3],r[4],r[5]) end
+        if r[2]==0 or r[2]==side then
+            add(r[1],r[3],r[4],r[5])
+            if r[1]==6 and validName(r[5]) and r[5]:match("^Innkeeper%s") then add(2,r[3],r[4],r[5]) end
+        end
     end
-    if options[1] then
+    do
         local nodes=safe(C_TaxiMap and C_TaxiMap.GetTaxiNodesForMap,map)
         for _,node in ipairs(type(nodes)=="table" and nodes or {}) do
             local vec=field(node,"position")
@@ -827,7 +872,7 @@ local function guideServicePoints(map,options)
             add(1,x,y,field(node,"name"))
         end
     end
-    if options[2] or options[7] or options[12] then
+    do
         local api=C_AreaPoiInfo
         local keys=safe(api and api.GetAreaPOIForMap,map)
         for _,id in ipairs(type(keys)=="table" and keys or {}) do
@@ -845,7 +890,7 @@ local function guideServicePoints(map,options)
             end
         end
     end
-    return list
+    return list,counts
 end
 local function drawGuideMap(frame)
     local fw,fh=frame:GetWidth(),frame:GetHeight()
@@ -859,7 +904,19 @@ local function drawGuideMap(frame)
     for _,t in pairs(frame.tiles) do t:Hide() end
     frame.zoomIn:SetShown(src~=nil)
     frame.zoomOut:SetShown(src~=nil)
-    if not src then return end
+    local function serviceStatus(visible)
+        if not frame.serviceStatus then return end
+        local total=#(frame.services or {})
+        local msg
+        if frame.hasServiceOptions then
+            if not src then msg="No map artwork available"
+            elseif total==0 then msg="No enabled NPC services recorded here"
+            elseif visible<total then msg=("%d / %d NPC icons in view"):format(visible,total)
+            else msg=("%d NPC %s"):format(visible,visible==1 and "icon" or "icons") end
+        end
+        frame.serviceStatus:SetText(msg or "");frame.serviceStatus:SetShown(msg~=nil)
+    end
+    if not src then serviceStatus(0);return end
     local scale=min((fw-8)/src.w,(fh-8)/src.h)*(frame.zoom or 1)
     local imgW,imgH=src.w*scale,src.h*scale
     local function origin(screen,extent,center)
@@ -906,16 +963,20 @@ local function drawGuideMap(frame)
             end
         end
     end
+    local visibleServices=0
     for i,g in ipairs(frame.services or {}) do
         local x,y=x0+g.x*imgW,y0+g.y*imgH
-        if x>=9 and x<=fw-9 and y>=9 and y<=fh-9 then
+        if x>=10 and x<=fw-10 and y>=10 and y<=fh-10 then
+            visibleServices=visibleServices+1
             local icon=frame.serviceMarks[i]
             if not icon then
                 icon=CreateFrame("Frame",nil,frame)
-                icon:SetFrameLevel(frame:GetFrameLevel()+1)
-                icon:SetSize(17,17);icon:EnableMouse(true)
-                local border=icon:CreateTexture(nil,"BACKGROUND");border:SetAllPoints();border:SetColorTexture(.10,.14,.16,1)
-                icon.picture=icon:CreateTexture(nil,"ARTWORK");icon.picture:SetPoint("CENTER");icon.picture:SetSize(14,14)
+                icon:SetFrameLevel(frame:GetFrameLevel()+7)
+                icon:SetSize(20,20);icon:EnableMouse(true)
+                local border=icon:CreateTexture(nil,"BACKGROUND");border:SetAllPoints();border:SetColorTexture(.74,.84,.68,1)
+                local backdrop=icon:CreateTexture(nil,"BORDER");backdrop:SetSize(18,18);backdrop:SetPoint("CENTER");backdrop:SetColorTexture(.06,.11,.09,1)
+                icon.picture=icon:CreateTexture(nil,"ARTWORK");icon.picture:SetPoint("CENTER");icon.picture:SetSize(16,16)
+                icon.caption=label(icon,"GameFontNormalSmall","",palette.gold);icon.caption:SetPoint("CENTER")
                 icon:SetScript("OnEnter",function(self)
                     if not GameTooltip or not self.service then return end
                     GameTooltip:SetOwner(self,"ANCHOR_RIGHT")
@@ -929,29 +990,34 @@ local function drawGuideMap(frame)
                 icon:SetScript("OnMouseWheel",function(_,d) frame:GetScript("OnMouseWheel")(frame,d) end)
                 frame.serviceMarks[i]=icon
             end
-            icon.service=g;icon.picture:SetTexture(npcIcons[g.kind][3])
+            icon.service=g
+            local applied=safe(icon.picture.SetTexture,icon.picture,npcIcons[g.kind][3])
+            icon.caption:SetText(npcIcons[g.kind][2]);icon.caption:SetShown(applied==false)
+            icon.picture:SetShown(applied~=false)
             icon:ClearAllPoints();icon:SetPoint("CENTER",frame,"TOPLEFT",x,-y);icon:Show()
         end
     end
+    serviceStatus(visibleServices)
     if destination then
         local x,y=x0+destination.x*imgW,y0+destination.y*imgH
         if destination.pickup then
-            local radius=destination.radius
-            for j=1,36 do
-                local phase=j*math.pi/18
-                local px,py=x+math.cos(phase)*max(12,radius*imgW),y+math.sin(phase)*max(12,radius*imgH)
-                if px>=3 and px<=fw-3 and py>=3 and py<=fh-3 then
+            local radius=positive(destination.radius) and min(.48,destination.radius) or .035
+            local rx,ry=max(15,radius*imgW),max(15,radius*imgH)
+            for j=1,54 do
+                local phase=j*math.pi/27
+                local px,py=x+math.cos(phase)*rx,y+math.sin(phase)*ry
+                if px>=4 and px<=fw-4 and py>=4 and py<=fh-4 then
                     local dot=frame.areaRing[j]
                     if not dot then
                         dot=frame:CreateTexture(nil,"OVERLAY",nil,4)
-                        dot:SetColorTexture(1,.72,.27,.91);dot:SetSize(4,4);frame.areaRing[j]=dot
+                        dot:SetColorTexture(1,.77,.22,.99);dot:SetSize(5,5);frame.areaRing[j]=dot
                     end
                     dot:ClearAllPoints();dot:SetPoint("CENTER",frame,"TOPLEFT",px,-py);dot:Show()
                 end
             end
         end
         if x>=8 and x<=fw-8 and y>=12 and y<=fh then
-            frame.pin:ClearAllPoints();frame.pin:SetPoint("BOTTOM",frame,"TOPLEFT",x,-y+1)
+            frame.pin:ClearAllPoints();frame.pin:SetPoint("CENTER",frame,"TOPLEFT",x,-y+6)
             frame.pin:Show()
         end
     end
@@ -989,6 +1055,8 @@ local function art(frame,map,dungeon,pin,key)
     end
     if changed or frame.pinKey~=key then
         frame.pinKey=key
+        frame.pin.pulse=0
+        frame.pin.marker:SetAlpha(1);frame.pin.ring:SetAlpha(1)
         if changed then frame.zoom=1 end
         frame.centerX,frame.centerY=pin and pin.x or .5,pin and pin.y or .5
     end
@@ -1128,8 +1196,8 @@ function AT.TrackLevelGuideGiver(q)
     return true
 end
 local function navigate(direction,which)
-    if which=="area" then guide.areaPage=max(1,guide.areaPage+direction)
-    else guide.questPage=max(1,guide.questPage+direction) end
+    if which=="area" then guide.areaOffset=max(1,guide.areaOffset+direction)
+    else guide.questOffset=max(1,guide.questOffset+direction) end
     render()
 end
 local function guideWheel(frame,action)
@@ -1143,7 +1211,6 @@ end
 local function listWheel(which)
     return function(_,delta) navigate(delta>0 and -1 or 1,which) end
 end
-local function pageText(pages,current) return ("%d / %d"):format(current,pages) end
 local badges={
     {"kill","Kill", "Interface\\Icons\\INV_Sword_04", {.92,.62,.43}},
     {"collect","Collect", "Interface\\Icons\\INV_Misc_Bag_10", {.53,.83,.76}},
@@ -1165,20 +1232,53 @@ local function rateLine(q)
     return ""
 end
 local requestedItems={}
-function AT.GetLevelGuideObjectiveText(qid)
-    local lines={}
-    local live=safe(Q and Q.GetQuestObjectives,qid)
-    if type(live)=="table" then
-        for _,objective in ipairs(live) do
-            local value=field(objective,"text")
-            if validName(value) then lines[#lines+1]=value end
-        end
+local function objectiveItemName(id,lib)
+    local name=safe(C_Item and C_Item.GetItemNameByID,id) or safe(GetItemInfo,id)
+        or questField(field(lib,"Item"),id,"name")
+    if not name and not requestedItems[id] then
+        requestedItems[id]=true;safe(C_Item and C_Item.RequestLoadItemDataByID,id)
     end
-    if #lines>0 then return table.concat(lines,"\n"),true end
-    local row=AT.ForeverLevelGuideQuests and AT.ForeverLevelGuideQuests[qid]
+    return name
+end
+local function objectiveIcon(r,catalog)
+    local row=positive(r.npc) and catalog and catalog[r.npc]
+    if r.kind=="kill" then
+        r.display=row and row[5] or (r.mob and safe(AT.GetQuestMobDisplayID,r.mob,true))
+        r.icon=badges[1][3]
+    elseif r.kind=="collect" then
+        r.icon=positive(r.item) and (safe(C_Item and C_Item.GetItemIconByID,r.item) or safe(GetItemIcon,r.item)) or nil
+        r.icon=r.icon or badges[2][3]
+    else
+        r.icon=GUIDE_BOOK
+    end
+    return r
+end
+function AT.GetLevelGuideObjectiveRows(qid)
+    local lines={}
     local locale=safe(GetLocale)
     local english=not locale or locale=="enUS" or locale=="enGB"
     local catalog=AT.QuestMobData and AT.QuestMobData.creatures
+    local live=safe(Q and Q.GetQuestObjectives,qid)
+    if type(live)=="table" then
+        for _,o in ipairs(live) do
+            local value=field(o,"text")
+            if validName(value) then
+                local kind=field(o,"type")
+                local subject=value:gsub("|c%x%x%x%x%x%x%x%x",""):gsub("|r","")
+                    :gsub("^%s*%d+%s*/%s*%d+[%s:]+",""):gsub("[%s:(]*%d+%s*/%s*%d+%)?%s*$",""):gsub(":%s*$","")
+                local nativeNPC=field(o,"npcID") or field(o,"creatureID") or field(o,"monsterID")
+                local knownMob=safe(AT.GetQuestKillMobName,qid,o,value)
+                local isKill=kind=="kill" or kind=="monster" and (knownMob or
+                    subject:lower():match("%s+slain$") or subject:lower():match("^kill%s") or subject:lower():match("^defeat%s"))
+                local item=kind=="item" and (field(o,"itemID") or field(o,"itemId") or safe(AT.GetKnownQuestDropItem,qid,subject))
+                local done=field(o,"finished")==true
+                lines[#lines+1]=objectiveIcon({text=value,kind=isKill and "kill" or kind=="item" and "collect" or "other",
+                    npc=isKill and nativeNPC or nil,item=item,mob=knownMob,done=done},catalog)
+            end
+        end
+    end
+    if #lines>0 then return lines,true end
+    local row=AT.ForeverLevelGuideQuests and AT.ForeverLevelGuideQuests[qid]
     local lib=optionalDatabase() and _G.LibQuestieDB
     for _,o in ipairs(row and row[10] or {}) do
         local kind,id,n=unpack(o)
@@ -1189,21 +1289,71 @@ function AT.GetLevelGuideObjectiveText(qid)
                 name=safe(C_CreatureInfo and C_CreatureInfo.GetCreatureName,id)
                     or questField(field(lib,"Npc"),id,"name") or entry and entry[1]
             elseif kind==2 and positive(id) then
-                name=safe(C_Item and C_Item.GetItemNameByID,id) or safe(GetItemInfo,id)
-                    or questField(field(lib,"Item"),id,"name")
-                if not name and not requestedItems[id] then
-                    requestedItems[id]=true
-                    safe(C_Item and C_Item.RequestLoadItemDataByID,id)
-                end
+                name=objectiveItemName(id,lib)
             end
-            lines[#lines+1]=("%s: 0/%d"):format(validName(name) and name or kind==1 and "Kills" or "Collect",n)
+            local line=("%s: 0/%d"):format(validName(name) and name or kind==1 and "Kills" or "Collect",n)
+            lines[#lines+1]=objectiveIcon({text=line,kind=kind==1 and "kill" or "collect",
+                npc=kind==1 and id or nil,item=kind==2 and id or nil,mob=kind==1 and name or nil},catalog)
         end
     end
     local summary=english and AT.LevelGuideObjectiveSummaries and AT.LevelGuideObjectiveSummaries[qid]
-    if validName(summary) then lines[#lines+1]=summary end
-    return #lines>0 and table.concat(lines,"\n") or nil,false
+    if validName(summary) then lines[#lines+1]={text=summary,kind="description"} end
+    return lines,false
 end
-local function startDescription(g)
+function AT.GetLevelGuideObjectiveText(qid)
+    local rows,live=AT.GetLevelGuideObjectiveRows(qid)
+    local lines={}
+    for _,row in ipairs(rows) do lines[#lines+1]=row.text end
+    return #lines>0 and table.concat(lines,"\n") or nil,live
+end
+local startDescription
+local function drawGuideObjectives(w,q)
+    local panel,content=w.objectives,w.objectivesContent
+    local rows=AT.GetLevelGuideObjectiveRows(q.id)
+    local info=startDescription(q.giver)
+    panel.start:SetText(info~="" and info or "Quest start not recorded")
+    local startH=max(13,min(43,safe(panel.start.GetStringHeight,panel.start) or 13))
+    panel.scroll:ClearAllPoints()
+    panel.scroll:SetPoint("TOPLEFT",9,-31-startH);panel.scroll:SetPoint("BOTTOMRIGHT",-9,6)
+    if panel.questID~=q.id then panel.scroll:SetVerticalScroll(0) end
+    panel.questID=q.id
+    panel.title:SetText(q.name)
+    for _,row in ipairs(panel.rows) do row:Hide() end
+    panel.text:SetShown(#rows==0)
+    if #rows==0 then panel.text:SetText("No objective details are available.") end
+    local offset=0
+    for i,data in ipairs(rows) do
+        local row=panel.rows[i]
+        if not row then
+            row=CreateFrame("Frame",nil,content)
+            panel.rows[i]=row
+            row.icon=row:CreateTexture(nil,"ARTWORK");row.icon:SetSize(20,20);row.icon:SetPoint("TOPLEFT",0,0)
+            row.text=label(row,"GameFontHighlight","",palette.ink)
+            row.text:SetWordWrap(true)
+        end
+        row:ClearAllPoints();row:SetPoint("TOPLEFT",0,-offset)
+        local withIcon=data.kind~="description"
+        row.text:ClearAllPoints();row.text:SetPoint("TOPLEFT",withIcon and 27 or 0,-1)
+        row.text:SetWidth(max(20,content:GetWidth()-(withIcon and 30 or 3)))
+        row.text:SetText(data.text)
+        row.text:SetTextColor(unpack(data.done and palette.teal or data.kind=="description" and palette.dim or palette.ink))
+        row.icon:SetShown(withIcon)
+        if withIcon then
+            row.icon:SetTexture(data.icon)
+            row.icon:SetTexCoord(0,1,0,1)
+            if positive(data.display) and SetPortraitTextureFromCreatureDisplayID then
+                local ok,result=pcall(SetPortraitTextureFromCreatureDisplayID,row.icon,data.display)
+                if not ok or result==false then row.icon:SetTexture(data.icon) end
+            end
+        end
+        row:SetSize(content:GetWidth(),max(withIcon and 23 or 18,(safe(row.text.GetStringHeight,row.text) or 16)+5))
+        offset=offset+row:GetHeight();row:Show()
+    end
+    content:SetHeight(max(25,offset+3))
+    local scroll=panel.scroll
+    scroll:SetVerticalScroll(min(scroll:GetVerticalScroll(),max(0,content:GetHeight()-scroll:GetHeight())))
+end
+startDescription=function(g)
     if not g then return "" end
     local mapName=positive(g.map) and field(mapInfo(g.map),"name")
     if g.pickup then
@@ -1217,7 +1367,9 @@ local function startDescription(g)
         end
         return g.source and ("Drop: "..what)..(mapName and ("  |  "..mapName) or "") or ("Starts with "..what)
     end
-    return ("%s  |  %s %.1f, %.1f"):format(validName(g.name) and g.name or "Quest start",mapName or "Map",g.x*100,g.y*100)
+    local who=validName(g.name) and g.name or "Quest start"
+    if not validPoint(g.x,g.y) then return who.."  |  Location not recorded" end
+    return ("%s  |  %s %.1f, %.1f"):format(who,mapName or "Map",g.x*100,g.y*100)
 end
 local function currentQuestView(p,mode,hideHeld)
     local out={}
@@ -1227,13 +1379,28 @@ local function currentQuestView(p,mode,hideHeld)
     end
     return out
 end
+local function fitLine(t,width)
+    width=max(20,width);t:SetWidth(width)
+    if not t.guideFont then
+        local face,size,flags=safe(t.GetFont,t)
+        if face and positive(size) then t.guideFont={face,size,flags} end
+    end
+    local base=t.guideFont
+    if not base or not t.SetFont or not t.GetUnboundedStringWidth then return end
+    local prior=t.guideFontSize or base[2]
+    local natural=safe(t.GetUnboundedStringWidth,t)
+    if not positive(natural) then return end
+    natural=natural*base[2]/prior
+    local size=max(base[2]*.74,min(base[2],floor(base[2]*width/natural*10)/10))
+    if abs(prior-size)>.04 and safe(t.SetFont,t,base[1],size,base[3])~=false then t.guideFontSize=size end
+end
 render=function()
     local w=guide
     if not w or not w:IsShown() or not w.result then return end
     local result=w.result
     for mode,b in pairs(w.tabs) do active(b,mode==w.mode) end
     for i,b in ipairs(w.group) do active(b,i==w.size) end
-    w.partyChoice.caption:SetText(w.size==1 and "Solo  v" or (w.size.." players  v"))
+    w.partyChoice.caption:SetText(w.size==1 and "Solo" or (w.size.." players"))
     local manual=w.mode~="forYou"
     for _,f in ipairs(w.filters) do f:SetShown(manual) end
     local entries=AT.FilterLevelGuide(result,w.mode,w.search:GetText(),tonumber(w.low:GetText()),tonumber(w.high:GetText()))
@@ -1269,12 +1436,9 @@ render=function()
     if chosen==nil then chosen,where=top,1 end
     w.renderedPlaceID=chosen and chosen.id
     local areaLimit,questLimit=w.areaLimit or 5,w.questLimit or 6
-    local areaPages=max(1,ceil(#entries/areaLimit))
-    w.areaPage=max(1,min(areaPages,w.areaPage))
-    if where and w.followSelection then w.areaPage=ceil(where/areaLimit) end
+    if where and w.followSelection then w.areaOffset=where end
     w.followSelection=nil
-    w.areaPages:SetText(pageText(areaPages,w.areaPage))
-    w.areaPrev:SetShown(w.areaPage>1);w.areaNext:SetShown(w.areaPage<areaPages)
+    w.areaOffset=max(1,min(max(1,#entries-areaLimit+1),w.areaOffset))
     w.headerSub:SetText(("Level %d"):format(result.level))
     w.heroTop:SetText(w.mode=="zones" and "EXPLORE A ZONE" or w.mode=="dungeons" and "PLAN A DUNGEON RUN" or "")
     w.heroName:SetText(chosen and chosen.name or "No matching areas")
@@ -1306,25 +1470,25 @@ render=function()
             or suggestion(nil))
     end
     w.heroNote:SetText(chosen and chosen.note or "")
+    for _,line in ipairs({w.heroName,w.heroBand,w.heroFact,w.heroAction}) do fitLine(line,w.hero:GetWidth()-25) end
     for _,badge in ipairs(w.badges) do
         local value=mix[badge.key]
         badge.label:SetText(value.." "..badge.typeLabel)
         badge.bg:SetColorTexture(w.questKind==badge.key and .27 or .08,w.questKind==badge.key and .195 or .095,.10,1)
-        badge.indicator:SetShown(w.questKind==badge.key)
-        badge.bar:SetWidth(max(1,value/max(1,total)*badge.barWidth))
-        badge.bar:SetShown(value>0)
+        badge.label:SetTextColor(unpack(w.questKind==badge.key and palette.gold or badge.baseInk))
+        fitLine(badge.label,badge:GetWidth()-29)
         badge:SetShown(chosen~=nil)
     end
-    w.objectives:SetShown(selectedQuest~=nil)
+    w.objectives:Show()
+    w.objectives.scroll:SetShown(selectedQuest~=nil)
+    w.objectives.empty:SetShown(selectedQuest==nil)
+    w.objectives.start:SetShown(selectedQuest~=nil)
     if selectedQuest then
-        w.objectives.title:SetText(selectedQuest.name)
-        local body=AT.GetLevelGuideObjectiveText(selectedQuest.id)
-        if w.objectives.questID~=selectedQuest.id then w.objectives.scroll:SetVerticalScroll(0) end
-        w.objectives.questID=selectedQuest.id
-        w.objectives.text:SetText(body or "No objective details are available.")
-        w.objectivesContent:SetHeight(max(2,(safe(w.objectives.text.GetStringHeight,w.objectives.text) or 40)+8))
+        drawGuideObjectives(w,selectedQuest);fitLine(w.objectives.title,w.questWidth-18)
+    else
+        w.objectives.title:SetText("Quest Details");fitLine(w.objectives.title,w.questWidth-18)
     end
-    w.art:SetHeight(w.mapHeight-(selectedQuest and w.detailsHeight+8 or 0))
+    w.art:SetHeight(w.mapHeight)
     local map=dest and dest.map or chosen and (chosen.artMap or chosen.map)
     w.mapButton:SetShown(positive(map))
     w.mapButton.map=map
@@ -1343,11 +1507,20 @@ render=function()
     local serviceKey=map or false
     if w.art.serviceMap~=serviceKey then
         w.art.serviceMap=serviceKey
-        w.art.services=guideServicePoints(map,w.npcOptions)
+        w.art.services,w.art.serviceCounts=guideServicePoints(map,w.npcOptions)
+    end
+    local displayMap=positive(map) and field(mapInfo(map),"name")
+    w.mapHeading:SetText(validName(displayMap) and ("QUEST MAP  |  "..displayMap) or "QUEST MAP")
+    w.art.hasServiceOptions=false
+    for kind,text in ipairs(w.npcCheckLabels) do
+        local n=w.art.serviceCounts[kind] or 0
+        text:SetText(npcIcons[kind][1].." ("..n..")")
+        text:SetTextColor(unpack(n>0 and palette.ink or palette.dim))
+        if w.npcOptions[kind] then w.art.hasServiceOptions=true end
     end
     art(w.art,map,chosen and chosen.kind=="dungeon",dest,selectedQuest and selectedQuest.id)
     for i,row in ipairs(w.areas) do
-        local idx=(w.areaPage-1)*areaLimit+i
+        local idx=w.areaOffset+i-1
         local p=i<=areaLimit and entries[idx] or nil;row.place=p;row:SetShown(p~=nil)
         if p then
             row.name:SetText(p.name)
@@ -1356,10 +1529,10 @@ render=function()
             row.detail:SetText((areaBand and ("Levels "..areaBand) or "")..(here and (areaBand and "   |   Here now" or "Here now") or ""))
                         row.index:SetText(w.mode=="forYou" and ("%02d"):format(idx) or "")
             local inset=w.mode=="forYou" and 25 or 8
-            row.name:ClearAllPoints();row.name:SetPoint("TOPLEFT",inset,-2)
-            row.name:SetWidth(w.areaWidth-inset-42)
-            row.detail:ClearAllPoints();row.detail:SetPoint("TOPLEFT",inset,-14)
-            row.detail:SetWidth(w.areaWidth-inset-21);row.detail:SetWordWrap(false)
+            row.name:ClearAllPoints();row.name:SetPoint("TOPLEFT",inset,-3)
+            fitLine(row.name,w.areaWidth-inset-40)
+            row.detail:ClearAllPoints();row.detail:SetPoint("TOPLEFT",inset,-17)
+            row.detail:SetWordWrap(false);fitLine(row.detail,w.areaWidth-inset-36)
             row.total:SetText(tostring(#views[p.id]))
             local relative=(entries[1] and visibleScores[entries[1].id] or 0)
             row.bar:SetWidth(max(1,min(1,visibleScores[p.id]/max(1,relative))*(w.areaWidth-42)))
@@ -1368,13 +1541,11 @@ render=function()
             row.bg:SetColorTexture(row.isSelected and .215 or .09,row.isSelected and .18 or .10,row.isSelected and .13 or .11,1)
         end
     end
-    local pages=max(1,ceil(#list/questLimit))
-    w.questPage=max(1,min(pages,w.questPage))
-    w.questPages:SetText(pageText(pages,w.questPage));w.questPrev:SetShown(w.questPage>1);w.questNext:SetShown(w.questPage<pages)
+    w.questOffset=max(1,min(max(1,#list-questLimit+1),w.questOffset))
     w.questEmpty:SetText(w.questKind and "No quests match this type." or "No unfinished quests found here.")
     w.questEmpty:SetShown(#list==0)
     for i,row in ipairs(w.quests) do
-        local q=i<=questLimit and list[(w.questPage-1)*questLimit+i] or nil
+        local q=i<=questLimit and list[w.questOffset+i-1] or nil
         row:SetShown(q~=nil)
         row.record=q
         if q then
@@ -1387,12 +1558,15 @@ render=function()
             local g=q.giver
             local canTrack=g and positive(g.map) and validPoint(g.x,g.y)
             row.waypoint:SetShown(canTrack and true or false)
-            if g then row.detail:SetText(startDescription(g)) end
+            if g then row.detail:SetText(startDescription(g))
+            elseif chosen and chosen.kind=="dungeon" then
+                row.detail:SetText(row.detail:GetText().."  |  Start not recorded")
+            end
             local selected=canTrack and trackedGiver and trackedGiver.id==q.id
             row.waypoint.caption:SetText(selected and "Stop" or "Track")
             active(row.waypoint,selected)
-            row.name:SetWidth(w.questWidth-(canTrack and 88 or 32))
-            row.detail:SetWidth(w.questWidth-(canTrack and 88 or 32))
+            fitLine(row.name,w.questWidth-(canTrack and 88 or 32))
+            fitLine(row.detail,w.questWidth-(canTrack and 88 or 32))
             local status=q.status=="In range" and not q.fits and w.mode~="dungeons" and "Later" or q.status
             row.status:SetText(status)
             row.status:Hide()
@@ -1421,7 +1595,7 @@ local function buildWindow()
     local w=CreateFrame("Frame","NQTLevelGuide",UIParent,"BackdropTemplate")
     guide=w
     local savedSize=tonumber(AT.char and AT.char.levelGuidePartySize) or 1
-    w.mode,w.size,w.areaPage,w.questPage="forYou",min(3,max(1,floor(savedSize))),1,1
+    w.mode,w.size,w.areaOffset,w.questOffset="forYou",min(3,max(1,floor(savedSize))),1,1
     w:SetFrameStrata("FULLSCREEN_DIALOG")
     w:SetClampedToScreen(true);w:SetMovable(true);w:SetResizable(true);w:EnableMouse(true)
     w:SetPoint("CENTER",UIParent,"CENTER")
@@ -1444,6 +1618,8 @@ local function buildWindow()
         canvas:SetBackdropColor(unpack(palette.base));canvas:SetBackdropBorderColor(unpack(palette.edge))
     end
     w.hideHeld=pref.levelGuideHideHeld~=false
+    local preferredScale=tonumber(pref.levelGuideScale)
+    w.scalePercent=positive(preferredScale) and max(70,min(160,floor(preferredScale+.5))) or 100
     w.npcOptions=type(pref.levelGuideNPCIcons)=="table" and pref.levelGuideNPCIcons or {}
     pref.levelGuideNPCIcons=w.npcOptions
     local mast=CreateFrame("Frame",nil,canvas)
@@ -1458,13 +1634,14 @@ local function buildWindow()
     local title=label(mast,"GameFontNormalLarge","NQT Level Guide",palette.gold);title:SetPoint("TOPLEFT",53,-5)
     w.headerSub=label(mast,"GameFontHighlightSmall","",palette.dim);w.headerSub:SetPoint("TOPLEFT",54,-27)
     local close=CreateFrame("Button",nil,canvas,"UIPanelCloseButton")
-    close:SetPoint("TOPRIGHT",-6,-6)
+    close:SetSize(28,28);close:SetPoint("TOPRIGHT",-10,-8)
+    w.closeButton=close
     close:SetFrameLevel(mast:GetFrameLevel()+4)
     close:SetScript("OnClick",function() w:Hide() end)
     local maximize=CreateFrame("Button",nil,canvas)
     w.maximizeButton=maximize
-    maximize:SetSize(32,32)
-    maximize:SetPoint("RIGHT",close,"LEFT",5,0)
+    maximize:SetSize(28,28)
+    maximize:SetPoint("RIGHT",close,"LEFT",-3,0)
     -- The movable mast occupies this same screen region. Keep both actions
     -- above its mouse-enabled drag surface, regardless of creation order.
     maximize:SetFrameLevel(close:GetFrameLevel())
@@ -1478,10 +1655,14 @@ local function buildWindow()
     maximize:SetNormalTexture(sprite)
     maximize:SetPushedTexture(sprite)
     maximize:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square","ADD")
+    close:SetNormalTexture(sprite);close:SetPushedTexture(sprite);close:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square","ADD")
+    local step=1/8
+    close:GetNormalTexture():SetTexCoord(4*step,5*step,0,1)
+    close:GetPushedTexture():SetTexCoord(5*step,6*step,0,1)
     local function updateMaximizeArt()
-        local left=w.maximized and .5 or 0
-        maximize:GetNormalTexture():SetTexCoord(left,left+.25,0,1)
-        maximize:GetPushedTexture():SetTexCoord(left+.25,left+.5,0,1)
+        local left=w.maximized and 2*step or 0
+        maximize:GetNormalTexture():SetTexCoord(left,left+step,0,1)
+        maximize:GetPushedTexture():SetTexCoord(left+step,left+2*step,0,1)
     end
     updateMaximizeArt()
     maximize:SetScript("OnEnter",function(self)
@@ -1495,7 +1676,7 @@ local function buildWindow()
     end)
     local check=CreateFrame("CheckButton",nil,canvas,"UICheckButtonTemplate")
     w.inQuestLog=check
-    check:SetSize(24,24);check:SetPoint("TOPRIGHT",-173,-12)
+    check:SetSize(24,24);check:SetPoint("TOPRIGHT",-329,-10)
     check:SetFrameLevel(close:GetFrameLevel())
     check:EnableMouse(true);check:SetChecked(w.hideHeld)
     local checkText=label(check,"GameFontHighlightSmall","In Quest Log",palette.ink)
@@ -1504,7 +1685,7 @@ local function buildWindow()
     check:SetScript("OnClick",function(self)
         w.hideHeld=self:GetChecked() and true or false
         pref.levelGuideHideHeld=w.hideHeld
-        w.questPage=1;render()
+        w.questOffset=1;render()
     end)
     check:SetScript("OnEnter",function(self)
         if not GameTooltip then return end
@@ -1527,7 +1708,7 @@ local function buildWindow()
     for _,d in ipairs(tabs) do
         local mode=d[1]
         w.tabs[mode]=button(canvas,d[2],d[3],21,offset,-59,function()
-            w.mode,w.areaPage,w.questPage,w.selection,w.selectedQuest=mode,1,1,nil,nil
+            w.mode,w.areaOffset,w.questOffset,w.selection,w.selectedQuest=mode,1,1,nil,nil
             if w.partyMenu then w.partyMenu:Hide() end
             w.search:ClearFocus();w.low:ClearFocus();w.high:ClearFocus()
             if w.layout then w.layout() end
@@ -1538,20 +1719,68 @@ local function buildWindow()
     w.group={}
     local menu=CreateFrame("Frame",nil,canvas)
     w.partyMenu=menu
-    menu:SetSize(94,70);menu:SetPoint("TOPRIGHT",-203,-39)
+    menu:SetSize(74,70);menu:SetPoint("TOPRIGHT",-81,-37)
     menu:SetFrameLevel(close:GetFrameLevel()+15)
     menu:EnableMouse(true)
     local menuBg=fill(menu,nil,{.10,.10,.093,1});menuBg:SetAllPoints()
     menu:Hide()
-    w.partyChoice=button(canvas,"Solo  v",94,23,0,0,function() menu:SetShown(not menu:IsShown()) end)
-    w.partyChoice:ClearAllPoints();w.partyChoice:SetPoint("TOPRIGHT",-203,-12)
+    w.partyChoice=button(canvas,"Solo",74,23,0,0,function()
+        menu:SetShown(not menu:IsShown())
+        if w.scaleMenu then w.scaleMenu:Hide() end
+    end)
+    w.partyChoice:ClearAllPoints();w.partyChoice:SetPoint("TOPRIGHT",-81,-10)
     w.partyChoice:SetFrameLevel(close:GetFrameLevel())
+    -- The popup belongs to the fixed outer window, never the scaled canvas.
+    local scaleMenu=CreateFrame("Frame",nil,w)
+    w.scaleMenu=scaleMenu
+    scaleMenu:SetSize(218,70);scaleMenu:SetPoint("TOPRIGHT",w,"TOPRIGHT",-60,-63)
+    scaleMenu:SetFrameLevel(w:GetFrameLevel()+40);scaleMenu:EnableMouse(true)
+    local scaleBack=fill(scaleMenu,"BACKGROUND",{.115,.105,.087,1});scaleBack:SetAllPoints()
+    local scaleEdge=rect(scaleMenu,"ARTWORK",{.55,.40,.23,1},0,0,205,1)
+    local scaleTitle=label(scaleMenu,"GameFontNormal","Interface scale",palette.gold)
+    scaleTitle:SetPoint("TOPLEFT",10,-8)
+    w.scaleLabel=label(scaleMenu,"GameFontHighlightSmall","",palette.ink);w.scaleLabel:SetPoint("TOPRIGHT",-10,-11)
+    w.scaleHint=label(scaleMenu,"GameFontHighlightSmall","",palette.dim);w.scaleHint:SetPoint("BOTTOMLEFT",10,5)
+    local slider=CreateFrame("Slider",nil,scaleMenu)
+    w.scaleSlider=slider
+    slider:SetOrientation("HORIZONTAL")
+    slider:SetPoint("TOPLEFT",10,-27);slider:SetSize(184,18)
+    local bar=fill(slider,"BACKGROUND",{.44,.35,.22,1});bar:SetSize(183,3);bar:SetPoint("CENTER")
+    slider:SetThumbTexture("Interface\\Buttons\\UI-SliderBar-Button-Horizontal")
+    local thumb=slider:GetThumbTexture()
+    if thumb then thumb:SetSize(24,24) end
+    slider:SetMinMaxValues(70,160);slider:SetValueStep(5)
+    if slider.SetObeyStepOnDrag then slider:SetObeyStepOnDrag(true) end
+    slider:SetValue(w.scalePercent)
+    slider:EnableMouse(true)
+    slider:SetScript("OnValueChanged",function(_,value)
+        if not positive(value) then return end
+        w.scalePercent=max(70,min(160,floor(value+.5)))
+        pref.levelGuideScale=w.scalePercent
+        if w.layout then w.layout();render() end
+    end)
+    scaleMenu:Hide()
+    w.scaleButton=button(canvas,"Scale",74,23,0,0,function()
+        scaleMenu:SetShown(not scaleMenu:IsShown())
+        menu:Hide()
+        if w.npcMenu then w.npcMenu:Hide() end
+    end)
+    w.scaleButton:ClearAllPoints();w.scaleButton:SetPoint("TOPRIGHT",-163,-10)
+    w.scaleButton:SetFrameLevel(close:GetFrameLevel())
+    guideWheel(w.scaleButton,function() end);guideWheel(slider,function() end);guideWheel(scaleMenu,function() end)
+    w.scaleButton:SetScript("OnEnter",function(self)
+        if not GameTooltip then return end
+        GameTooltip:SetOwner(self,"ANCHOR_BOTTOM");GameTooltip:SetText("Level Guide interface scale");GameTooltip:Show()
+    end)
+    w.scaleButton:SetScript("OnLeave",function(self)
+        if GameTooltip and GameTooltip.IsOwned and GameTooltip:IsOwned(self) then GameTooltip:Hide() end
+    end)
     for i,n in ipairs({"Solo","2 players","3 players"}) do
         local size=i
-        w.group[i]=button(menu,n,90,21,2,-2-(i-1)*22,function()
+        w.group[i]=button(menu,n,70,21,2,-2-(i-1)*22,function()
             menu:Hide();w.size=size
             if AT.char then AT.char.levelGuidePartySize=size end
-            w.areaPage,w.questPage,w.selection,w.selectedQuest=1,1,nil,nil;queueRefresh(true)
+            w.areaOffset,w.questOffset,w.selection,w.selectedQuest=1,1,nil,nil;queueRefresh(true)
         end)
     end
     local rule=rect(canvas,nil,{.31,.25,.18,1},17,-114,836,1);w.filterRule=rule
@@ -1563,7 +1792,7 @@ local function buildWindow()
     w.high=rangeEntry(canvas,395,-85,34,2,true)
     local filterChange=function()
         if w.batch then return end
-        w.areaPage,w.questPage,w.selection=1,1,nil
+        w.areaOffset,w.questOffset,w.selection=1,1,nil
         render()
     end
     for _,e in ipairs({w.search,w.low,w.high}) do e:SetScript("OnTextChanged",filterChange) end
@@ -1590,6 +1819,8 @@ local function buildWindow()
     local tint=fill(w.art,"OVERLAY",{.12,.14,.15,.1});tint:SetAllPoints()
     w.mapHeading=label(w.art,"GameFontHighlightSmall","QUEST MAP",palette.gold)
     w.mapHeading:SetPoint("BOTTOMLEFT",5,5)
+    w.art.serviceStatus=label(w.art,"GameFontHighlightSmall","",palette.teal)
+    w.art.serviceStatus:SetPoint("BOTTOMLEFT",7,23);w.art.serviceStatus:SetWordWrap(false)
     w.heroTop=label(hero,"GameFontHighlightSmall","",palette.teal);w.heroTop:SetPoint("TOPLEFT",16,-11)
     w.heroName=label(hero,"GameFontNormalHuge","",palette.gold);w.heroName:SetPoint("TOPLEFT",15,-27);w.heroName:SetWidth(594);w.heroName:SetWordWrap(false)
     w.heroBand=label(hero,"GameFontHighlightSmall","",palette.gold);w.heroBand:SetPoint("TOPLEFT",16,-57)
@@ -1602,15 +1833,14 @@ local function buildWindow()
         local tile=button(hero,"",74,24,16+(i-1)*79,-113,function()
             w.selection=w.renderedPlaceID or w.selection
             w.questKind=w.questKind~=kind and kind or nil
-            w.questPage=1
+            w.questOffset=1
             render()
         end)
         tile:EnableMouse(true)
-        tile.indicator=rect(tile,"ARTWORK",{.86,.68,.39,1},0,-24,74,1)
-        local icon=tile:CreateTexture(nil,"ARTWORK");icon:SetSize(14,14);icon:SetPoint("LEFT",4,0);setIcon(icon,meta[3])
-        tile.label=label(tile,"GameFontHighlightSmall","",meta[4]);tile.label:SetPoint("LEFT",21,0)
-        tile.bar=rect(tile,"ARTWORK",{meta[4][1],meta[4][2],meta[4][3],.65},4,-21,1,1)
-        tile.key,tile.typeLabel,tile.barWidth=meta[1],meta[2],66
+        local icon=tile:CreateTexture(nil,"ARTWORK");icon:SetSize(17,17);icon:SetPoint("LEFT",6,0);setIcon(icon,meta[3])
+        tile.label=label(tile,"GameFontHighlight","",meta[4]);tile.label:SetPoint("LEFT",27,0)
+        tile.label:SetWordWrap(false)
+        tile.key,tile.typeLabel,tile.baseInk=meta[1],meta[2],meta[4]
         w.badges[i]=tile
     end
     w.mapButton=button(w.art,"View map",72,21,0,0,function(self) openMap(self.map) end)
@@ -1634,11 +1864,12 @@ local function buildWindow()
     w.npcButton=button(preview,"NPC Icons",76,20,5,-5,function()
         optionsPanel:SetShown(not optionsPanel:IsShown())
         if w.partyMenu then w.partyMenu:Hide() end
+        if w.scaleMenu then w.scaleMenu:Hide() end
     end)
     w.npcButton:SetFrameLevel(preview:GetFrameLevel()+5)
     guideWheel(w.npcButton,function(_,d) zoomGuideMap(preview,d) end)
     guideWheel(optionsPanel,function() end)
-    w.npcChecks={}
+    w.npcChecks,w.npcCheckLabels={},{}
     for i,option in ipairs(npcIcons) do
         local key=i
         local check=CreateFrame("CheckButton",nil,optionsPanel,"UICheckButtonTemplate")
@@ -1647,6 +1878,7 @@ local function buildWindow()
         if check.SetHitRectInsets then check:SetHitRectInsets(0,-122,0,0) end
         check:SetChecked(w.npcOptions[i]==true)
         local title=label(check,"GameFontHighlightSmall",option[1],palette.ink);title:SetPoint("LEFT",check,"RIGHT",4,0)
+        w.npcCheckLabels[i]=title
         guideWheel(check,function() end)
         check:SetScript("OnClick",function(self)
             w.npcOptions[key]=self:GetChecked() and true or nil
@@ -1655,15 +1887,23 @@ local function buildWindow()
     end
     local pin=CreateFrame("Frame",nil,preview)
     preview.pin=pin
-    pin:SetSize(23,26);pin:SetFrameLevel(preview:GetFrameLevel()+2);pin:EnableMouse(true)
+    pin:SetSize(18,20);pin:SetFrameLevel(preview:GetFrameLevel()+9);pin:EnableMouse(true)
     local mark=pin:CreateTexture(nil,"ARTWORK")
-    mark:SetSize(23,24);mark:SetPoint("CENTER")
+    mark:SetSize(12,15);mark:SetPoint("CENTER")
     mark:SetTexture("Interface\\GossipFrame\\AvailableQuestIcon")
-    local highlight=pin:CreateTexture(nil,"BACKGROUND")
-    highlight:SetSize(37,37);highlight:SetPoint("CENTER")
-    highlight:SetTexture("Interface\\Minimap\\UI-Minimap-ZoomButton-Highlight")
-    highlight:SetVertexColor(1,.69,.25,.85)
-    highlight:SetBlendMode("ADD")
+    local ring=CreateFrame("Frame",nil,pin);ring:SetAllPoints(pin);ring:EnableMouse(false)
+    ring:SetFrameLevel(pin:GetFrameLevel())
+    pin.marker,pin.ring=mark,ring
+    for i=1,36 do
+        local t=ring:CreateTexture(nil,"OVERLAY");local angle=i*math.pi/18
+        t:SetColorTexture(1,.78,.22,1);t:SetSize(2.6,2.6)
+        t:SetPoint("CENTER",ring,"CENTER",13*math.cos(angle),13*math.sin(angle))
+    end
+    pin:SetScript("OnUpdate",function(self,elapsed)
+        self.pulse=((self.pulse or 0)+elapsed)%2.2
+        local light=.5+.5*math.cos(self.pulse*math.pi/1.1)
+        self.marker:SetAlpha(.30+.70*light);self.ring:SetAlpha(.68+.32*light)
+    end)
     pin:Hide()
     guideWheel(pin,function(_,delta) zoomGuideMap(preview,delta) end)
     guideWheel(w.mapButton,function(_,delta) zoomGuideMap(preview,delta) end)
@@ -1702,10 +1942,15 @@ local function buildWindow()
     end)
     local details=CreateFrame("Frame",nil,canvas)
     w.objectives=details
+    details.rows={}
     local detailsBG=fill(details,nil,{.085,.077,.065,1});detailsBG:SetAllPoints()
     details.rule=rect(details,"ARTWORK",{.58,.42,.25,1},0,0,310,1)
     details.title=label(details,"GameFontNormal","",palette.gold)
     details.title:SetPoint("TOPLEFT",9,-8);details.title:SetWordWrap(false)
+    details.start=label(details,"GameFontHighlightSmall","",palette.teal)
+    details.start:SetPoint("TOPLEFT",9,-25);details.start:SetWordWrap(true)
+    details.empty=label(details,"GameFontHighlightSmall","Select a quest to see its starting point and objectives.",palette.dim)
+    details.empty:SetPoint("TOPLEFT",9,-28);details.empty:SetWordWrap(true)
     local scroll=CreateFrame("ScrollFrame",nil,details)
     details.scroll=scroll
     scroll:SetPoint("TOPLEFT",9,-29);scroll:SetPoint("BOTTOMRIGHT",-9,6)
@@ -1720,10 +1965,12 @@ local function buildWindow()
     details.text=label(content,"GameFontHighlightSmall","",palette.ink)
     details.text:SetPoint("TOPLEFT",0,-1);details.text:SetWordWrap(true)
     details:Hide()
-    w.areaTitle=label(canvas,"GameFontNormal","WHERE TO GO",palette.gold)
-    w.questTitle=label(canvas,"GameFontNormal","QUESTS TO DO",palette.gold)
+    w.areaTitle=label(canvas,"GameFontNormal","Location",palette.gold)
+    w.questTitle=label(canvas,"GameFontNormal","Quests",palette.gold)
     w.areaRule=rect(canvas,"BORDER",{.33,.27,.19,1},17,-335,286,1)
     w.questRule=rect(canvas,"BORDER",{.33,.27,.19,1},316,-335,537,1)
+    w.areaPanel=fill(canvas,"BACKGROUND",{.058,.068,.069,1})
+    w.questPanel=fill(canvas,"BACKGROUND",{.058,.068,.069,1})
     w.areaSurface=CreateFrame("Frame",nil,canvas)
     w.questSurface=CreateFrame("Frame",nil,canvas)
     guideWheel(w.areaSurface,listWheel("area"));guideWheel(w.questSurface,listWheel("quest"))
@@ -1733,10 +1980,10 @@ local function buildWindow()
     guideWheel(w.partyChoice,function() end)
     for _,child in ipairs({mast,hero,details,check,close,maximize}) do guideWheel(child,listWheel("quest")) end
     w.areas={}
-    for i=1,22 do
+    for i=1,60 do
         local row=button(canvas,"",286,32,17,-342-(i-1)*34,function(self)
             if not self.place then return end
-            menu:Hide();w.selection=self.place.id;w.questPage=1;w.selectedQuest=nil;render()
+            menu:Hide();w.selection=self.place.id;w.questOffset=1;w.selectedQuest=nil;render()
         end)
         row.index=label(row,"GameFontHighlightSmall","",palette.gold);row.index:SetPoint("LEFT",8,0)
         row.name=label(row,"GameFontHighlight","");row.name:SetPoint("TOPLEFT",30,-4);row.name:SetWidth(247);row.name:SetWordWrap(false)
@@ -1753,6 +2000,17 @@ local function buildWindow()
         row:SetScript("OnClick",function(self)
             if not self.record then return end
             menu:Hide();w.selectedQuest=self.record.id;render()
+        end)
+        row:SetScript("OnEnter",function(self)
+            local q=self.record
+            if not q or not GameTooltip then return end
+            GameTooltip:SetOwner(self,"ANCHOR_RIGHT");GameTooltip:SetText(q.name)
+            local start=startDescription(q.giver)
+            if start~="" then GameTooltip:AddLine(start,.88,.88,.88,true) end
+            GameTooltip:Show()
+        end)
+        row:SetScript("OnLeave",function(self)
+            if GameTooltip and GameTooltip.IsOwned and GameTooltip:IsOwned(self) then GameTooltip:Hide() end
         end)
         row:SetSize(537,28);row:SetPoint("TOPLEFT",316,-342-(i-1)*30)
         row.back=fill(row,nil,{.078,.091,.10,1});row.back:SetAllPoints()
@@ -1787,14 +2045,7 @@ local function buildWindow()
         w.quests[i]=row
     end
     w.questEmpty=label(canvas,"GameFontHighlight","No unfinished quests found here for this view.",palette.dim);w.questEmpty:SetPoint("TOPLEFT",326,-356)
-    w.areaPages=label(canvas,"GameFontHighlightSmall","",palette.dim);w.areaPages:SetPoint("TOPLEFT",129,-586)
-    w.questPages=label(canvas,"GameFontHighlightSmall","",palette.dim);w.questPages:SetPoint("TOPLEFT",568,-586)
-    w.areaPrev=button(canvas,"<",30,20,86,-580,function() navigate(-1,"area") end)
-    w.areaNext=button(canvas,">",30,20,192,-580,function() navigate(1,"area") end)
-    w.questPrev=button(canvas,"<",30,20,523,-580,function() navigate(-1,"quest") end)
-    w.questNext=button(canvas,">",30,20,624,-580,function() navigate(1,"quest") end)
-    for _,child in ipairs({w.areaPrev,w.areaNext}) do guideWheel(child,listWheel("area")) end
-    for _,child in ipairs({w.questPrev,w.questNext,w.search,w.low,w.high,mine,clear}) do guideWheel(child,listWheel("quest")) end
+    for _,child in ipairs({w.search,w.low,w.high,mine,clear}) do guideWheel(child,listWheel("quest")) end
     for _,child in pairs(w.tabs) do guideWheel(child,listWheel("quest")) end
     for _,child in ipairs(w.badges) do guideWheel(child,listWheel("quest")) end
     for _,child in ipairs(w.group) do guideWheel(child,function() end) end
@@ -1821,17 +2072,37 @@ local function buildWindow()
     local function layout()
         local width,height=w:GetWidth(),w:GetHeight()
         if not positive(width) or not positive(height) then return end
-        -- Extra screen space buys rows and map area, not oversized labels.
-        local zoom=min(w.maximized and 1.12 or 1.23,width/750,height/526,sqrt(width/870*height/642))
+        local top=w.mode=="forYou" and 86 or 120
+        local pct=w.scalePercent
+        local rowCap=min(20,max(6,10+floor((100-pct)/3)))
+        if pct>100 then rowCap=max(6,10-floor((pct-100)/15)) end
+        -- Tie automatic scale to the actual vertical row budget. At 100%
+        -- a full list shows ten entries; at 70% it can show twenty.
+        local rowStride=32
+        -- Reserve the selected-quest panel in the right column, so selecting a
+        -- row does not swap the page or resize the center map.
+        local heroH,bodyGap,bodyBottom,heading,listPadding,splitGap=110,6,12,34,3,8
+        local bodyTop=top+heroH+bodyGap
+        local function heightForRows(n)
+            return bodyTop+bodyBottom+splitGap+ceil((heading+listPadding+n*rowStride)/.70)
+        end
+        local defaultZoom=min(width/900,height/heightForRows(10))
+        local requested=defaultZoom*pct/100
+        local zoom=min(width/900,height/heightForRows(rowCap),requested)
+        w.scaleLabel:SetText(("%d%%"):format(pct))
+        w.scaleHint:SetText(requested>zoom+.001 and "Adjusted to fit this window" or "")
         local ww,hh=width/zoom,height/zoom
         canvas:SetScale(zoom);canvas:SetSize(ww,hh)
         grip:SetSize(19*zoom,19*zoom);w.contentZoom=zoom
-        local top=w.mode=="forYou" and 86 or 120
-        local mapWidth=floor(ww*.465)-16
-        local leftW=ww-46-mapWidth
-        local mapX=29+leftW
-        local heroH=81
-        w.hero:SetSize(leftW,heroH);anchor(w.hero,17,-top)
+        local gutter,edge=8,17
+        local usable=ww-edge*2-gutter*2
+        -- Match the traced section boundaries: Location 20%, Map 52%, right rail 28%.
+        local areaW=floor(usable*.20+.5)
+        local questW=floor(usable*.28+.5)
+        local mapWidth=usable-areaW-questW
+        local areaX,mapX,questX=edge,edge+areaW+gutter,edge+areaW+gutter+mapWidth+gutter
+        local summaryWidth=ww-2*edge
+        w.hero:SetSize(summaryWidth,heroH);anchor(w.hero,edge,-top)
         w.heroEdge:SetHeight(heroH)
         w.heroTop:Hide();w.heroNote:Hide()
         local function heroLabel(f,x,y) f:ClearAllPoints();f:SetPoint("TOPLEFT",w.hero,"TOPLEFT",x,y) end
@@ -1839,45 +2110,42 @@ local function buildWindow()
         heroLabel(w.heroBand,12,-26)
         heroLabel(w.heroFact,12,-39)
         heroLabel(w.heroAction,12,-53)
-        w.mapHeight=hh-top-28
-        w.detailsHeight=min(168,max(104,floor(w.mapHeight*.34)))
-        anchor(w.art,mapX,-top);w.art:SetSize(mapWidth,w.mapHeight)
-        anchor(w.objectives,mapX,-hh+28+w.detailsHeight)
-        w.objectives:SetSize(mapWidth,w.detailsHeight)
-        w.objectives.rule:SetWidth(mapWidth)
-        w.objectives.title:SetWidth(mapWidth-18)
-        w.objectivesContent:SetWidth(mapWidth-18)
-        w.objectives.text:SetWidth(mapWidth-18)
-        local wide=leftW>=568
-        if wide then
-            for _,x in ipairs({w.heroName,w.heroAction}) do x:SetWidth(leftW-291) end
-        else
-            w.heroName:SetWidth(leftW-24);w.heroAction:SetWidth(leftW-24)
-        end
-        local badgeW=wide and 64 or min(72,floor((leftW-24-12)/4))
-        if not wide then heroH=100;w.hero:SetHeight(heroH);w.heroEdge:SetHeight(heroH) end
+        local gap=6
+        local badgeW=max(68,min(116,floor((summaryWidth-24-3*gap)/4)))
         for i,b in ipairs(w.badges) do
-            b:ClearAllPoints()
-            b:SetPoint("TOPLEFT",w.hero,"TOPLEFT",wide and leftW-12-4*(badgeW+4)+(i-1)*(badgeW+4) or 12+(i-1)*(badgeW+4),wide and -27 or -72)
-            b:SetSize(badgeW,22);b.barWidth=badgeW-8;b.indicator:SetWidth(badgeW)
+            b:ClearAllPoints();b:SetPoint("TOPLEFT",w.hero,"TOPLEFT",12+(i-1)*(badgeW+gap),-75)
+            b:SetSize(badgeW,28)
+            b.label:SetWidth(badgeW-29)
         end
         w.mastRule:SetWidth(ww-32);w.filterRule:SetWidth(ww-34)
-        local areaW=max(135,min(320,floor(leftW*.32)))
-        local questW=leftW-areaW-9
-        local areaX,questX=17,17+areaW+9
-        local first=top+heroH+29
-        local stride=27
-        if hh-28-first<270 then stride=25 end
-        local available=floor((hh-28-first)/stride)
-        w.areaLimit=min(#w.areas,max(1,available))
-        w.questLimit=min(#w.quests,max(1,available))
+        local bodyHeight=floor(hh-bodyTop-bodyBottom)
+        local questHeight=floor((bodyHeight-splitGap)*.70+.5)
+        w.detailsHeight=bodyHeight-questHeight-splitGap
+        w.mapHeight=bodyHeight
+        local detailsY=-bodyTop-questHeight-splitGap
+        anchor(w.areaPanel,areaX,-bodyTop);w.areaPanel:SetSize(areaW,bodyHeight)
+        anchor(w.questPanel,questX,-bodyTop);w.questPanel:SetSize(questW,questHeight)
+        anchor(w.art,mapX,-bodyTop);w.art:SetSize(mapWidth,w.mapHeight)
+        anchor(w.objectives,questX,detailsY)
+        w.objectives:SetSize(questW,w.detailsHeight)
+        w.objectives.rule:SetWidth(questW)
+        w.objectives.title:SetWidth(questW-18)
+        w.objectives.start:SetWidth(questW-18)
+        w.objectives.empty:SetWidth(questW-18)
+        w.objectivesContent:SetWidth(questW-18)
+        w.objectives.text:SetWidth(questW-18)
+        local first=bodyTop+heading
+        local stride=rowStride
+        local available=floor((questHeight-heading-listPadding+.01)/stride)
+        w.areaLimit=min(#w.areas,max(1,floor((bodyHeight-heading-listPadding)/stride)))
+        w.questLimit=min(#w.quests,rowCap,max(1,available))
         w.areaWidth,w.questWidth=areaW,questW
         anchor(w.areaTitle,areaX+4,-first+21)
         anchor(w.questTitle,questX+4,-first+21)
         anchor(w.areaRule,areaX,-first+3);w.areaRule:SetWidth(areaW)
         anchor(w.questRule,questX,-first+3);w.questRule:SetWidth(questW)
-        anchor(w.areaSurface,areaX,-first);w.areaSurface:SetSize(areaW,stride*w.areaLimit)
-        anchor(w.questSurface,questX,-first);w.questSurface:SetSize(questW,stride*w.questLimit)
+        anchor(w.areaSurface,areaX,-bodyTop);w.areaSurface:SetSize(areaW,bodyHeight)
+        anchor(w.questSurface,questX,-bodyTop);w.questSurface:SetSize(questW,questHeight)
         for i,row in ipairs(w.areas) do
             anchor(row,areaX,-first-(i-1)*stride)
             row:SetSize(areaW,stride-2)
@@ -1886,16 +2154,10 @@ local function buildWindow()
         for i,row in ipairs(w.quests) do
             anchor(row,questX,-first-(i-1)*stride)
             row:SetSize(questW,stride-2);row.detail:SetWordWrap(false)
-            row.name:ClearAllPoints();row.name:SetPoint("TOPLEFT",27,-1)
-            row.detail:ClearAllPoints();row.detail:SetPoint("TOPLEFT",27,-14)
+            row.name:ClearAllPoints();row.name:SetPoint("TOPLEFT",27,-3)
+            row.detail:ClearAllPoints();row.detail:SetPoint("TOPLEFT",27,-17)
         end
         anchor(w.questEmpty,questX+5,-first-9)
-        -- Paginate below each column, leaving the headings readable at narrow widths.
-        local pagerY=-hh+25
-        for _,pair in ipairs({{areaX,areaW,w.areaPrev,w.areaPages,w.areaNext},{questX,questW,w.questPrev,w.questPages,w.questNext}}) do
-            local middle=pair[1]+floor(pair[2]/2)
-            anchor(pair[3],middle-65,pagerY);anchor(pair[4],middle-21,pagerY-3);anchor(pair[5],middle+35,pagerY)
-        end
         legend:Hide()
     end
     w.layout=layout
@@ -1930,7 +2192,7 @@ local function buildWindow()
         refreshLayout()
     end
     w:SetScript("OnHide",function()
-        finishResize();menu:Hide();optionsPanel:Hide();w:SetFrameStrata("FULLSCREEN_DIALOG");w.search:ClearFocus();w.low:ClearFocus();w.high:ClearFocus()
+        finishResize();menu:Hide();scaleMenu:Hide();optionsPanel:Hide();w:SetFrameStrata("FULLSCREEN_DIALOG");w.search:ClearFocus();w.low:ClearFocus();w.high:ClearFocus()
     end)
     w:SetScript("OnEvent",function(_,event,qid,second)
         if event=="GET_ITEM_INFO_RECEIVED" then

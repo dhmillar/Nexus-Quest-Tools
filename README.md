@@ -24,7 +24,7 @@ Nexus Quest Tools is a World of Warcraft: Forever addon that organizes your ques
 
 ### NQT Level Guide
 
-Open with the map-book icon in Rank Quest. **For You** ranks available leveling areas; **Zones** and **Dungeons** let you browse. Pick Solo, 2 players, or 3 players to adjust recommendations, and filter by Kill, Collect, Mixed, or Other. Select a quest to see objectives and highlight its known start on the guide map. **Track** sets a waypoint to a known start or highlights a recorded item-drop area. **NPC Icons** toggles service categories, all off by default. Coverage is not exhaustive.
+Open with the map-book icon in Rank Quest. **For You** ranks available leveling areas; **Zones** and **Dungeons** let you browse. Pick Solo, 2 players, or 3 players to adjust recommendations, and filter by Kill, Collect, Mixed, or Other. Select a quest to see objectives and highlight its known start on the guide map. **Track** sets a waypoint to a known start or highlights a recorded item-drop area. Scroll Location and Quests independently. Quest Details shows the recorded starter beneath the right-hand quest list. **NPC Icons** toggles service categories, all off by default, and shows counts for the displayed map. Coverage is not exhaustive.
 
 ### Auto Macro
 

@@ -3,7 +3,12 @@
 -- https://github.com/JIVESCORP/eg-link-output-wowf/tree/1339ce5600bbc2b12e8f1081e584f548f62fa57f/data/wowf
 -- Adapted recorded offers and verified enUS NPC names. map,x,y,side,NPC ID,name.
 local _,AT=...
+-- Quest 96084: the Empty Phial is supplied on acceptance, not looted to start the quest.
+-- Giver at the same verified Riverglades position as her other recorded offers.
+-- https://www.wowhead.com/forever/quest=96084/somethings-in-the-water
+-- https://foreverquestlog.com/quests/96084/
 AT.LevelGuideQuestGivers={
+ [96084]={{2548,0.6178,0.8318,1,262031,"Sister Rowland"}},
  [5]={{1431,0.1817,0.5652,1,288,"Jitters"}},
  [6]={{1429,0.4814,0.4306,1,823,"Deputy Willem"}},
  [7]={{1429,0.4886,0.4169,1,197,"Marshal McBride"}},

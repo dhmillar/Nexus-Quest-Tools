@@ -3,7 +3,7 @@
 ## IconTexture: Interface\AddOns\NQT\MinimapAT.tga
 ## Notes: Sticky nearby quest tracking and a reusable named-target macro.
 ## Author: Dennis
-## Version: 1.5.144
+## Version: 1.5.149
 ## SavedVariables: AutoTrackDB
 ## SavedVariablesPerCharacter: AutoTrackCharDB
 ## OptionalDeps: QuestieDB, Questie, ShortestPathForever, ForeverDungeonJournal

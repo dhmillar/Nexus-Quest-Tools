@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.5.149 - 2026-11-26
+
+### Level Guide
+- New layout: full-height Location list on the left, a larger center map, and Quests and Quest Details stacked on the right. Scroll each list directly.
+- Matched Maximize and Close controls, same-size Scale and Solo controls, and adaptive text fit. The Scale slider stays fixed while you adjust it.
+- Selecting a quest pulses its normal-sized start icon inside a gold ring. Recorded quest starters and coordinates appear in the list and details, including dungeon quests started outside the instance. Recorded item-start quests can highlight a pickup area instead.
+- NPC Icons now shows available counts for the displayed map and draws the markers above the terrain. Missing location data is not guessed.
+
 ## 1.5.144 - 2026-11-26
 
 ### Level Guide and Rank Quest
