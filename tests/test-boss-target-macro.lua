@@ -10,6 +10,7 @@ function CreateFrame(kind,_,parent,template)
     function f:SetAttribute(k,v) self.attrs[k]=v end
     function f:SetShown(v) self.shown=v end
     function f:Hide() self.shown=false end
+    function f:Show() self.shown=true end
     function f:SetText(v) self.text=v end
     ui[#ui+1]=f;return f
 end

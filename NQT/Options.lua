@@ -33,6 +33,8 @@ local function refreshPanel()
 end
 
 local function updateState()
+    if AT.RefreshSmartTargetButton then AT.RefreshSmartTargetButton() end
+    if AT.RefreshSmartTargetBarKeys then AT.RefreshSmartTargetBarKeys() end
     if AT.RefreshQuests then AT.RefreshQuests() end
     if AT.RefreshTargetMacro then AT.RefreshTargetMacro() end
     if AT.RefreshPortrait then AT.RefreshPortrait() end
@@ -114,7 +116,7 @@ end
 
 local function buildPanel()
     panel = CreateFrame("Frame", "AutoTrackOptionsFrame", UIParent, "BackdropTemplate")
-    panel:SetSize(404, 387)
+    panel:SetSize(404, 426)
     panel:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
     panel:SetFrameStrata("DIALOG")
     panel:SetClampedToScreen(true)
@@ -190,6 +192,7 @@ local function buildPanel()
         text:SetPoint("LEFT", check, "RIGHT", 2, 0)
         text:SetText(label)
         check:SetScript("OnClick", function(self)
+            if (key == "showQuestMapPins" or key == "showObservedQuestGivers") and AT.RefreshQuestMapPins then AT.RefreshQuestMapPins() end
             if key == "pingWithMarker" and AT.SetMarkerPing then
                 local ok, why = AT.SetMarkerPing(self:GetChecked() and true or false)
                 if not ok and why then AT.Say(why) end
@@ -234,19 +237,23 @@ local function buildPanel()
     status:SetTextColor(0.43, 0.88, 0.81)
 
     option(macro, "quietTarget", "Mute target macro sounds", -2)
-    option(macro, "pressSkull", "Raid marker on Smart Target press", -30, "Bind Smart Target under WoW Options > Keybindings > Nexus Quest Tools. The regular action-bar macro can recall a name but cannot check tap status before selecting it.")
+    option(macro, "pressSkull", "Raid marker on Smart Target press", -30, "Your existing stock action-bar shortcut automatically runs Smart Target out of combat. You can also bind Smart Target directly.")
     option(macro, "nextMobHint", "Highlight next visible untagged mob", -58)
     option(macro, "pingWithMarker", "Ping when placing marker", -86)
     primaryChoice = setupButton(macro, "Primary marker: Skull", 300, 18, -118, choosePrimary)
     markerStatus = makeText(macro, "GameFontHighlightSmall", -149, "")
     targetStatus = makeText(macro, "GameFontHighlightSmall", -172, "")
 
+    option(macro, "showSmartTargetButton", "Show Smart Target button", -288, "Click this button to recall, mark, and ping on one press out of combat. Hiding it does not remove its keybinding.")
+
     option(rank, "questHUDEnabled", "Enable Rank Quest", -2, "Show the movable, zone-organized Rank Quest panel and hide the stock quest display.")
     option(rank, "questPartyProgress", "Quest Party Progress", -30, "Show the party progress Blizzard reports on hover, and keep shared quests visible while a party member still needs objectives.")
     option(rank, "questLeftoverMarks", "Mark leftover quest items in bags", -58, "Adds a trash badge only when a turned-in quest can be verified and no current known objective uses that item. Never deletes anything.")
     option(rank, "rankQuestDropRates", "Show item drop rates", -86, "Uses Questie when available or bundled Forever observations. Hover the quest for sample counts. Data from Everloot (https://everloot.app), CC BY-SA 4.0. Unknown rates are hidden.")
-    makeText(rank, "GameFontHighlightSmall", -123, "Right-click a quest to exclude it from automatic tracking.")
-    makeText(rank, "GameFontDisableSmall", -145, "Ctrl-click quest titles to number them. /at order lists them.")
+    option(rank, "showQuestMapPins", "Show standalone map pins", -114, "Adds verified quest and service pins on the maps when Questie is off.")
+    option(rank, "showObservedQuestGivers", "Show observed quest giver locations", -142, "Optional reported landmarks, not proof of current quest availability. Data from Efficient Games, CC BY 4.0.")
+    makeText(rank, "GameFontHighlightSmall", -177, "Right-click a quest to exclude it from automatic tracking.")
+    makeText(rank, "GameFontDisableSmall", -199, "Ctrl-click quest titles to number them. /at order lists them.")
 
     option(dungeon, "dungeonPositionEnabled", "Enable dungeon maps", -2)
     option(dungeon, "dungeonPositionAutoOpen", "Open automatically in a dungeon", -30)
@@ -266,13 +273,13 @@ local function buildPanel()
     option(dungeon, "bossMarkPing", "Also ping the boss", -218,
         "Include an Attack ping on the same macro press when the client allows it.")
     makeText(dungeon, "GameFontHighlightSmall", -249, "Uses your existing macro. Enemy nameplates help.")
-    setupButton(macro, "Place on action bar", 151, 18, -192, function()
+    setupButton(macro, "Place recall macro", 151, 18, -192, function()
         if InCombatLockdown() then AT.Say("Leave combat before setting up the target macro."); return end
         if AT.PickupTargetMacro then
             local ok, why = AT.PickupTargetMacro()
             if ok then
                 panel:Hide()
-                AT.Say("Click an empty action-bar slot. The key bound to that slot now runs the macro.")
+                AT.Say("Click an empty action-bar slot. For regular mob markers and pings, click Smart Target or bind it directly.")
             elseif why then AT.Say(why) end
         end
         refreshPanel()

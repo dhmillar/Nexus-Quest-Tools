@@ -507,10 +507,13 @@ end
 local function refreshHighlights(inspectProgress)
     if not model then return false end
     local zone=model.current
-    local current=zone and model.zones[zone]
     local ids,previous,progress={},{},{}
-    if current then
-        for qid in pairs(current.rows) do ids[qid]=true end
+    -- Zone assignment describes where the quest was picked up or grouped,
+    -- not necessarily where the player can work on its current objective.
+    for qid,row in pairs(model.rows) do
+        if not row.complete and not row.partyOnly and call(AT.IsQuestExcluded,qid)~=true then
+            ids[qid]=true
+        end
     end
     for qid,state in pairs(highlights) do
         ids[qid]=true; previous[qid]=state.area
@@ -842,10 +845,8 @@ local function describe(e)
             local name=mapName(row.destination)
             return name and ("Leads to " .. name) or "Leads outside this zone"
         end
-        if kind=="origin" or kind=="recorded" then return nil end
-        return "Quest log: this zone"
+        return nil
     end
-    return "Objective in this zone"
 end
 local function verifiedQuestItem(qid,index)
     local qt=Q and Q.GetLogIndexForQuestID
@@ -884,7 +885,7 @@ end
 local function dropName(text)
     if not is(text,"string") then return end
     text=text:gsub("|c%x%x%x%x%x%x%x%x",""):gsub("|r","")
-    text=text:gsub("^%s*%d+%s*/%s*%d+%s+",""):gsub("%s*[(:]?%s*%d+%s*/%s*%d+%)?%s*$","")
+    text=text:gsub("^%s*%d+%s*/%s*%d+[%s:]+",""):gsub("%s*[(:]?%s*%d+%s*/%s*%d+%)?%s*$","")
     return text:match("^%s*(.-)%s*$")
 end
 local dropIndex,dropIndexAt
@@ -923,6 +924,33 @@ local function observedDropItem(qid,label)
 end
 
 
+-- QuestieDB can run without the Questie tracker UI. Read only this
+-- quest's item objectives, and require an exact, unambiguous name match.
+local function standaloneProviderDropItem(qid,wanted)
+    local provider=_G.LibQuestieDB
+    if not provider or field(field(provider,"flavor"),"key")~="Forever" and
+        field(field(provider,"flavor"),"id")~="Forever" and
+        call(C_AddOns and C_AddOns.GetAddOnMetadata,"QuestieDB","X-Flavor")~="Forever" then return end
+    local objectives=call(field(field(provider,"Quest"),"Get"),qid,"objectives")
+    local candidates=field(objectives,3)
+    if not is(candidates,"table") then return end
+    local match
+    for _,entry in pairs(candidates) do
+        local item=field(entry,1)
+        if id(item) then
+            local name=call(C_Item and C_Item.GetItemNameByID,item)
+            if (not is(name,"string") or name=="") and call(GetLocale)=="enUS" then
+                name=call(field(field(provider,"Item"),"Get"),item,"name")
+            end
+            if is(name,"string") and name==wanted then
+                if match and match~=item then return nil,true end
+                match=item
+            end
+        end
+    end
+    return match
+end
+
 local function objectiveDropItem(db,qid,objective,label)
     if field(objective,"type")~="item" then return end
     local exact=field(objective,"itemID")
@@ -939,7 +967,11 @@ local function objectiveDropItem(db,qid,objective,label)
     local wanted=dropName(label)
     if not wanted or wanted=="" then return end
     local objectives=field(db and call(db.GetQuest,qid),"ObjectiveData")
-    if not is(objectives,"table") then return observedDropItem(qid,wanted) end
+    if not is(objectives,"table") then
+        local match,ambiguous=standaloneProviderDropItem(qid,wanted)
+        if ambiguous then return end
+        return match or observedDropItem(qid,wanted)
+    end
     local match
     for _,entry in pairs(objectives) do
         local item=field(entry,"Id")
@@ -954,10 +986,7 @@ local function objectiveDropItem(db,qid,objective,label)
     end
     return match or observedDropItem(qid,wanted)
 end
-local function fmtDrop(value)
-    if value<.001 then return "<0.001%" end
-    return (string.format("%.3f",value):gsub("0+$",""):gsub("%.$","")).."%"
-end
+local function fmtDrop(value) return ("%d%%"):format(math.ceil(value-1e-10)) end
 local function questieDropRange(db,item)
     if not db then return end
     -- Questie returns {percentage, source}; count only NPC records.
@@ -1000,12 +1029,8 @@ local function objectiveDropSuffix(db,qid,objective,label)
     end
     local low,high,rows=observedRecord(item)
     if not low then return "" end
-    local function rounded(value)
-        if value<.1 then return "<0.1%" end
-        return (string.format("%.1f",value):gsub("%.0$","")).."%"
-    end
-    local a,b=rounded(low),rounded(high)
-    return " (~"..(a==b and a or a.."\226\128\147"..b).." Everloot)",rows
+    local a,b=fmtDrop(low),fmtDrop(high)
+    return " ("..(a==b and a or a.."\226\128\147"..b)..")",rows
 end
 
 addDropTooltip=function(tip,qid)
@@ -1026,8 +1051,8 @@ addDropTooltip=function(tip,qid)
                 end
                 tip:AddLine(dropName(label),.86,.92,.95,true)
                 for _,e in ipairs(rows) do
-                    tip:AddLine(("NPC #%d: %d/%d windows, %d installs (%s)"):format(
-                        e[1],e[2],e[3],e[4],AT.ObservedQuestDrops.dates[e[5]]),.70,.83,.93,true)
+                    tip:AddLine(("%s #%d: %d/%d windows, %d installs (%s)"):format(
+                        e[6]==1 and "Object" or "NPC",e[1],e[2],e[3],e[4],AT.ObservedQuestDrops.dates[e[5]]),.70,.83,.93,true)
                 end
             end
         end
@@ -1270,6 +1295,14 @@ local function matchesSearch(haystack)
 end
 
 local zoneBranchPriority={origin=40,recorded=30,category=20,destination=10,unassigned=0}
+local function questSortPriority(row,activeID)
+    if not row.partyOnly and row.id==activeID then return 0 end
+    local state=highlights[row.id]
+    return state and (state.area=="inside" or state.area=="near") and 1 or 2
+end
+local function questSortLevel(row)
+    return id(row.level) and row.level or math.huge
+end
 local function groupQuestEntries(result,entries,scope)
     local best={}
     local function consider(bucket,prefix,priority)
@@ -1310,11 +1343,6 @@ local function groupQuestEntries(result,entries,scope)
         end
         group.entries[#group.entries+1]=e
     end
-    table.sort(groups,function(a,b)
-        if a.key=="zone:at-other" or b.key=="zone:at-other" then return a.key~="zone:at-other" end
-        local l,r=lowerSearch(a.name),lowerSearch(b.name)
-        return l==r and a.key<b.key or l<r
-    end)
     return groups
 end
 
@@ -1462,10 +1490,13 @@ local function arrange()
             if includes(e.row) then entries[#entries+1]=e end
         end
     end
+    local activeID=call(AT.GetQuestNavigationID)
     table.sort(entries,function(a,b)
         local qa,qb=a.row,b.row
-        if qa.order~=qb.order then return (qa.order or 100)<(qb.order or 100) end
-        if qa.complete~=qb.complete then return qa.complete end
+        local pa,pb=questSortPriority(qa,activeID),questSortPriority(qb,activeID)
+        if pa~=pb then return pa<pb end
+        local la,lb=questSortLevel(qa),questSortLevel(qb)
+        if la~=lb then return la<lb end
         return qa.title==qb.title and qa.id<qb.id or qa.title<qb.title
     end)
     for key,bucket in pairs(model.zones) do
@@ -1519,7 +1550,6 @@ local function arrange()
     end
     for n=#others+1,#hud.rail do hud.rail[n]:Hide() end
     setExtent(hud.railScroll,hud.railContent,#others*railGap)
-    local activeID=call(AT.GetQuestNavigationID)
     local pinnedID=call(AT.GetQuestHUDManualFocus)
     local width=math.max(180,hud.scroll:GetWidth()-8)
     hud.content:SetWidth(width)
@@ -1530,13 +1560,42 @@ local function arrange()
     local visual={}
     if groupScope then
         local closed=AT.char and AT.char.rankQuestClosedBranches
-        for _,g in ipairs(groupQuestEntries(model,entries,groupScope)) do
-            local key=groupScope..":"..g.key
-            local isClosed=(itemSearchQuestID and itemSearchCollapsed==true)
-                or (not itemSearchQuestID and is(closed,"table") and closed[key]==true)
-            visual[#visual+1]={group=g,stateKey=key,closed=isClosed}
-            if not isClosed then
-                for _,e in ipairs(g.entries) do visual[#visual+1]=e end
+        local groups=groupQuestEntries(model,entries,groupScope)
+        local priorityGroups={}
+        -- Lift only matching rows into the top of the current view. The rest
+        -- stay in their collapsible branches. Don't duplicate promoted rows.
+        for _,g in ipairs(groups) do
+            local remaining={}
+            for _,e in ipairs(g.entries) do
+                if questSortPriority(e.row,activeID)<2 and not itemSearchQuestID then
+                    priorityGroups[e]=g.name
+                else
+                    remaining[#remaining+1]=e
+                end
+            end
+            g.entries=remaining
+        end
+        for _,e in ipairs(entries) do
+            if priorityGroups[e] then
+                visual[#visual+1]={row=e.row,kind=e.kind,priorityGroup=priorityGroups[e]}
+            end
+        end
+        table.sort(groups,function(a,b)
+            local al=a.entries[1] and questSortLevel(a.entries[1].row) or math.huge
+            local bl=b.entries[1] and questSortLevel(b.entries[1].row) or math.huge
+            if al~=bl then return al<bl end
+            local l,r=lowerSearch(a.name),lowerSearch(b.name)
+            return l==r and a.key<b.key or l<r
+        end)
+        for _,g in ipairs(groups) do
+            if #g.entries>0 then
+                local key=groupScope..":"..g.key
+                local isClosed=(itemSearchQuestID and itemSearchCollapsed==true)
+                    or (not itemSearchQuestID and is(closed,"table") and closed[key]==true)
+                visual[#visual+1]={group=g,stateKey=key,closed=isClosed}
+                if not isClosed then
+                    for _,e in ipairs(g.entries) do visual[#visual+1]=e end
+                end
             end
         end
     else
@@ -1581,7 +1640,7 @@ local function arrange()
             yOffset=yOffset+26+offset
         else
             shownRows=shownRows+1
-            local indent=groupScope and 12 or 0
+            local indent=groupScope and not e.priorityGroup and 12 or 0
             width=outerWidth-indent
             local q=e.row
             if not q.partyOnly then shownOwned=shownOwned+1 end
@@ -1648,12 +1707,13 @@ local function arrange()
                 b.detail:SetTextColor(1,.78,.40)
             elseif marker and marker.area then
                 color(b.mark,.30,.96,.78,1)
-                detail=marker.area=="inside" and "In quest area" or "Near an objective"
+                if marker.area=="near" then detail="Near an objective" end
                 b.detail:SetTextColor(.52,.97,.85)
             else
                 color(b.mark,a.accent[1],a.accent[2],a.accent[3],q.complete and .95 or .62)
                 b.detail:SetTextColor(.63,.79,.82)
             end
+            if e.priorityGroup then detail=detail and (detail.."  |  "..e.priorityGroup) or e.priorityGroup end
             b.detail:SetText(detail or "")
             b.detail:SetShown(detail~=nil)
             b.badge:SetText(statusTag)

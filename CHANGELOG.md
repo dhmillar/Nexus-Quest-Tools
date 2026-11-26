@@ -2,6 +2,19 @@
 
 WowUp installs the Forever ZIP attached to tagged GitHub releases.
 
+## 1.5.104 - 2026-11-26
+
+### Changes
+- Rank Quest keeps your tracked quest first, promotes nearby objectives as you move, and sorts each group from lowest to highest quest level.
+- Drop rates display as whole percentages, rounded up. The standalone Forever database now has observed rates for 1,150 item IDs across 1,932 NPC/item and object/item pairs. Unknown rates stay blank. Optional QuestieDB data can identify items even with the Questie tracker disabled.
+- Added standalone world map and outdoor minimap pins for supported quests and services. Historical quest-giver sightings are optional and do not indicate quest availability.
+- The existing stock Auto Track hotkey automatically runs Smart Target out of combat. It can search for the saved mob without a selected target. If the game will not expose tap status before selection, the first press recalls the mob and the next can mark or ping it after checking.
+
+### Hotfixes
+- Restored Mute macro sounds on the regular Smart Target hotkey.
+- Removed redundant area labels from Rank Quest. Nearby highlights and progress text remain.
+- Dungeon boss targeting, mark rotation, and ping logic are unchanged.
+
 ## 1.5.103 - 2026-11-26
 
 ### Changes

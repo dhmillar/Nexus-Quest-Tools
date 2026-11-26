@@ -83,6 +83,14 @@ local function validPartial(name)
     return true
 end
 
+function AT.GetSafeTargetSearchLine()
+    local saved=AT.GetTargetName()
+    if not saved then return end
+    local partial=AT.IsPartialTarget()
+    if partial and not validPartial(saved) then return end
+    return (partial and "/target " or "/targetexact ").."[noexists] "..saved
+end
+
 local function enabled()
     return not AT.db or AT.db.enabled ~= false
 end
@@ -130,7 +138,7 @@ local function macroBody(name)
 end
 function AT.GetMarkerPingNotice()
     if not (AT.db and AT.db.enabled and AT.db.pressSkull) then return end
-    return "Bind Smart Target to skip other groups' tags."
+    return "Smart Target marks only mobs your group can tag."
 end
 
 function AT.IsOwnTargetMacro(id)
@@ -491,7 +499,7 @@ end
 local targetSounds = { 567453, 567520 }
 local mutedSounds = {}
 local muteGeneration = 0
-local function muteTargetSounds()
+function AT.MuteTargetMacroSounds()
     if not (AT.db and AT.db.quietTarget and C_Timer and C_Timer.After and MuteSoundFile and UnmuteSoundFile) then return end
     muteGeneration = muteGeneration + 1
     local generation = muteGeneration
@@ -542,14 +550,22 @@ end
 function AT.InitTarget()
     if initialized then return end
     initialized = true
+    SLASH_NQTTARGETDEBUG1 = "/nqttargetdebug"
+    SlashCmdList.NQTTARGETDEBUG=function()
+        say(AT.GetSmartTargetDiagnostic and AT.GetSmartTargetDiagnostic() or "Smart Target module did not load.")
+    end
     SLASH_AUTOTRACKMOB1 = "/atmob"
     SlashCmdList.AUTOTRACKMOB = function(message)
         message = message or ""
         local parsed, command = true, message
         if SecureCmdOptionParse then parsed, command = pcall(SecureCmdOptionParse, message) end
         if not parsed or private(command) or type(command) ~= "string" then return end
-        if command == "q" and enabled() then muteTargetSounds(); return end
-        if command == "m" and enabled() then warnIfTagged(AT.GetTargetName()); return end
+        if command == "q" and enabled() then AT.MuteTargetMacroSounds(); return end
+        if command=="z" then if AT.NoteSmartMacroExecuted then AT.NoteSmartMacroExecuted() end; return end
+        if command == "m" and enabled() then
+            if AT.NoteRecallMacroPress then AT.NoteRecallMacroPress() end
+            warnIfTagged(AT.GetTargetName()); return
+        end
         if command == "edit" or command == "e" then AT.OpenTargetEditor(); return end
         if command=="h" then
             if GetTime and AT.db and AT.db.bossAutoMark then bossMacroUntil=GetTime()+.09 end

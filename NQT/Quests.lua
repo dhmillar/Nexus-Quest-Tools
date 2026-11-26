@@ -447,11 +447,24 @@ function AT.SampleQuestAreas(ids,previous)
             if validID(id) then points[id]=poi end
         end
     end
-    local indoor=IsIndoors and call(IsIndoors)==true
-    if ctx then
-        local info=call(M.GetMapInfo,ctx.id)
-        local kind=field(info,"mapType")
-        if kind==4 or kind==5 then indoor=true end
+    -- A roof or cave is not an instance: a valid outdoor zone still
+    -- provides quest geometry. Never apply open-world distances in a dungeon.
+    local inInstance, instanceKind=call(IsInInstance)
+    local parentZone=ctx and zoneID(ctx.id)
+    local kind=ctx and field(call(M.GetMapInfo,ctx.id),"mapType")
+    local blocked=inInstance==true and instanceKind~="none" or kind==4 or kind==5 and not parentZone
+        or not ctx and call(IsIndoors)==true
+    local parent
+    if not blocked and parentZone and parentZone~=ctx.id then
+        parent={id=parentZone}
+        local parentPOIs=call(Q.GetQuestsOnMap,parentZone)
+        for _,poi in ipairs(isType(parentPOIs,"table") and parentPOIs or {}) do
+            local id=field(poi,"questID")
+            if validID(id) then
+                parent.points=parent.points or {}
+                parent.points[id]=poi
+            end
+        end
     end
     for id in pairs(ids) do
         if validID(id) and not completed(id) then
@@ -460,9 +473,13 @@ function AT.SampleQuestAreas(ids,previous)
             if task==true or blob==true then
                 result[id]="inside"
             else
-                if not indoor then
+                if not blocked then
                     local limit=previous[id] and EXIT_YARDS or ENTER_YARDS
                     local dist=distance(id,ctx,points[id],limit,true)
+                    if parent and (not dist or dist>limit*limit) then
+                        local other=distance(id,parent,parent.points and parent.points[id],limit,true)
+                        if other and (not dist or other<dist) then dist=other end
+                    end
                     if dist then result[id]=dist<=limit*limit and "near" or "outside" end
                 end
                 -- A negative signal alone is not a valid area test for an

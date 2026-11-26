@@ -130,6 +130,43 @@ end
 local areaTick
 C_Timer={NewTicker=function(_,fn) areaTick=fn end}
 AT.InitQuestHUD()
+do
+    local initialEntries=entries
+    local initialNavigation,initialSample=AT.GetQuestNavigationID,AT.SampleQuestAreas
+    local active,near=105,{[102]="near",[104]="inside"}
+    entries={
+        {isHeader=true,title="Stranglethorn Vale"},
+        {questID=101,title="General low",level=6},{questID=102,title="Near high",level=28},
+        {questID=103,title="General high",level=31},{questID=104,title="Near low",level=18},
+        {questID=105,title="Tracked high",level=50},{questID=106,title="Unknown level"}
+    }
+    AT.GetQuestNavigationID=function()return active end
+    AT.SampleQuestAreas=function(ids)
+        local r={}
+        for q in pairs(ids) do r[q]=near[q] or "outside" end
+        return r
+    end
+    local function order(...)
+        local shown={}
+        for _,b in ipairs(objs) do
+            if b.shown and b.qid and b.circle and b.anchor and b.anchor[5] and b.qid>=101 then shown[#shown+1]=b end
+        end
+        table.sort(shown,function(a,b)return a.anchor[5]>b.anchor[5] end)
+        local ids={}
+        for i,b in ipairs(shown) do ids[i]=b.qid end
+        assert(table.concat(ids,",")==table.concat({...},","),table.concat(ids,","))
+    end
+    AT.RefreshQuestHUD()
+    order(105,104,102,101,103,106)
+    near={[103]="near"};areaTick()
+    order(105,103,101,104,102,106)
+    active=102;AT.RefreshQuestHUD()
+    order(102,103,101,104,105,106)
+    entries=initialEntries
+    AT.GetQuestNavigationID,AT.SampleQuestAreas=initialNavigation,initialSample
+    AT.RefreshQuestHUD()
+    print("PASS Rank Quest tracked first, nearby leveled next, remote level order, unknown last and movement reshuffle")
+end
 for _,o in ipairs(objs) do if o.scripts.OnDragStart and o.scripts.OnMouseUp then header=o;break end end
 do
     AT.RefreshQuestHUD()
@@ -241,7 +278,7 @@ do
         AT.db.rankQuestDropRates=nil
         AT.RefreshQuestHUD()
         local row=assert(find("Acquired in Stranglethorn"))
-        assert(row.objectives[1].text:find("12.5%\226\128\14730%",1,true))
+        assert(row.objectives[1].text:find("13%\226\128\14730%",1,true))
         assert(row.objectives[2].text:find("(100%)",1,true))
         for i=3,5 do assert(not row.objectives[i].text:find("%%%)")) end
         AT.db.rankQuestDropRates=false;AT.RefreshQuestHUD()
@@ -253,25 +290,48 @@ do
     AT.RefreshQuestHUD()
     assert(not find("Acquired in Stranglethorn").objectives[1].text:find("%%%)"))
     assert(loadfile("NQT/EverlootDrops.lua"))("NQT",AT)
+    assert(AT.ObservedQuestDrops.items[783][1][6]==1,"standalone pack includes object loot")
+    AT.ObservedQuestDrops.items[990001]={{88,3,7,3,2,1}}
     local oldItem=C_Item
     C_Item={GetItemNameByID=function(x) if x==730 then return "Murloc Eye" end end}
     C_QuestLog.GetQuestObjectives=function(q)
         if q==12 then return {
             {type="item",itemID=730,text="Eye with id: 0/3"},
-            {type="item",text="Murloc Eye: 0/3"},
+            {type="item",text="0/3: Murloc Eye"},
             {type="item",text="Missing: 0/3"},
-            {type="monster",text="Murloc Eye: 0/3"}
+            {type="monster",text="Murloc Eye: 0/3"}, {type="item",itemID=990001,text="Object fixture: 0/3"}
         } end
         return getObjectives(q)
     end
     AT.RefreshQuestHUD()
     local offline=assert(find("Acquired in Stranglethorn"))
-    assert(offline.objectives[1].text:find("45.2% Everloot",1,true))
-    assert(offline.objectives[2].text:find("45.2% Everloot",1,true))
-    assert(not offline.objectives[3].text:find("Everloot",1,true) and not offline.objectives[4].text:find("Everloot",1,true))
+    assert(offline.objectives[1].text:find("(46%)",1,true))
+    assert(offline.objectives[2].text:find("(46%)",1,true))
+    assert(offline.objectives[5].text:find("(43%)",1,true) and not offline.objectives[5].text:find("~",1,true))
+    assert(not offline.objectives[3].text:find("%%%)") and not offline.objectives[4].text:find("%%%)"))
     AT.db.rankQuestDropRates=false;AT.RefreshQuestHUD()
-    assert(not offline.objectives[1].text:find("Everloot",1,true))
+    assert(not offline.objectives[1].text:find("%%%)"))
     print("PASS Questie-off objective renders observed drop estimates for numeric IDs and exact client names; toggle and unknowns")
+    AT.db.rankQuestDropRates=true
+    AT.ObservedQuestDrops.items[990002]={{89,2,5,3,2,0}}
+    local locale, provider=GetLocale,LibQuestieDB
+    GetLocale=function() return "enUS" end
+    LibQuestieDB={flavor={key="Forever"},
+        Quest={Get=function(q,k)
+            if q==12 and k=="objectives" then return {[3]={{990002}}} end
+        end},
+        Item={Get=function(i,k) if i==990002 and k=="name" then return "Only Provider Knows" end end}}
+    C_QuestLog.GetQuestObjectives=function(q)
+        if q==12 then return {{type="item",text="Only Provider Knows: 0/1"}} end
+        return getObjectives(q)
+    end
+    AT.RefreshQuestHUD()
+    assert(find("Acquired in Stranglethorn").objectives[1].text:find("(40%)",1,true))
+    LibQuestieDB.flavor.key="Classic"
+    AT.RefreshQuestHUD()
+    assert(not find("Acquired in Stranglethorn").objectives[1].text:find("%%%)"))
+    GetLocale,LibQuestieDB=locale,provider
+    print("PASS optional Forever QuestieDB item resolution without Questie tracker and with a cold cache")
     C_Item=oldItem
     C_QuestLog.GetQuestObjectives=getObjectives
     AT.db.questHUDTheme=1;AT.db.rankQuestDropRates=nil;AT.RefreshQuestHUD()
@@ -935,8 +995,29 @@ local area,progress=AT.GetRankQuestHighlight(15)
 assert(area=="near" and not progress,"initial objective read is not a progress update")
 assert(find("No NPC metadata").detail.text=="Near an objective")
 assert(not AT.GetRankQuestHighlight(11))
+-- Quest in another journal zone with a local objective, including under a roof.
+local oldIndoors,oldInstance=IsIndoors,IsInInstance
+IsIndoors=function() return true end
+IsInInstance=function() return false,"none" end
+distances[13]=100;areaTick()
+assert(AT.GetRankQuestHighlight(13)=="near","movement samples objectives even if journal grouped them elsewhere")
+distances[13]=240;areaTick()
+assert(not AT.GetRankQuestHighlight(13),"movement clears newly distant objective")
+IsInInstance=function() return true,"party" end
+distances[13]=100;areaTick()
+assert(not AT.GetRankQuestHighlight(13),"a dungeon must not reuse outdoor distances")
+local oldSize,oldPos,oldWP=C_Map.GetMapWorldSize,C_Map.GetPlayerMapPosition,C_QuestLog.GetNextWaypoint
+IsInInstance=function() return false,"none" end
+C_Map.GetMapWorldSize=function(z) if z==1 then return 1000,1000 end end
+C_Map.GetPlayerMapPosition=function(z) if z==1 then return { GetXY=function() return .5,.5 end } end end
+C_QuestLog.GetNextWaypoint=function(q) if q==13 then return 1,.51,.5 elseif oldWP then return oldWP(q) end end
+distances[13]=nil;map=88;areaTick()
+assert(AT.GetRankQuestHighlight(13)=="near","micro map uses verified parent-zone waypoint geometry")
+C_Map.GetMapWorldSize,C_Map.GetPlayerMapPosition,C_QuestLog.GetNextWaypoint=oldSize,oldPos,oldWP
+map=1;AT.RefreshQuestHUD()
+IsIndoors,IsInInstance=oldIndoors,oldInstance;distances[13]=nil
 task[11]=true;areaTick()
-assert(AT.GetRankQuestHighlight(11)=="inside" and find("A flight to Duskwood").detail.text=="In quest area")
+assert(AT.GetRankQuestHighlight(11)=="inside" and find("A flight to Duskwood").detail.text~="In quest area")
 count=3; AT.RefreshQuestHUD()
 assert(select(2,AT.GetRankQuestHighlight(15)) and find("No NPC metadata").detail.text:match("Progress updated"))
 distances[15]=200;areaTick()

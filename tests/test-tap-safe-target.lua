@@ -10,7 +10,11 @@ function CreateFrame(_,name)
     local f={script={},attr={}}
     function f:SetScript(k,v) self.script[k]=v end
     function f:SetAttribute(k,v) self.attr[k]=v end
-    function f:Hide() end
+    function f:Hide() self.shown=false end
+    function f:Show() self.shown=true end
+    function f:SetSize() end
+    function f:SetPoint() end
+    function f:SetText(text) self.label=text end
     function f:RegisterEvent() end
     function f:UnregisterEvent() end
     function f:RegisterForClicks() end
@@ -41,32 +45,60 @@ assert(loadfile("NQT/Target.lua"))("NQT",AT)
 AT.InitTarget()
 assert(not body:find("/tm",1,true) and not body:find("/ping",1,true),"existing owned action-slot macro must be rewritten")
 assert(body:find("/targetexact",1,true) and body:find("/atmob m",1,true),"slot keeps native recall without blind marking/pinging")
+local owner,overrides,actionKind=nil,{},"macro"
+ActionButton1={action=1}
+ActionButton2={action=2}
+function GetActionInfo(slot) if slot==1 then return actionKind,121 else return "macro",123 end end
+function GetBindingKey(command) if command=="ACTIONBUTTON1" then return "1","SHIFT-1" else return "2" end end
+function GetBindingAction(key) return (key=="1" or key=="SHIFT-1") and "ACTIONBUTTON1" or "ACTIONBUTTON2" end
+function RegisterStateDriver(frame,attribute,conditional)
+    owner=frame
+    assert(attribute=="nqtcombat" and conditional=="[combat] combat; peace")
+    assert(frame.attr["_onstate-nqtcombat"]:find("ClearBindings",1,true))
+end
+function ClearOverrideBindings(frame) assert(frame==owner);overrides={} end
+function SetOverrideBindingClick(frame,priority,key,name,button)
+    assert(frame==owner and priority==false and name=="AutoTrackSmartTargetButton" and button=="LeftButton")
+    overrides[key]=true
+end
+AT.Say=function() end
 assert(loadfile("NQT/SmartTarget.lua"))("NQT",AT)
 last.script.OnEvent(last,"PLAYER_LOGIN")
 local btn=assert(buttons.AutoTrackSmartTargetButton)
+assert(btn.shown and btn.label=="Smart Target")
+assert(owner and overrides["1"] and overrides["SHIFT-1"] and not overrides["2"],"automatically reuse only the owned slot shortcuts")
+actionKind="spell";owner.script.OnEvent();assert(not next(overrides),"page or slot changes restore unmodified bindings")
+actionKind="macro";owner.script.OnEvent();assert(overrides["1"])
+AT.db.enabled=false;AT.RefreshSmartTargetBarKeys();assert(not next(overrides));AT.db.enabled=true;AT.RefreshSmartTargetBarKeys()
+AT.db.showSmartTargetButton=false; AT.RefreshSmartTargetButton(); assert(not btn.shown)
+AT.db.showSmartTargetButton=true; AT.RefreshSmartTargetButton(); assert(btn.shown)
 local function press()
     btn.script.PreClick(btn,"LeftButton",false)
     action=btn.attr.macrotext
+    if action:find("/atmob z",1,true) then SlashCmdList.AUTOTRACKMOB("z") end
     btn.script.PostClick(btn)
     assert(btn.attr.macrotext=="/stopmacro")
     return action
 end
 local function pick(token)
     local line=press()
-    assert(line:find("/target [@"..token..",harm,nodead] "..token,1,true),line)
-    assert(line:find("/tm [@"..token..",harm,nodead] !8",1,true),line)
-    assert(line:find("/ping [@"..token..",harm,nodead] Attack",1,true),line)
-    assert(not line:find("/cleartarget",1,true) and not line:find("/targetexact",1,true))
+    assert(line:find("/target [@"..token..",exists,harm,nodead] "..token,1,true),line)
+    assert(line:find("/tm [@"..token..",exists,harm,nodead] !8",1,true),line)
+    assert(line:find("/ping [@"..token..",exists,harm,nodead] Attack",1,true),line)
+    assert(not line:find("/cleartarget [nocombat]",1,true)); if units.target then assert(not line:find("/targetexact",1,true)) end
 end
 local denied={name="Raptor",tap=true,distance=4}
 local allowed={name="Raptor",tap=false,distance=50}
 units={target=denied,nameplate1=denied,nameplate2=allowed,nameplate3={name="Raptor",tap=false,distance=90}}
 pick("nameplate2")
+assert(AT.GetSmartTargetDiagnostic():find("Secure macro ran",1,true))
+SlashCmdList.AUTOTRACKMOB("m"); assert(AT.GetSmartTargetDiagnostic():find("action-bar recall macro ran",1,true))
+AT.db.pingWithMarker=false; local mark=press(); assert(mark:find("/tm ",1,true) and not mark:find("/ping ",1,true)); AT.db.pingWithMarker=true
 units.target=allowed
 units.nameplate3.distance=40
 pick("nameplate3")
 units.nameplate2=nil;units.nameplate3=nil
-assert(press():find("/tm [@target,harm,nodead]",1,true))
+assert(press():find("/tm [@target,exists,harm,nodead]",1,true))
 units.target=denied
 for _,tap in ipairs({true,secret,"false",0}) do
     units.nameplate2={name="Raptor",tap=tap}
@@ -87,9 +119,35 @@ assert(press()=="/stopmacro" and AT.char.targetName=="Troll","corpse can teach n
 AT.char.targetName="Rap"; AT.char.targetPartial=true
 units={mouseover={name="Jungle Raptor",tap=false}}
 pick("mouseover")
+C_NamePlate={GetNamePlates=function() return {{namePlateUnitToken="nameplate77"}} end}
+units={nameplate77={name="Jungle Raptor",tap=false}}
+pick("nameplate77")
+units={nameplate77={name="Jungle Raptor",tap=true}}
+assert(press()=="/stopmacro","do not recall a known denied match")
+units={nameplate77={name="Jungle Raptor"}} -- unreadable tap off-target
+local search=press()
+assert(search:find("/target [noexists] Rap",1,true) and not search:find("/tm",1,true) and not search:find("/ping",1,true))
+AT.char.targetName="Raptor";AT.char.targetPartial=false
+assert(press():find("/targetexact [noexists] Raptor",1,true))
+units.target={name="Raptor",tap=false}
+assert(press():find("/tm [@target,exists,harm,nodead] !8",1,true))
 AT.db.pressSkull=false
+units={nameplate77={name="Raptor",tap=false}}
 local plain=press()
 assert(plain:find("/target",1,true) and not plain:find("/tm",1,true) and not plain:find("/ping",1,true))
+local muted,restored,timers=0,0,{}
+function MuteSoundFile() muted=muted+1 end
+function UnmuteSoundFile() restored=restored+1 end
+C_Timer={After=function(t,fn) timers[#timers+1]={t,fn} end}
+AT.db.quietTarget=true
+units={};press()
+assert(muted==2,"the real Smart Target PreClick must mute before issuing native recall")
+for _,timer in ipairs(timers) do timer[2]() end
+assert(restored==2,"restore only the target sounds briefly muted")
+AT.db.quietTarget=false
+press()
+assert(muted==2,"do not mute when disabled")
+C_Timer=nil
 combat=true
 assert(press()=="/stopmacro")
 print("PASS hardware Smart Target rejects denied/unknown, uses eligible units only, and owned normal macro cannot send blind marks/pings")
