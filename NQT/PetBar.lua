@@ -1,6 +1,6 @@
 local _,AT=...
 local bar,events,listening,anchoredPlate,anchoredToken
-local tokenHint,removedPlate,recheck
+local tokenHint,removedPlate,recheck,bootstrapGeneration
 local healthColorCurve,renderStatus,followElapsed
 local masked={}
 local settingMode,leasePending,writing
@@ -57,7 +57,7 @@ local function syncPetCVar(wanted)
 end
 local function ownsUnit(unit)
     if issecretvalue and issecretvalue(unit) or type(unit)~="string" then return false end
-    if safe(UnitIsUnit,"pet",unit)==true then return true end
+    if unit=="pet" or safe(UnitIsUnit,"pet",unit)==true then return true end
     local pet=read(UnitGUID,"pet","string")
     return pet~=nil and pet==read(UnitGUID,unit,"string")
 end
@@ -82,6 +82,15 @@ end
 local function restoreAllArt()
     for frame in pairs(masked) do restoreArt(frame) end
 end
+local function maskArt(frame,plate,token)
+    if not frame or frame==plate or safe(frame.IsForbidden,frame)~=false then return end
+    if masked[frame] and masked[frame].token~=token then restoreArt(frame) end
+    local alpha=safe(frame.GetAlpha,frame)
+    if finite(alpha) and alpha~=0 then
+        safe(frame.SetAlpha,frame,0)
+        if safe(frame.GetAlpha,frame)==0 then masked[frame]={token=token,alpha=alpha} end
+    end
+end
 local function hideStockArt(plate,token)
     if not outdoor() or not usable(plate) then return end
     if type(token)~="string" or (issecretvalue and issecretvalue(token)) then return end
@@ -93,12 +102,12 @@ local function hideStockArt(plate,token)
         if not ((guid and guid:match("^Pet%-")) or safe(UnitIsOtherPlayersPet,token)==true)
             or safe(UnitIsFriend,"player",token)~=true then return end
     end
-    if not frame or frame==plate or safe(frame.IsForbidden,frame)~=false then return end
-    local alpha=safe(frame.GetAlpha,frame)
-    if not finite(alpha) then return end
-    if finite(alpha) and alpha~=0 then
-        safe(frame.SetAlpha,frame,0)
-        if safe(frame.GetAlpha,frame)==0 then masked[frame]={token=token,alpha=alpha} end
+    maskArt(frame,plate,token)
+    -- Plater draws the name and owner subtitle in its own child, not UnitFrame.
+    if own then
+        local alternate=plate.unitFramePlater
+        if not alternate and plate.ActorNameSpecial and plate.ActorTitleSpecial then alternate=plate.unitFrame end
+        if alternate~=frame then maskArt(alternate,plate,token) end
     end
 end
 local function filterExistingPlates()
@@ -192,8 +201,10 @@ local function bindToPlate(plate,token)
     local followsCoordinates=screenAnchor(plate)
     if not followsCoordinates and not pcall(bar.SetPoint,bar,"BOTTOM",plate,"TOP",0,2) then return false end
     followElapsed=0
+    local artElapsed=0
     events:SetScript("OnUpdate",function(_,dt)
         followElapsed=followElapsed+dt
+        artElapsed=artElapsed+dt
         if followElapsed<.04 then return end
         followElapsed=0
         local currentToken=usable(plate) and plateToken(plate)
@@ -201,6 +212,10 @@ local function bindToPlate(plate,token)
             bar:Hide()
         elseif not followsCoordinates or screenAnchor(plate) then bar:Show()
         else bar:Hide() end
+        if artElapsed>=.2 then
+            artElapsed=0
+            if bar:IsShown() then hideStockArt(plate,currentToken or anchoredToken or "pet") end
+        end
     end)
     anchoredPlate,anchoredToken=plate,token
     return true
@@ -225,8 +240,23 @@ local function paintNativeHealth()
         for _,edge in ipairs(bar.edge) do pcall(edge.SetColorTexture,edge,r,g,b,a) end
     end)
 end
+local function scheduleBootstrap()
+    if not (C_Timer and C_Timer.After and AT.db and AT.db.enabled~=false and AT.db.petBarEnabled==true) then return end
+    local generation=(bootstrapGeneration or 0)+1
+    bootstrapGeneration=generation
+    for _,delay in ipairs({.15,.6,1.5,4}) do
+        C_Timer.After(delay,function()
+            if bootstrapGeneration~=generation or not AT.db or AT.db.enabled==false or AT.db.petBarEnabled~=true then return end
+            -- Other nameplate addons can apply their saved CVars after PLAYER_ENTERING_WORLD.
+            if outdoor() and read(UnitExists,"pet","boolean")==true
+                and (getPetCVar(modernPetCVar) or getPetCVar(legacyPetCVar))=="0" then settingMode=nil end
+            AT.RefreshPetBar()
+        end)
+    end
+end
 local function petEvent(_,event,unit)
     if event=="PLAYER_LOGOUT" then
+        bootstrapGeneration=nil
         syncPetCVar(false)
         restoreAllArt()
         return
@@ -258,6 +288,7 @@ local function petEvent(_,event,unit)
         restoreAllArt()
         AT.RefreshPetBar()
         if outdoor() and read(UnitExists,"pet","boolean")==true then filterExistingPlates() end
+        scheduleBootstrap()
     elseif (event=="UNIT_HEALTH" or event=="UNIT_MAXHEALTH" or event=="UNIT_NAME_UPDATE") and unit=="pet" then
         AT.RefreshPetBar()
     end
@@ -269,6 +300,7 @@ function AT.RefreshPetBar()
     syncPetCVar(wanted)
     if not wanted then restoreAllArt() end
     if not enabled then
+        bootstrapGeneration=(bootstrapGeneration or 0)+1
         if not leasePending then events:UnregisterAllEvents();listening=nil end
         detach()
         tokenHint,removedPlate=nil,nil
@@ -343,4 +375,5 @@ function AT.InitPetBar()
         SlashCmdList.NQTPETBAR=function() print("NQT Pet Bar: "..statusText()) end
     end
     AT.RefreshPetBar()
+    scheduleBootstrap()
 end

@@ -21,6 +21,8 @@ C_NamePlate={
 function UnitIsUnit(a,b)return a=="pet" and b==ownership end
 local cv={nameplateShowFriendlyPlayerPets="0",nameplateShowFriendlyPlayers="0",nameplateShowFriendlyNpcs="0",nameplateShowFriends="0"}
 local writes={}
+local timers={}
+C_Timer={After=function(delay,callback)timers[#timers+1]={delay,callback}end}
 C_CVar={
     GetCVar=function(k)return cv[k] end,
     SetCVar=function(k,v) writes[#writes+1]=k;cv[k]=v end,
@@ -39,6 +41,7 @@ local function stock(alpha,forbidden)
         GetAlpha=function(self)return self.a end,SetAlpha=function(self,v)self.a=v end}
 end
 mine.UnitFrame,other.UnitFrame=stock(1),stock(.72)
+mine.unitFramePlater,other.unitFramePlater=stock(.84),stock(.71)
 local npc,enemy,protected=plate("nameplate11"),plate("nameplate10"),plate("nameplate12")
 npc.UnitFrame,enemy.UnitFrame,protected.UnitFrame=stock(.8),stock(.9),stock(1,true)
 listed={mine,other,npc,enemy,protected}
@@ -60,6 +63,7 @@ function CreateFrame(kind)
     function f:UnregisterAllEvents()self.events={} end
     function f:Hide()self.shown=false end
     function f:Show()self.shown=true end
+    function f:IsShown()return self.shown end
     if kind=="Frame" then watcher=f;return f end
     assert(kind=="StatusBar")
     bar=f;f.parent=UIParent
@@ -88,6 +92,10 @@ assert(bar.parent==UIParent and bar.point[2]==mine and bar.point[1]=="BOTTOM" an
 assert(cv.nameplateShowFriendlyPlayerPets=="1" and cv.nameplateShowFriendlyPlayers=="0"
     and cv.nameplateShowFriendlyNpcs=="0" and cv.nameplateShowFriends=="0")
 assert(other.UnitFrame.a==0 and mine.UnitFrame.a==0 and npc.UnitFrame.a==.8 and enemy.UnitFrame.a==.9 and protected.UnitFrame.a==1)
+assert(mine.unitFramePlater.a==0 and other.unitFramePlater.a==.71,"hide only the active pet Plater child")
+mine.unitFramePlater.a=.88
+watcher.onUpdate(watcher,.21)
+assert(mine.unitFramePlater.a==0,"hide refreshed Plater art without touching its parent")
 assert(bar.height==8 and not bar.interactive and bar.range[1]==0 and bar.range[2]==100)
 assert(watcher.events.UNIT_HEALTH=="pet" and watcher.events.UNIT_PET=="player" and watcher.events.UNIT_NAME_UPDATE=="pet")
 assert(bar.petName.text=="Ember" and bar.petName.point[1]=="BOTTOM" and bar.petName.point[2]==bar and bar.petName.point[3]=="TOP")
@@ -107,7 +115,7 @@ health(0);assert(bar.value==0 and bar.red and bar.label.text=="0%")
 sample.maximum=50;sample.health=30
 watcher.onEvent(watcher,"UNIT_MAXHEALTH","pet");assert(bar.value==60 and not bar.red)
 sample.present=false
-watcher.onEvent(watcher,"UNIT_PET","player");assert(not bar.shown and cv.nameplateShowFriendlyPlayerPets=="0" and other.UnitFrame.a==.72)
+watcher.onEvent(watcher,"UNIT_PET","player");assert(not bar.shown and cv.nameplateShowFriendlyPlayerPets=="0" and other.UnitFrame.a==.72 and mine.unitFramePlater.a==.88)
 sample.present=true
 watcher.onEvent(watcher,"UNIT_PET","player");assert(bar.shown and created==2)
 watcher.onEvent(watcher,"NAME_PLATE_UNIT_REMOVED","nameplate7")
@@ -170,5 +178,14 @@ cv.nameplateShowFriendlyPlayerPets="0"
 AT.db.petBarEnabled=true;AT.RefreshPetBar()
 instance=true;watcher.onEvent(watcher,"PLAYER_ENTERING_WORLD")
 assert(cv.nameplateShowFriendlyPlayerPets=="0","never force exposure in instances")
+instance=false; direct=nil; listed={}; timers={}
+watcher.onEvent(watcher,"PLAYER_ENTERING_WORLD")
+assert(not bar.shown and #timers==4,"saved toggle retries without a ready plate")
+cv.nameplateShowFriendlyPlayerPets="0"
+listed={replacement}
+assert(timers[2][1]==.6);timers[2][2]()
+assert(bar.shown and cv.nameplateShowFriendlyPlayerPets=="1","late Plater setting and plate are reconciled without toggling")
+AT.db.petBarEnabled=false;AT.RefreshPetBar()
+timers[4][2]();assert(not bar.shown and cv.nameplateShowFriendlyPlayerPets=="0","stale startup callback cannot re-enable disabled bar")
 for _,key in ipairs(writes) do assert(key=="nameplateShowFriendlyPlayerPets") end
 print("PASS Pet Bar: bright green and red threshold, exact pet anchor, pet-only category lease and restoration, confirmed friendly pet filtering and instance guards")

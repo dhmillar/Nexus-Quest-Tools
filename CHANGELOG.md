@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.199 - 2026-11-27
+
+- Hides the duplicate name and owner subtitle drawn by Plater for your active pet while Pet Bar is visible. Other Plater units and settings are unchanged.
+- Retries Pet Bar setup after login, reload, and pet changes, including when another addon reapplies the friendly-pet category during startup.
+
 ## 1.5.198 - 2026-11-27
 
 - Shows only your active pet’s name above the Pet Bar, replacing the stock owner label. The health display and nameplate settings are unchanged.
