@@ -26,7 +26,7 @@ function UnitIsUnit(a,b)return raid and a=="raid1" and b=="player" end
 function InCombatLockdown()return locked end
 C_UnitAuras={GetAuraDataByIndex=function(u,i)
     local id=auras[u] and auras[u][i]
-    if id then return {spellId=id,name=spells[id]} end
+    if id then return {spellId=id,name=spells[id],sourceUnit=(u=="player" and "player" or nil)} end
 end}
 local edits={}
 AT.SyncSmartBuffAction=function(cmd,pickup)edits[#edits+1]={cmd,pickup};return true end
@@ -195,7 +195,7 @@ do
     end
     local activeAspect=13165
     function C_UnitAuras.GetPlayerAuraBySpellID(id)
-        if id==activeAspect then return {spellId=id,name=spells[id]} end
+        if id==activeAspect then return {spellId=id,name=spells[id],sourceUnit=(u=="player" and "player" or nil)} end
     end
     function IsIndoors() error("Hunter aspects should not consult indoor state") end
     AT.RefreshSmartBuff()
@@ -236,6 +236,31 @@ do
     AT.db.enabled=true
     AT.db.smartBuffEnabled=true
     print("PASS Hunter action-bar toggle works with reminders switched off; master disable still stops it")
+
+    -- Client temporarily withholds aura info; a successful self-aspect cast
+    -- must advance the next press. A separate Hunter's Pack cannot pin Hawk.
+    local oldRead=C_UnitAuras.GetAuraDataByIndex
+    local now=100
+    function GetTime()return now end
+    C_UnitAuras.GetAuraDataByIndex=function(_,i) if i==1 then return {} end end
+    local watchFrame=frames[2]
+    AT.RefreshSmartBuff()
+    local fallback=edits[#edits][1]
+    assert(fallback:find("/castsequence",1,true) and fallback:find("Cheetah",1,true))
+    watchFrame.scripts.OnEvent(watchFrame,"UNIT_SPELLCAST_SUCCEEDED","player","spell",13165)
+    assert(edits[#edits][1]:find("[nocombat,@player] !Aspect of the Cheetah",1,true))
+    watchFrame.scripts.OnEvent(watchFrame,"UNIT_SPELLCAST_SUCCEEDED","player","spell",5118)
+    assert(edits[#edits][1]:find("[nocombat,@player] !Aspect of the Hawk",1,true))
+    now=101
+    C_UnitAuras.GetAuraDataByIndex=function(u,i)
+        if i==1 then return {spellId=13159,sourceUnit="party1"} end
+        if i==2 then return {spellId=13165,sourceUnit="player"} end
+    end
+    AT.RefreshSmartBuff()
+    assert(edits[#edits][1]:find("[nocombat,@player] !Aspect of the Cheetah",1,true))
+    C_UnitAuras.GetAuraDataByIndex=oldRead
+    watchFrame.scripts.OnEvent(watchFrame,"PLAYER_DEAD")
+    print("PASS Hunter recovery: unknown aura, successful casts, and a party member's Pack")
     print("PASS movable reminder scale, icon-only edit mode, reset and hide when covered")
 end
 

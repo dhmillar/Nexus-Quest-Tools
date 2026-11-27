@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.221
+
+- Hunter Smart Buff uses successful aspect casts to recover from delayed or unreadable buff data, ignores a party member's Pack, and can fall back to a native cast sequence outside combat rather than repeatedly selecting Hawk.
+
 ## 1.5.220
 
 - Auto Focus chooses only current-zone objectives or hand-ins and clears when none qualify. Manual selections can still route across zones. Verified Mai'Zoth's hand-in at Brother Nimetz. Both maps, including MapWise, draw progress in yellow and turn-ins in green.

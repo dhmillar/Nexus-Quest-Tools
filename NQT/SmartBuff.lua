@@ -444,23 +444,62 @@ local function createReminderClicker()
 end
 local idleMacro="# No buff to cast"
 
-local function hunterTravelActive(hawk,cheetah,pack)
-    -- A targeted lookup can still confirm an aspect if a separate buff
-    -- makes the full aura list unreadable. It never invents an aura result.
-    local find=C_UnitAuras and C_UnitAuras.GetPlayerAuraBySpellID
-    if find then
-        for _,id in ipairs({5118,13159}) do
-            local aura=call(find,id)
-            if type(aura)=="table" then return true end
+local recentAspect
+local function aspectNow() return call(GetTime) or 0 end
+local function aspectFromID(id)
+    if type(id)~="number" then return end
+    for _,key in ipairs({"hawk","monkey","cheetah","pack"}) do
+        for _,rank in ipairs(catalog[key].r) do
+            if id==rank then return key end
         end
-        if hawk and type(call(find,hawk.id))=="table" then return false end
     end
-    local snapshot=auraSnapshot("player")
-    if not snapshot then return nil end
-    return (cheetah and hasAura(snapshot,cheetah)==true)
-        or (pack and hasAura(snapshot,pack)==true)
-        or snapshot.ids[5118]==true or snapshot.ids[13159]==true
-        or snapshot.names[spellName(5118) or ""]==true or snapshot.names[spellName(13159) or ""]==true
+end
+local function travelAspect(key) return key=="cheetah" or key=="pack" end
+
+local function hunterTravelActive(hawk,cheetah,pack)
+    local age=recentAspect and aspectNow()-recentAspect.at or math.huge
+    -- Spell success can precede the corresponding aura update by a frame.
+    if recentAspect and age>=0 and age<.8 then return travelAspect(recentAspect.key) end
+    local function owns(a,key)
+        local source=safe(a.sourceUnit)
+        if type(source)=="string" then
+            return source=="player" or call(UnitIsUnit,source,"player")==true
+        end
+        if key=="pack" then
+            -- Another Hunter's Pack can appear on us while our Hawk is active.
+            return safe(a.isFromPlayerOrPlayerPet)==true
+        end
+        return true -- Hawk, Monkey and Cheetah are self-only.
+    end
+    local found
+    local function seen(a,key)
+        if type(a)~="table" or not key or not owns(a,key) then return end
+        if not found or travelAspect(key) then found=key end
+    end
+    local auras=C_UnitAuras
+    if auras and auras.GetPlayerAuraBySpellID then
+        for _,id in ipairs({5118,13159,hawk and hawk.id or 13165,13163}) do
+            seen(call(auras.GetPlayerAuraBySpellID,id),aspectFromID(id))
+        end
+    end
+    if not found and auras and auras.GetAuraDataByIndex then
+        for i=1,80 do
+            local ok,a=pcall(auras.GetAuraDataByIndex,"player",i,"HELPFUL")
+            if not ok or ordinary(a) and a==nil then break end
+            if ordinary(a) and type(a)=="table" then
+                local key=aspectFromID(safe(a.spellId))
+                local name=safe(a.name)
+                if not key and type(name)=="string" then
+                    if pack and name==pack.name then key="pack"
+                    elseif cheetah and name==cheetah.name then key="cheetah"
+                    elseif hawk and name==hawk.name then key="hawk" end
+                end
+                seen(a,key)
+            end
+        end
+    end
+    if found then return travelAspect(found) end
+    if recentAspect and age>=0 and age<20 then return travelAspect(recentAspect.key) end
 end
 local function hunterMacro()
     local hawk,monkey,cheetah,pack=spellFor("hawk"),spellFor("monkey"),spellFor("cheetah"),spellFor("pack")
@@ -476,9 +515,22 @@ local function hunterMacro()
     elseif travel==false then
         add("nocombat,group",pack)
         add("nocombat",cheetah or hawk)
+    elseif hawk and (cheetah or pack) then
+        -- If aura data is unavailable, let WoW advance a fixed sequence on
+        -- successful manual casts. Combat remains on the native clauses above.
+        local choices={}
+        if pack then choices[#choices+1]="[group] !"..pack.name..",!"..hawk.name end
+        if cheetah then choices[#choices+1]="!"..cheetah.name..",!"..hawk.name
+        else choices[#choices+1]="!"..hawk.name end
+        if #clauses>0 then
+            local fallback="#showtooltip\n/cast "..table.concat(clauses,";")..
+                "\n/stopmacro [combat]\n/castsequence "..table.concat(choices,";")
+            if #fallback<=236 then return fallback end
+        end
+        add("nocombat,group",pack)
+        add("nocombat",cheetah or hawk)
     else
-        -- Do not guess whether it is time to switch to a travel aspect.
-        add("nocombat",hawk)
+        add("nocombat",cheetah or hawk)
     end
     local command="#showtooltip\n/cast "..table.concat(clauses,"; ")
     if #clauses==0 then return idleMacro end
@@ -650,12 +702,23 @@ function AT.InitSmartBuff()
     if watcher or not CreateFrame then return end
     overlay=createOverlay()
     watcher=CreateFrame("Frame")
-    for _,event in ipairs({"PLAYER_ENTERING_WORLD","GROUP_ROSTER_UPDATE","SPELLS_CHANGED",
+    for _,event in ipairs({"PLAYER_ENTERING_WORLD","PLAYER_DEAD","GROUP_ROSTER_UPDATE","SPELLS_CHANGED",
         "PLAYER_TARGET_CHANGED","UNIT_TARGET","UNIT_AURA","UNIT_SPELLCAST_SUCCEEDED","UNIT_CONNECTION","PLAYER_REGEN_DISABLED","PLAYER_REGEN_ENABLED","UPDATE_INVENTORY_ALERTS","UNIT_INVENTORY_CHANGED"}) do
         pcall(watcher.RegisterEvent,watcher,event)
     end
-    watcher:SetScript("OnEvent",function(_,event,unit)
-        if event=="UNIT_SPELLCAST_SUCCEEDED" and unit~="player" then return end
+    watcher:SetScript("OnEvent",function(_,event,unit,_,spellID)
+        if event=="PLAYER_DEAD" then recentAspect=nil;return end
+        if event=="UNIT_SPELLCAST_SUCCEEDED" then
+            if unit~="player" then return end
+            if shortClass()=="HUNTER" and AT.db.enabled~=false then
+                local key=aspectFromID(safe(spellID))
+                if key then
+                    recentAspect={key=key,at=aspectNow()}
+                    AT.RefreshSmartBuff()
+                    return
+                end
+            end
+        end
         if event=="UNIT_AURA" and (type(unit)~="string" or not (unit=="player" or unit:match("^party%d+$") or unit:match("^raid%d+$"))) then return end
         if event=="PLAYER_REGEN_ENABLED" or event=="GROUP_ROSTER_UPDATE" then AT.RefreshSmartBuff();return end
         local hunter=AT.db.enabled~=false and shortClass()=="HUNTER"
