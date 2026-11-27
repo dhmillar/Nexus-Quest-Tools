@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.242
+
+- Pet Bar follows your actual pet again. It hides when WoW does not expose a usable pet nameplate, rather than attaching to your character or showing a stationary HUD. Friendly player and NPC nameplate settings remain unchanged.
+
 ## 1.5.241
 
 - Tracked ready quests can route to a unique recorded outdoor turn-in NPC when the client omits the hand-in pin. Both maps use that same destination; the world map labels it as recorded. Missing, ambiguous, wrong-faction, indoor placeholders and mismatched objective pins are not used as fallbacks.

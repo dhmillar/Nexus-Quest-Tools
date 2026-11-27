@@ -315,7 +315,7 @@ local function buildPanel()
         if AT.SetSmartBuffPreview then AT.SetSmartBuffPreview(false) end
     end)
     option(classes, "petBarEnabled", "Pet Bar", -294,
-        "Shows your active pet's health in the upper-left HUD, even with friendly nameplates off. Bright green at 50% and above, red below 50%.")
+        "Follows your active pet when the game exposes its nameplate. Never anchors to the player or shows a stationary fallback. Bright green at 50% and above, red below 50%.")
     option(classes, "smartBuffEnabled", "Smart Buff reminders", -2,
         "Shows missing buffs for your class. Turning off reminders does not disable the Hunter action-bar macro.")
     buffPreviewButton = setupButton(classes,"Preview / Move",158,397,-3,function()
