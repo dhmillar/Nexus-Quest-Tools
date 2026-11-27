@@ -15,6 +15,7 @@ local defaults = {
     hunterDeadzoneY = 0,
     minimapAngle = 220,
     questHUDEnabled = false,
+    rankQuestFocusCloseCompleted = false,
     dungeonPositionEnabled = true,
     dungeonPositionAutoOpen = true,
     dungeonMapMinimap = true,

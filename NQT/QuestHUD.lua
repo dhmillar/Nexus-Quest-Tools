@@ -5,6 +5,7 @@ local initialPaintPending
 local ALL_ZONES,ALL_DUNGEONS={},{}
 local popupOpen,completedView,toolbarOpen=false,false,false
 local preferredCompleted,resolveStatusOnSelection=false,false
+local visibleAutoTurnIn,renderedNavigationID
 local selectedDungeon
 local shareOpen,shareJob
 local searchWords,searchOpen={},false
@@ -2042,6 +2043,14 @@ end
 
 local function arrange()
     if not hud or not model then return end
+    local activeID,source=call(AT.GetQuestNavigationID)
+    local automaticTurnIn=source=="nearby-turn-in" and activeID or nil
+    renderedNavigationID=activeID
+    if automaticTurnIn~=visibleAutoTurnIn then
+        completedView=automaticTurnIn~=nil
+        resolveStatusOnSelection=false
+        visibleAutoTurnIn=automaticTurnIn
+    end
     if AT.InvalidateRankQuestItems then AT.InvalidateRankQuestItems() end
     local a=themes[AT.db.questHUDTheme] or themes[2]
 
@@ -2183,7 +2192,12 @@ local function arrange()
             if includes(e.row) then entries[#entries+1]=e end
         end
     end
-    local activeID=call(AT.GetQuestNavigationID)
+    if automaticTurnIn and completedView and not searching and not viewedZone and not selectedDungeon then
+        local row=model.rows[automaticTurnIn]
+        if row and readyToTurnIn(row) and not (selected and selected.rows[automaticTurnIn]) then
+            entries[#entries+1]={row=row,kind="unassigned"}
+        end
+    end
     table.sort(entries,function(a,b)
         local qa,qb=a.row,b.row
         local pa,pb=questSortPriority(qa,activeID),questSortPriority(qb,activeID)
@@ -3074,7 +3088,11 @@ function AT.InitQuestHUD()
             local _,dungeon,insideDungeon=playerDungeon(call(M and M.GetBestMapForUnit,"player"))
             if playerZone()~=currentZone or (insideDungeon and (dungeon or true))~=currentDungeon
                 or pollPartyChanges() then AT.RefreshQuestHUD()
-            elseif not AT.db.questHUDCollapsed and refreshHighlights(false) then arrange() end
+            elseif not AT.db.questHUDCollapsed then
+                local changed=refreshHighlights(false)
+                local activeID,source=call(AT.GetQuestNavigationID)
+                if changed or renderedNavigationID~=activeID or visibleAutoTurnIn~=(source=="nearby-turn-in" and activeID or nil) then arrange() end
+            end
         end)
     end
     -- Coalesce the initial layout with the login event burst instead of

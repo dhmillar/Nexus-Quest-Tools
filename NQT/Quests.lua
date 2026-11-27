@@ -3,7 +3,7 @@ local Q, M, S = C_QuestLog, C_Map, C_SuperTrack
 local ENTER_YARDS, EXIT_YARDS, ORDER_LIMIT = 100, 125, 10
 local focus, ownedWatch, ownedSuper, lastNear, focusFromOrder, running, queued, initialized
 local manualHUDQuest, manualWasReady, retiringManual, manualFromMap
-local focusTurnIn, observedTurnIn
+local focusTurnIn, observedTurnIn, resolveTurnInPoint
 
 local function ordinary(v)
     return not issecretvalue or not issecretvalue(v)
@@ -396,6 +396,7 @@ local function proximityContext()
     if not blocked and parentZone and parentZone~=ctx.id then
         parent={id=parentZone}
         local parentPOIs=call(Q.GetQuestsOnMap,parentZone)
+        parent.list=parentPOIs
         for _,poi in ipairs(isType(parentPOIs,"table") and parentPOIs or {}) do
             local id=field(poi,"questID")
             if validID(id) then
@@ -411,7 +412,7 @@ local function turnInPin(p)
     return field(p,"isQuestStart")~=true and field(p,"inProgress")==false
 end
 
-local function turnInDistance(id,ctx,poi,parent,blocked)
+local function turnInDistance(id,ctx,poi,parent,blocked,lookup)
     local function pointDistance(map,x,y,knownContext)
         if not xyValid(x,y) then return end
         local px,py
@@ -442,6 +443,20 @@ local function turnInDistance(id,ctx,poi,parent,blocked)
     if map and ctx and (not blocked or map==ctx.id) then
         d,point=pointDistance(map,x,y,map==ctx.id and ctx or parent and map==parent.id and parent or nil)
         if d then return d,point end
+    end
+    if lookup and ctx and not blocked then
+        map,x,y=resolveTurnInPoint(id,ctx.id,false,lookup)
+        if map then
+            d,point=pointDistance(map,x,y,map==ctx.id and ctx or parent and map==parent.id and parent or nil)
+            if d then return d,point end
+        end
+        -- A cross-checked endpoint can inform ranking without masquerading
+        -- as a native GPS destination. Ignore ambiguous or wrong-faction rows.
+        map,x,y=observedTurnIn(id,nil,nil,nil,"verified",true)
+        if map then
+            d=pointDistance(map,x,y,map==ctx.id and ctx or parent and map==parent.id and parent or nil)
+            if d then return d,{} end
+        end
     end
     -- Native same-continent distance can focus a ready quest without a
     -- pin, unless the map still advertises it as an unfinished objective.
@@ -533,15 +548,14 @@ end
 
 local function snapshot()
     local ids = {}
-    local shown,total = call(Q.GetNumQuestLogEntries)
+    local shown = call(Q.GetNumQuestLogEntries)
     local size = finite(shown) and math.min(1000, math.max(0, shown)) or 0
-    local seen=0
     for i = 1, size do
         local info = call(Q.GetInfo, i)
         local id = field(info, "questID")
-        if validID(id) and not field(info, "isHeader") and not field(info, "isHidden") then ids[id] = true;seen=seen+1 end
+        if validID(id) and not field(info, "isHeader") and not field(info, "isHidden") then ids[id] = true end
     end
-    if finite(total) and total>seen and AT.GetCachedRankQuestIDs then
+    if AT.GetCachedRankQuestIDs then
         for id in pairs(AT.GetCachedRankQuestIDs() or {}) do
             if validID(id) and call(Q.IsOnQuest,id)==true then ids[id]=true end
         end
@@ -666,6 +680,18 @@ local function run()
     end
     local best,bestDist,bestTurnIn,currentDistance
     local inProgress={}
+    local preferReady=db.rankQuestFocusCloseCompleted==true
+    local radius2=ENTER_YARDS^2+1e-6
+    local mapLists,remaining={},24
+    if ctx then mapLists[ctx.id]=ctx.points or false end
+    if parent then mapLists[parent.id]=parent.list or false end
+    local function lookup(map)
+        if mapLists[map]==nil and remaining>0 then
+            remaining=remaining-1
+            mapLists[map]=call(Q.GetQuestsOnMap,map) or false
+        end
+        return mapLists[map]
+    end
     local function consider(id,d,point)
         if id==focus then currentDistance=d end
         if finite(d) and d>=0 and (not bestDist or d<bestDist
@@ -677,30 +703,19 @@ local function run()
         if not AT.IsQuestExcluded(id) then
             local d,turnIn
             if completed(id) then
-                if activeQuest(id,ids) then d,turnIn=turnInDistance(id,ctx,poiByID[id],parent,blocked) end
-                consider(id,d,turnIn)
+                if preferReady and activeQuest(id,ids) then
+                    d,turnIn=turnInDistance(id,ctx,poiByID[id],parent,blocked,lookup)
+                    if finite(d) and d<=radius2 then consider(id,d,turnIn) end
+                end
             else
                 inProgress[#inProgress+1]=id
             end
         end
     end
-    local hasMeasuredTurnIn=bestTurnIn~=nil
-    for _,id in ipairs(inProgress) do
-        local poi=poiByID[id]
-        local d,area=measureProximity(id,ctx,poi,parent,blocked)
-        if hasMeasuredTurnIn and area=="inside" then
-            -- Blob membership is not a distance to an objective. Compare
-            -- actual measurements, including the enclosing zone if available.
-            d=not blocked and distance(id,ctx,poi) or nil
-            if not blocked and parent then
-                local outer=distance(id,parent,parent.points and parent.points[id])
-                if finite(outer) and (not finite(d) or outer<d) then d=outer end
-            end
-            -- Preserve the local-area fallback if no objective distance is
-            -- available; do not prefer a distant hand-in on unknown evidence.
-            if not finite(d) then d=ENTER_YARDS^2+1 end
+    if not bestTurnIn then
+        for _,id in ipairs(inProgress) do
+            consider(id,(measureProximity(id,ctx,poiByID[id],parent,blocked)))
         end
-        consider(id,d)
     end
     if best then
         if best==focus or acquire(best,bestTurnIn) then
@@ -728,7 +743,7 @@ function AT.GetQuestNavigationID()
         if validID(id) and not AT.IsQuestExcluded(id) and not completed(id)
             and call(Q.IsOnQuest,id) ~= false then return id,"order" end
     end
-    if AT.db.autoFocus and focusTurnIn and completed(focus) and not AT.IsQuestExcluded(focus)
+    if AT.db.autoFocus and AT.db.rankQuestFocusCloseCompleted==true and focusTurnIn and completed(focus) and not AT.IsQuestExcluded(focus)
         and call(Q.IsOnQuest,focus)~=false then return focus,"nearby-turn-in" end
     -- Explicitly selecting a quest in the stock UI also drives the HUD;
     -- it is not necessary to have Auto Track's nearest-focus mode enabled.
@@ -756,9 +771,10 @@ function AT.IsQuestTurnInNavigation(id)
     return active==id and (source=="hud" or source=="turn-in" or source=="nearby-turn-in")
 end
 
-local function nativeTurnIn(id,map)
+local function nativeTurnIn(id,map,lookup)
     if not validID(map) then return end
-    local points=call(Q.GetQuestsOnMap,map)
+    local points
+    if lookup then points=lookup(map) else points=call(Q.GetQuestsOnMap,map) end
     if not isType(points,"table") then return end
     for _,p in ipairs(points) do
         -- The Forever quest POI API distinguishes starts and in-progress pins.
@@ -810,7 +826,9 @@ local referenceTurnIns={
 }
 observedTurnIn=function(id,map,x,y,reference,skipName)
     local source
-    if reference then
+    if reference=="verified" then
+        source=AT.ForeverVerifiedEndpointReferences and AT.ForeverVerifiedEndpointReferences[id]
+    elseif reference then
         source=referenceTurnIns[id] or (AT.ForeverQuestNPCReferences and AT.ForeverQuestNPCReferences[id])
             or (AT.ForeverATTQuestNPCReferences and AT.ForeverATTQuestNPCReferences[id])
             or (AT.ForeverVerifiedEndpointReferences and AT.ForeverVerifiedEndpointReferences[id])
@@ -849,13 +867,13 @@ observedTurnIn=function(id,map,x,y,reference,skipName)
     return m,px,py,name,kind==1 and name~=nil
 end
 
-local function resolveTurnInPoint(id,viewMap,wantName)
+resolveTurnInPoint=function(id,viewMap,wantName,lookup)
     local visited={}
     local function chain(map)
         for _=1,4 do
             if not validID(map) or visited[map] then break end
             visited[map]=true
-            local m,x,y=nativeTurnIn(id,map)
+            local m,x,y=nativeTurnIn(id,map,lookup)
             if m then return m,x,y end
             local info=M and call(M.GetMapInfo,map)
             map=field(info,"parentMapID")
@@ -865,7 +883,7 @@ local function resolveTurnInPoint(id,viewMap,wantName)
     -- a destination by itself: it may still point to the last objective.
     local m,x,y
     if validID(viewMap) then
-        m,x,y=nativeTurnIn(id,viewMap)
+        m,x,y=nativeTurnIn(id,viewMap,lookup)
         visited[viewMap]=true
     end
     local hint=call(Q.GetNextWaypoint,id)
@@ -887,7 +905,7 @@ local function resolveTurnInPoint(id,viewMap,wantName)
                 if validID(map) and not visited[map] and (access==0 or access==side) then
                     visited[map]=true
                     budget=budget-1
-                    m,x,y=nativeTurnIn(id,map)
+                    m,x,y=nativeTurnIn(id,map,lookup)
                     if m or budget==0 then return true end
                 end
             end

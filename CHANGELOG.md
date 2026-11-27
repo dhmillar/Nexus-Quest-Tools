@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.202 - 2026-11-27
+
+- Added **Focus Close Completed Quests** to Rank Quest settings, off by default. When enabled with Auto Focus, the nearest ready turn-in within 100 yards takes priority. Rank Quest shows Completed while focused on a nearby turn-in and returns to In Progress once none remain in range.
+- Checks additional client map sources for ready hand-ins, so an eligible quest is not skipped just because its pin is absent from the local map. Manual tracking and the tracking order still take priority.
+
 ## 1.5.201 - 2026-11-27
 
 - Auto Focus compares the distance to quest objectives and ready-to-turn-in locations. A closer hand-in can take focus beyond the 100-yard highlight radius. Explicit selections and tracking order still take priority.

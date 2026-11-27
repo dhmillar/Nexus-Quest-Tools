@@ -75,18 +75,20 @@ print("PASS closest eligible quest follows movement inside and beyond highlight 
 AT.SetQuestExcluded(14,false);cont[14]=true;measured[14]=250
 ready[11]=true;inside[11]=true
 pois[1]={{questID=11,x=.6,y=.5,isQuestStart=false,inProgress=false}}
+expect(14) -- no automatic completed focus unless explicitly enabled
+AT.db.rankQuestFocusCloseCompleted=true
 expect(11)
 assert(AT.IsQuestTurnInNavigation(11) and select(2,AT.GetQuestNavigationID())=="nearby-turn-in")
 local current,m,x,y=AT.GetFocusedQuestRoutePoint()
 assert(current==11 and m==1 and x==.6 and y==.5)
 assert(watch[11] and not AT.ShouldHideCompletedQuest(11),"the current nearby turn-in watch is temporary")
 assert(AT.SampleQuestAreas({[11]=true},{})[11]=="near","inclusive 100-yard hand-in boundary")
-measured[14]=50;expect(14);assert(not watch[11])
+measured[14]=50;expect(11);assert(watch[11],"nearby turn-ins interrupt even closer progress")
 measured[14]=250
-pois[1][1].x=.601;expect(11)
-assert(AT.SampleQuestAreas({[11]=true},{[11]="near"})[11]=="outside","tracking is independent of the highlight radius")
+pois[1][1].x=.601;expect(14);assert(not watch[11])
+assert(AT.SampleQuestAreas({[11]=true},{[11]="near"})[11]=="outside","outside the 100-yard turn-in range")
 measured[14]=100;expect(14)
-measured[14]=250;expect(11)
+measured[14]=250;expect(14)
 pois[1][1].x=.51;pois[1][1].inProgress=true;expect(14)
 assert(AT.SampleQuestAreas({[11]=true},{[11]="near"})[11]==nil,"stale objective pins and blobs cannot locate turn-in")
 pois[1][1].inProgress=false;map=2;expect(11);map=1
@@ -103,7 +105,7 @@ expect(11)
 assert(select(3,AT.GetFocusedQuestRoutePoint())==.55)
 AT.ObservedQuestTurnIns={[11]={{1,.55,.5,1,123,0,"Finisher"},{1,.52,.5,1,124,0,"Alternate"}}}
 expect(14)
-print("PASS true turn-in distance beyond the highlight radius, nearest comparison, GPS, exclusions, manual/queue priority, and completed watch safety")
+print("PASS 100-yard turn-in priority, default off, GPS, exclusions, manual/queue priority, and completed watch safety")
 -- A collapsed log and a native distance without a map pin can still switch.
 AT.ObservedQuestTurnIns=nil
 local baseLog=C_QuestLog.GetNumQuestLogEntries
@@ -120,19 +122,46 @@ expect(11)
 assert(watch[11] and not AT.ShouldHideCompletedQuest(11))
 assert(AT.GetFocusedQuestRoutePoint()==11 and select(2,AT.GetFocusedQuestRoutePoint())==nil,
     "native distance alone never becomes GPS coordinates")
-measured[14]=20;expect(14)
+measured[14]=20;expect(11)
 measured[14]=nil;expect(11)
 measured[11]=101;expect(14)
-measured[14]=300;expect(11)
+measured[14]=300;expect(14)
 measured[14]=50;expect(14)
 measured[14]=nil
 measured[11]=nil
 pois[1]={{questID=11,x=.54,y=.5,inProgress=false}}
 expect(11)
 assert(select(3,AT.GetFocusedQuestRoutePoint())==.54,"the native ready pin need not repeat isQuestStart=false")
-map=2;waypoints[14]={1,.52,.5};expect(14)
+map=2;waypoints[14]={1,.52,.5};expect(11)
 waypoints[14]=nil;map=1;expect(11)
+-- A hand-in in the neighboring zone is not advertised on the player's map.
+C_QuestLog.GetNextWaypoint=function(q) if q==11 then return 3,.57,.5 end end
+CreateVector2D=function(x,y) return {GetXY=function()return x,y end} end
+C_Map.GetWorldPosFromMapPos=function(m,pos)
+    local px,py=pos:GetXY()
+    return 1,CreateVector2D(1000*px,1000*py)
+end
+pois[1]=nil;pois[3]={{questID=11,x=.57,y=.5,inProgress=false}}
+expect(11)
+assert(select(2,AT.GetFocusedQuestRoutePoint())==3)
+ready[13]=true
+AT.GetCachedRankQuestIDs=function()return {[11]=true,[13]=true} end
+pois[3][2]={questID=13,x=.53,y=.5,inProgress=false}
+local count=0
+local oldPoints=C_QuestLog.GetQuestsOnMap
+C_QuestLog.GetQuestsOnMap=function(m) if m==3 then count=count+1 end;return oldPoints(m) end
+AT.char.zoneQuestOrigins={[13]=3}
+expect(13);assert(count==1,"shared turn-in map fetched once per focus scan")
+table.remove(ids,2);expect(11)
+AT.db.rankQuestFocusCloseCompleted=false;expect(14)
+assert(AT.ToggleQuestHUDManualFocus(11));expect(11)
+assert(AT.ToggleQuestHUDManualFocus(11));expect(14)
+AT.db.rankQuestFocusCloseCompleted=true
+C_QuestLog.GetQuestsOnMap=oldPoints
+C_QuestLog.GetNextWaypoint=nil;pois[3]=nil
+measured[14]=100
 C_QuestLog.GetNumQuestLogEntries=baseLog
+C_QuestLog.GetInfo=function(i)return {questID=ids[i]} end
 print("PASS ready quest without native pin, hidden rows, stock watch required, broad blob ranking, distance-only GPS safety and omitted POI flags")
 
 do

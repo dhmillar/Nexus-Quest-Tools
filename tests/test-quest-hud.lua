@@ -1638,6 +1638,16 @@ do
     print("PASS completed Rank Quest row shows instance area and named NPC/object without fake coordinates")
 end
 showFinisher=true
+do
+    local oldNav=AT.GetQuestNavigationID
+    AT.GetQuestNavigationID=function()return 15,"nearby-turn-in" end
+    AT.RefreshQuestHUD()
+    assert(find("Completed") and find("No NPC metadata"),"automatic turn-in switches to and renders Completed")
+    AT.GetQuestNavigationID=function()return 11,"nearby" end
+    AT.RefreshQuestHUD()
+    assert(find("In Progress") and not find("No NPC metadata"),"exiting automatic turn-in returns to In Progress")
+    AT.GetQuestNavigationID=oldNav
+end
 clickButton("In Progress")
 for _,theme in ipairs({"Map","Minimal"}) do
     qrow=find("No NPC metadata");assert(qrow.circle.available and qrow.circle.dot.shown)
