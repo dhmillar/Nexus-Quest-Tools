@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.226
+
+- Boss fallback skips confirmed corpses. The macro explicitly checks the selected unit when clearing a corpse, and /nqtboss explains when combat prevents the scan.
+
 ## 1.5.225
 
 - Restored the pre-regression dungeon boss macro conditions for targeting, marking and pinging. Kept the elite-click and dungeon Pet Bar fixes.

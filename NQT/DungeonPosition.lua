@@ -1817,6 +1817,11 @@ do
             end
         end
         local unknowns={}
+        local deadNames,livingNames,rosterName={},{},{}
+        for _,entry in ipairs(factRoster(id)) do
+            local key=entry[2]:lower()
+            if names[key] then rosterName[entry[1]]=key end
+        end
         local directOwner
         local candidateGUIDs={}
         for _,unit in ipairs(units) do
@@ -1856,6 +1861,12 @@ do
                 local classification=safe(UnitClassification,unit)
                 local boss=(npc and ids[npc]) or (not npc and label and names[label:lower()])
                     or (usable(classification,"string") and classification=="worldboss") or unit:match("^boss%d$")
+                if boss and knownDead then
+                    local evidence=dead==true and deadNames or (dead==false and livingNames or nil)
+                    if evidence and nameKey then evidence[nameKey]=true end
+                    -- An exact roster ID can prove death even if the client masks the name.
+                    if evidence and npc and rosterName[npc] then evidence[rosterName[npc]]=true end
+                end
                 local key=guid or label
                 local attack=safe(UnitCanAttack,"player",unit)
                 if reachable and boss and key and not candidateGUIDs[key] and (not knownDead or dead~=true)
@@ -1952,7 +1963,7 @@ do
                 if pick and pick.index then break end
             end
         end
-        return pick,#unresolved==0 and index or nil,index~=nil and #unresolved>0
+        return pick,#unresolved==0 and index or nil,index~=nil and #unresolved>0,deadNames,livingNames
     end
 
     -- Only the bound Smart Target button builds its macro on each physical
@@ -1965,7 +1976,7 @@ do
         end
     end
 
-    local clearDead="\n/cleartarget [dead]"
+    local clearDead="\n/cleartarget [@target,dead]"
 
     local function reacquireTail(label,ping)
         if not label then return "" end
@@ -2029,8 +2040,14 @@ do
             return true,nil,"You need raid marking permission."
         end
         local ids,names,fallback=bossIDs(name,id)
-        fallbackCount=#fallback
-        local pick,free,unreadable=scan(name,id,preview,ids,names)
+        local pick,free,unreadable,deadNames,livingNames=scan(name,id,preview,ids,names)
+        local kept={}
+        for _,label in ipairs(fallback) do
+            local key=label:lower()
+            if not deadNames[key] or livingNames[key] then kept[#kept+1]=label end
+        end
+        fallback,fallbackCount=kept,#kept
+        if stockBatch>fallbackCount then stockBatch=1 end
         local labels={}
         if pick then
             local label=pick.label
@@ -2077,14 +2094,13 @@ do
         -- failed selection performs no mark or ping.
         local body="/stopmacro [combat]\n/cleartarget\n/stopmacro [exists]"
         for i,label in ipairs(labels) do
-            body=body.."\n/targetexact [noexists] "..label
+            body=body.."\n/targetexact "..(i==1 and "" or "[noexists] ")..label
 
         end
         local ping=AT.db.bossMarkPing and "\n/ping [@target,harm,nodead] Attack" or ""
         body=body..(index and ("\n/tm [harm,nodead] ~"..index) or "")
-            ..("\n/atmob k"..(index or 0)..":"..planFor(labels[1]:lower()))
+            ..("\n/atmob k"..(index or 0)..":"..planFor(labels[1]:lower())..(not pick and "f" or ""))
         if not pick then
-            body=body.."\n/atmob f"
             if not smart then
                 local recent=recentFallback(fallback)
                 if recent and recent~=labels[1] then
@@ -2109,10 +2125,6 @@ do
         -- Exact-name targeting can pick a corpse, even if the scan saw
         -- a live boss when this macro was prepared. Guard marks and pings
         -- natively, then clear the corpse after all acquisition paths.
-        if maxBytes and #body+#ping+#clearDead>maxBytes then
-            -- There is already a no-target guard immediately before the first probe.
-            body=body:gsub("/targetexact %[noexists%] ","/targetexact ",1)
-        end
         if maxBytes and #body+#ping+#clearDead>maxBytes then ping="" end
         body=body..ping..clearDead
         if maxBytes and #body>maxBytes then return true,nil,"That boss name does not fit in the action-bar macro." end
@@ -2225,6 +2237,7 @@ do
                             same and readable and (validRaidIcon(icon) and ("target now has icon "..icon) or "target has no readable icon")
                             or "current target cannot verify it")
                     end
+                    if active and safe(InCombatLockdown)==true then message="Boss macro paused in combat. "..message end
                     AT.Say(message)
                 end
             end

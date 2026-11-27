@@ -631,8 +631,12 @@ function AT.InitTarget()
         local finish,slot=command:match("^j([0-8]):(%d+)$")
         if finish and AT.FinishBossSearch then AT.FinishBossSearch(tonumber(finish),tonumber(slot)); return end
         if AT.ReserveBossMark then
-            local index,plan=command:match("^k([0-8]):(%d+)$")
-            if index then AT.ReserveBossMark(tonumber(index),tonumber(plan)); return end
+            local index,plan,advance=command:match("^k([0-8]):(%d+)(f?)$")
+            if index then
+                AT.ReserveBossMark(tonumber(index),tonumber(plan))
+                if advance=="f" and AT.AdvanceBossSearch then AT.AdvanceBossSearch() end
+                return
+            end
             if command:match("^k[0-8]$") then AT.ReserveBossMark(tonumber(command:sub(2))); return end
         end
         if command == "f" and AT.AdvanceBossSearch then AT.AdvanceBossSearch(); return end

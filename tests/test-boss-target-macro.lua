@@ -87,10 +87,10 @@ units.nameplate2.dist=81
 units.nameplate3=mob(648,103,"Trash")
 units.nameplate3.dist=1
 units.target=units.nameplate1
-assert(press()=="/stopmacro [combat]\n/cleartarget\n/stopmacro [exists]\n/targetexact [noexists] Boss B\n/tm [harm,nodead] ~8\n/atmob k8:1\n/cleartarget [dead]")
+assert(press()=="/stopmacro [combat]\n/cleartarget\n/stopmacro [exists]\n/targetexact Boss B\n/tm [harm,nodead] ~8\n/atmob k8:1\n/cleartarget [@target,dead]")
 units.nameplate2.mark=8
 AT.db.bossMarkPing=true
-assert(press()=="/stopmacro [combat]\n/cleartarget\n/stopmacro [exists]\n/targetexact [noexists] Boss A\n/tm [harm,nodead] ~7\n/atmob k7:2\n/ping [@target,harm,nodead] Attack\n/cleartarget [dead]")
+assert(press()=="/stopmacro [combat]\n/cleartarget\n/stopmacro [exists]\n/targetexact Boss A\n/tm [harm,nodead] ~7\n/atmob k7:2\n/ping [@target,harm,nodead] Attack\n/cleartarget [@target,dead]")
 units.nameplate1.mark=7
 units.nameplate4=mob(645,104,"Boss C")
 assert(press():find("~4",1,true),"third boss gets Triangle")
@@ -132,7 +132,7 @@ function EditMacro(i,n,icon,b)
 end
 assert(loadfile("NQT/Target.lua"))("NQT",AT)
 assert(AT.RefreshBossActionBar())
-assert(body:find("/targetexact [noexists] Hamhock",1,true) and body:find("/ping [@target,harm,nodead] Attack",1,true))
+assert(body:find("/targetexact Hamhock",1,true) and body:find("/ping [@target,harm,nodead] Attack",1,true))
 assert(not body:find("/atmob [btn:2]e;c",1,true),"does not capture the secondary target")
 units.nameplate1.mark=8
 units.nameplate3=mob(1716,789,"Bazil Thredd")
@@ -185,7 +185,9 @@ local function native(text,lookup,refuse)
     for line in text:gmatch("[^\n]+") do
         local target=units.target
         local live=target and not target.dead and not target.friendly
-        if line=="/cleartarget" then
+        if line=="/stopmacro [combat]" or line=="/stopmacro [btn:2][combat]" then
+            if combat then return end
+        elseif line=="/cleartarget" then
             if not refuse then priorTarget,target=target,nil; units.target=target end
         elseif line=="/stopmacro [harm,nodead]" then
             if live then return end
@@ -209,7 +211,7 @@ local function native(text,lookup,refuse)
             pings[#pings+1]=target
         elseif line:find("^/atmob ") then
             SlashCmdList.AUTOTRACKMOB(line:sub(8))
-        elseif line=="/cleartarget [dead]" and target and target.dead then
+        elseif line=="/cleartarget [@target,dead]" and target and target.dead then
             units.target=nil
         elseif line=="/targetlasttarget [noexists]" and not target then
             units.target=priorTarget
@@ -268,7 +270,7 @@ for _,id in ipairs(ids) do
             units.nameplate1=mob(record[1],909,record[2])
             units.nameplate1.npc=record[1]
             assert(AT.RefreshBossActionBar())
-            assert(body:find("/targetexact [noexists] "..record[2],1,true),
+            assert(body:find("/targetexact "..record[2],1,true),
                 "missing boss '"..record[2].."' in instance "..id..": "..body)
             assert(#body<=255)
         end
@@ -295,7 +297,7 @@ for _,useSmart in ipairs({false,true}) do
     for i=1,8 do
         assert(AT.RefreshBossActionBar())
         local text=useSmart and press() or body
-        assert(text:find("/targetexact [noexists] "..bosses[i].name,1,true))
+        assert(text:find("/targetexact "..bosses[i].name,1,true))
         assert(text:find("~"..order[i],1,true) and #text<=255)
         native(text,lookup,false)
         for n=1,i do assert(actual[bosses[n]]==order[n],"keep each previous boss's icon") end
@@ -305,7 +307,7 @@ for _,useSmart in ipairs({false,true}) do
     bosses[1].dead=true
     assert(AT.RefreshBossActionBar())
     local text=useSmart and press() or body
-    assert(text:find("/targetexact [noexists] "..bosses[9].name,1,true))
+    assert(text:find("/targetexact "..bosses[9].name,1,true))
     assert(text:find("~8",1,true),"confirmed death resets priority to Skull")
     native(text,lookup,false)
     assert(actual[bosses[9]]==8 and actual[bosses[1]]==nil and actual[bosses[2]]==7 and actual[bosses[3]]==4)
@@ -396,7 +398,7 @@ for _,useSmart in ipairs({false,true}) do
     units={nameplate1=a,nameplate2=b2,nameplate3=c};actual={[a]=8,[b2]=7};pings={}
     assert(AT.RefreshBossActionBar())
     local first=useSmart and press() or body
-    assert(first:find("~4",1,true) and first:sub(-19)=="/cleartarget [dead]")
+    assert(first:find("~4",1,true) and first:sub(-27)=="/cleartarget [@target,dead]")
     units.target=c;SlashCmdList.AUTOTRACKMOB("k4") -- server failed to apply the first request
     when=when+1
     assert(AT.RefreshBossActionBar())
@@ -618,8 +620,30 @@ units={};kind="none";ui[1].scripts.OnEvent(ui[1],"PLAYER_ENTERING_WORLD")
 kind="party";current=34;ui[1].scripts.OnEvent(ui[1],"PLAYER_ENTERING_WORLD")
 local long=mob(1696,8234,("B"):rep(85))
 units.nameplate1=long;assert(AT.RefreshBossActionBar())
-assert(#body<=255 and body:find(long.name,1,true) and body:find("~8",1,true) and body:sub(-19)=="/cleartarget [dead]")
+assert(#body<=255 and body:find(long.name,1,true) and body:find("~8",1,true) and body:sub(-27)=="/cleartarget [@target,dead]")
 long.dead=true;actual={};pings={}
 native(body,{[long.name]=long},false)
 assert(units.target==nil and next(actual)==nil and #pings==0)
 print("PASS both macro entry points clear corpses, including stale and recovery results; Smart Target continues to a living boss and long names fit")
+
+-- A boss already confirmed dead must not be selected again just because
+-- its name is next in the native fallback roster.
+for _,smart in ipairs({false,true}) do
+    units={};kind="none";ui[1].scripts.OnEvent(ui[1],"PLAYER_ENTERING_WORLD")
+    kind="party";current=3039;ui[1].scripts.OnEvent(ui[1],"PLAYER_ENTERING_WORLD")
+    local dead=mob(258966,9201,"Slavecrusher Grox")
+    local alive=mob(258972,9202,"Twilight Commander Zarmok")
+    dead.dead=true
+    units.target=dead
+    actual={};pings={}
+    assert(AT.RefreshBossActionBar())
+    local action=smart and press() or body
+    assert(not action:find(dead.name,1,true),action)
+    native(action,{[dead.name]=dead,[alive.name]=alive},false)
+    assert(units.target==alive and actual[alive]==8 and pings[1]==alive and not actual[dead])
+    combat=true
+    native(action,{[alive.name]=alive},false)
+    combat=false
+    assert(#pings==1,"combat stop must be reflected by the test environment")
+end
+print("PASS Drowned City skips known dead roster bosses, chooses and marks the living boss, and respects combat stop")
