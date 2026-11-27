@@ -1434,7 +1434,11 @@ local prevDest=C_QuestLog.GetNextWaypoint
 C_QuestLog.GetNextWaypoint=function(q) if q==15 then return 1,.32,.30 end return prevDest(q) end
 local qrow=find("No NPC metadata");qrow.circle.scripts.OnClick(qrow.circle);drain()
 ready[15]=true;AT.RefreshQuests();AT.RefreshQuestHUD()
-assert(AT.GetQuestHUDManualFocus()==15 and AT.GetQuestNavigationID()==15,"explicit pin persists across objective completion")
+assert(not AT.GetQuestHUDManualFocus() and AT.GetQuestNavigationID()==11,"manual in-progress focus ends when objectives complete")
+clickButton("In Progress")
+qrow=find("No NPC metadata");qrow.circle.scripts.OnClick(qrow.circle);drain()
+assert(AT.GetQuestHUDManualFocus()==15 and AT.GetQuestNavigationID()==15,"explicit selection of a ready quest still navigates to turn-in")
+clickButton("Completed")
 local q,m,x,y=AT.GetFocusedQuestRoutePoint()
 assert(q==15 and m==1 and x==.8 and y==.6,"finished native POI beats stale objective waypoint and starter")
 local _,pins=AT.GetFocusedQuestRouteTargets(1);assert(#pins==1 and pins[1].x==.8)
@@ -2422,7 +2426,26 @@ do
     visible.party2=false;held.party1[701]=true
     held.party1[95309]=true
     shareArrow.scripts.OnClick(shareArrow)
+    ids[3].level=41
+    AT.GetShareQuestStart=function(q)
+        if q==95789 then return "Starts at: Dockmaster  |  Riverglades 35.2, 41.0" end
+    end
+    AT.char.zoneQuestOrigins[704]=nil
+    local priorWP=C_QuestLog.GetNextWaypoint
+    C_QuestLog.GetNextWaypoint=function(q) if q==704 then return 2,.5,.5 end if priorWP then return priorWP(q) end end
     find("Share Verify").scripts.OnClick()
+    local startSeen,unknownSeen
+    for _,obj in ipairs(objs) do
+        if obj.qid==95789 and obj.source and obj:IsVisible() then
+            startSeen=true
+            assert(obj.title:GetText()=="[41] Shady Saltseers" and obj.source:GetText():find("Dockmaster",1,true))
+            assert(obj.detail:GetText():find("Kara-A",1,true))
+        elseif obj.qid==704 and obj.source and obj:IsVisible() then
+            unknownSeen=true
+            assert(obj.source:GetText()=="Start location unknown  |  Objective: Duskwood","an objective is not a pickup location")
+        end
+    end
+    assert(startSeen and unknownSeen,"source and unknown rows were rendered")
     local function offer(q)
         for _,obj in ipairs(objs) do
             if obj.qid==q and obj.action and obj.action.label.text=="Share" and obj:IsVisible() then return obj.action end
@@ -2432,8 +2455,16 @@ do
     assert(offer(95789) and offer(704),"verified missing quest gets its own Share button")
     local b=offer(95789);b.scripts.OnClick()
     assert(attempts[1]==95789 and not offer(95789),"pending offer is not offered twice")
+    local function pendingRow(q)
+        for _,obj in ipairs(objs) do
+            if obj.qid==q and obj.offerPending and obj:IsVisible() then return obj end
+        end
+    end
+    local waiting=assert(pendingRow(95789),"quest remains visible while the offer is pending")
+    assert(waiting.detail:GetText():find("Offer pending: Kara-A",1,true) and waiting.action.label.text=="Pending")
+    waiting.action.scripts.OnClick(waiting.action);assert(#attempts==1)
     held.party1[95789]=true;now=now+4;areaTick()
-    assert(not offer(95789),"accepted quest drops from the list on refresh")
+    assert(not offer(95789) and not pendingRow(95789),"accepted quest drops from the list on refresh")
     ERR_QUEST_PUSH_INVALID_S="%s is not eligible for that quest."
     ERR_QUEST_PUSH_ALREADY_DONE_S="%1$s has completed that quest."
     b=offer(704);b.scripts.OnClick()
@@ -2478,6 +2509,10 @@ do
     arrow=assert(inlineArrow())
     arrow.scripts.OnClick(arrow)
     assert(attempts[#attempts]==701 and not inlineArrow(),"inline share is a real native offer, not a menu")
+    row=find("Zone share");assert(inlineText(row,"Kara-A  -  Offer pending"))
+    now=now+21;areaTick();AT.RefreshQuestHUD()
+    arrow=assert(inlineArrow(),"an unanswered offer is shareable again after timeout")
+    arrow.scripts.OnClick(arrow)
     held.party1[701]=true;now=now+30
     AT.GetQuestPartySnapshot=function(q)
         if q==701 then return {pending=true,members={{guid="Player-party1",name="Kara-A",counts={{current=1,total=3}}}}} end

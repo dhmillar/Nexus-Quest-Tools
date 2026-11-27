@@ -200,6 +200,7 @@ local function buildPanel()
                 return
             end
             AT.db[key] = self:GetChecked() and true or false
+            if (key == "questStartItemAlert" or key == "enabled") and AT.RefreshQuestStartItemAlert then AT.RefreshQuestStartItemAlert() end
             updateState()
         end)
         if hint then
@@ -217,7 +218,7 @@ local function buildPanel()
         checks[key] = check
     end
     option(general, "enabled", "Enable Nexus Quest Tools", -2)
-    option(general, "autoFocus", "Focus one nearby quest at a time", -30)
+    option(general, "autoFocus", "Automatically focus the closest quest", -30)
     option(general, "hideCompleted", "Untrack ready-to-turn-in quests", -58)
     option(general, "showQuestRoute", "Show minimap walking route", -86)
     option(general, "hunterDeadzone", "Hunter Deadzone", -114,
@@ -250,8 +251,9 @@ local function buildPanel()
     option(rank, "rankQuestDropRates", "Show item drop rates", -86, "Show estimated percentages next to item objectives. Unknown rates are hidden.")
     option(rank, "showQuestMapPins", "Show standalone map pins", -114, "Adds quest and service pins to the world map when Questie is off. NQT adds no minimap pins. Recorded starts can still have prerequisites.")
     option(rank, "showObservedQuestGivers", "Show observed quest giver locations", -142, "Show known giver locations, even when the associated quest is not currently available.")
-    makeText(rank, "GameFontHighlightSmall", -177, "Right-click a quest to exclude it from automatic tracking.")
-    makeText(rank, "GameFontDisableSmall", -199, "Ctrl-click quest titles to number them. /at order lists them.")
+    option(rank, "questStartItemAlert", "Quest-starting item popup", -170, "Shows the icon for a newly acquired quest-starting item above your character. Click to open the quest offer, or right-click to dismiss.")
+    makeText(rank, "GameFontHighlightSmall", -206, "Right-click a quest to exclude it from automatic tracking.")
+    makeText(rank, "GameFontDisableSmall", -228, "Ctrl-click quest titles to number them. /at order lists them.")
 
     option(dungeon, "dungeonPositionEnabled", "Enable dungeon maps", -2)
     option(dungeon, "dungeonPositionAutoOpen", "Open automatically in a dungeon", -30)

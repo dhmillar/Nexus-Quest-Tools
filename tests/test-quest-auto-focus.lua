@@ -35,27 +35,39 @@ local function expect(id)
     assert(AT.GetFocusedQuestID()==id,"focus expected "..tostring(id)..", got "..tostring(AT.GetFocusedQuestID()))
     assert(selected==(id or 0),"native super tracking follows focus")
 end
-cont[11],cont[12],cont[13],cont[14]=true,true,true,true
-measured[11],measured[12],measured[13],measured[14]=101,0,1000,75
-cont[14]=false
-expect(nil)
-assert(AT.SampleQuestAreas({[11]=true,[12]=true},{})[12]==nil,"unknown native zero is not a near quest")
-measured[11]=100; expect(11)
-assert(AT.SampleQuestAreas({[11]=true},{})[11]=="near")
-measured[11],measured[12]=125,50; expect(11)
-measured[11]=126; expect(12)
+cont[11],cont[12],cont[13],cont[14]=true,true,true,false
+measured[11],measured[12],measured[13],measured[14]=220,0,1000,5
+expect(11)
+assert(AT.SampleQuestAreas({[11]=true,[12]=true},{})[11]=="outside")
+assert(AT.SampleQuestAreas({[12]=true},{})[12]==nil,"unknown native zero is not a near quest")
+measured[11],measured[12]=83,50; expect(12)
 assert(not watch[11] and watch[12])
-ready[12]=true;cont[14]=true
-measured[14]=90; expect(14)
-ready[14]=true; measured[13]=0
+measured[11]=50; expect(12)
+measured[11]=49; expect(11)
+assert(AT.SampleQuestAreas({[11]=true},{})[11]=="near")
+assert(AT.ToggleQuestHUDManualFocus(12)); expect(12)
+assert(AT.GetQuestNavigationID()==12)
+measured[11],measured[12]=30,900
+expect(12)
+ready[12]=true; expect(11)
+assert(not AT.GetQuestHUDManualFocus() and AT.GetQuestNavigationID()==11)
+assert(AT.ToggleQuestHUDManualFocus(12)); expect(12)
+assert(AT.IsQuestTurnInNavigation(12))
+assert(AT.ToggleQuestHUDManualFocus(12)); expect(11)
+ready[11]=true; measured[13]=0
 map=2;waypoints[13]={1,.58,.5}; expect(13)
 assert(AT.SampleQuestAreas({[13]=true},{})[13]=="near","parent zone resolves missing interior coordinates")
-ready[13]=true; measured[11]=0; waypoints[13]=nil
-pois[2]={{questID=11,x=.5,y=.51,isQuestStart=true}}
-measured[11]=nil; map=1;pois[1]=pois[2]; expect(nil)
+ready[13]=true;ready[11]=false; measured[11]=nil; waypoints[13]=nil
+pois[1]={{questID=11,x=.5,y=.51,isQuestStart=true}}
+map=1; expect(nil)
 instance=true; measured[11]=49; expect(nil)
 inside[11]=true; expect(11)
 assert(AT.SampleQuestAreas({[11]=true},{})[11]=="inside")
 ready[12]=false;AT.ToggleQuestTrackingOrder(12);expect(12)
 assert(AT.ToggleQuestHUDManualFocus(11));expect(11)
-print("PASS nearby auto-focus and HUD share 100/125 yards, recover with parent-zone/area data, and preserve manual and queue priority")
+ready[11]=true;expect(12)
+AT.ResetTrackingOrder()
+instance=false;cont[14]=true; measured[14]=440;expect(14)
+AT.SetQuestExcluded(14,true);expect(12)
+cont[12]=false;expect(nil)
+print("PASS closest eligible quest follows movement inside and beyond highlight range; ties, exclusions, distances and manual completion work")

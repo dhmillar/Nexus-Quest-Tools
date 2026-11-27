@@ -4,7 +4,7 @@ local refreshPeriod, enterAreaYards, leaveAreaYards = 0.18, 35, 52
 local previewYards, renderLimit, offPathYards = 90, 30, 24
 local currentPath, cursor, projected, arrival
 local scopeQuest, scopeTurnIn, scopeMap, positionLost, routeStatus, statusQuest
-local hud, meter, metadata, travelDetail, measure, mapRoute
+local meter, metadata, travelDetail, measure, mapRoute
 local bearing, bearingStatus, distanceSource, selectionSource, drawFailure
 
 local function ordinary(value)
@@ -285,22 +285,6 @@ local function walk(d, radius, yardRadius)
     return used > 0 and used or nil
 end
 
-local statusCopy={
-    provider_missing={"No walking router loaded","Quest location only"},
-    turnin_missing={"Turn-in location unavailable","This quest has no verified map pin"},
-    objective_missing={"Objective location unavailable","Waiting for game or Questie data"},
-    interior={"Route paused inside","Floor or cave path unavailable"},
-    position={"Finding player position","Route will resume when located"},
-    planning={"Finding a walking route","Checking terrain and access"},
-    replan={"Off route","Recalculating from here"},
-    loading={"Loading walking map","Route will resume when ready"},
-    combat={"Planning paused in combat","Route will resume after combat"},
-    unreachable={"No walkable route found","Check the quest map"},
-    nodata={"Walking map unavailable","No route data for this area"},
-    outside={"Destination outside walking map","Check the quest map"},
-    offmesh={"Path cannot reach this point","Check the quest map"},
-}
-
 local function call(fn,...)
     if type(fn)~="function" then return end
     local ok,a,b,c=pcall(fn,...)
@@ -356,12 +340,7 @@ local function metaFor(quest)
     local turnIn=AT.IsQuestTurnInNavigation and AT.IsQuestTurnInNavigation(quest) or false
     if metadata and metadata.quest==quest and metadata.turnIn==turnIn and now-metadata.when<.5
         and (not turnIn or metadata.map) then return metadata end
-    local title
-    if C_QuestLog and C_QuestLog.GetTitleForQuestID then
-        local ok,result=pcall(C_QuestLog.GetTitleForQuestID,quest)
-        if ok and ordinary(result) and type(result)=="string" then title=result end
-    end
-    metadata={quest=quest,when=now,turnIn=turnIn,title=title or ("Quest #" .. quest)}
+    metadata={quest=quest,when=now,turnIn=turnIn}
     if AT.GetFocusedQuestRoutePoint then
         local ok,id,map,x,y=pcall(AT.GetFocusedQuestRoutePoint)
         if ok and id==quest and finite(map) and frac(x,y) then
@@ -376,14 +355,6 @@ function AT.GetQuestRouteDisplayPoint(quest)
     if not finite(quest) or quest<=0 then return end
     local m=metaFor(quest)
     return m.map,m.x,m.y
-end
-
-local function mapLabel(map)
-    if not C_Map or not C_Map.GetMapInfo then return end
-    local ok,info=pcall(C_Map.GetMapInfo,map)
-    if ok and ordinary(info) and type(info)=="table" and ordinary(info.name) and type(info.name)=="string" then
-        return info.name
-    end
 end
 
 local function yardEstimate(meta)
@@ -473,73 +444,8 @@ local function drawMeter(yards)
     meter:Show()
 end
 
-local function drawHud()
-    if not hud then return end
-    if not statusQuest or routeStatus=="disabled" or routeStatus=="no_quest" then
-        hud:Hide(); return
-    end
-    local meta=metaFor(statusQuest)
-    local heading,sub
-    if routeStatus=="arrival" then
-        heading,sub="In objective area","Guidance will resume if you leave"
-    elseif routeStatus=="routed" or routeStatus=="road" then
-        local details=travelDetail
-        local mode=routeStatus=="road" and "ROAD-AWARE WALK" or "WALK ROUTE"
-        if details and details.turn and details.toTurn then
-            heading=details.turn .. " in " .. math.floor(details.toTurn+.5) .. " yd"
-        else
-            heading="Follow the walkable path"
-        end
-        sub=details and details.remain and (mode .. "  |  " .. math.floor(details.remain+.5) .. " yd left") or mode
-    else
-        local copy=statusCopy[routeStatus] or {"Walking route unavailable","Check the quest map"}
-        heading=copy[1]
-        local map=meta.map and mapLabel(meta.map)
-        if map and routeStatus~="interior" then
-            sub=string.format("%s  |  %.0f, %.0f",map,meta.x*100,meta.y*100)
-        else
-            sub=copy[2]
-        end
-    end
-    setHudLabel(hud.title,meta.title)
-    setHudLabel(hud.instruction,heading)
-    setHudLabel(hud.detail,sub)
-    local healthy=routeStatus=="routed" or routeStatus=="road" or routeStatus=="arrival"
-    hud.instruction:SetTextColor(healthy and .32 or 1,healthy and .95 or .79,healthy and .85 or .46)
-    hud:Show()
-end
-
-local function makeHud()
-    -- A non-interactive panel below the current minimap, including custom skins.
-    local card=CreateFrame("Frame",nil,Minimap)
-    if not card.SetSize or not card.CreateTexture or not card.CreateFontString then return end
-    card:SetSize(196,45)
-    card:SetPoint("TOP",Minimap,"BOTTOM",0,-10)
-    card:SetFrameLevel(Minimap:GetFrameLevel()+4)
-    card:EnableMouse(false)
-    local fill=card:CreateTexture(nil,"BACKGROUND")
-    fill:SetAllPoints(card);fill:SetColorTexture(.025,.068,.085,.94)
-    local rule=card:CreateTexture(nil,"BORDER")
-    rule:SetPoint("TOPLEFT",card,"TOPLEFT",0,0)
-    rule:SetPoint("TOPRIGHT",card,"TOPRIGHT",0,0)
-    rule:SetHeight(1);rule:SetColorTexture(.19,.64,.61,.95)
-    local function makeText(font,y,r,g,b)
-        local text=card:CreateFontString(nil,"OVERLAY",font)
-        text:SetPoint("TOP",card,"TOP",0,y)
-        text:SetWidth(186);text:SetWordWrap(false)
-        text:SetTextColor(r,g,b)
-        return text
-    end
-    card.title=makeText("GameFontNormalSmall",-6,.94,.98,1)
-    card.instruction=makeText("GameFontHighlightSmall",-18,.32,.95,.85)
-    card.detail=makeText("GameFontDisableSmall",-30,.68,.80,.84)
-    card:Hide()
-    hud=card
-end
-
 local function makeMeter()
-    -- Keep the distance independent of the card below the minimap; skins
-    -- may clip or layer its contents differently. No solid background.
+    -- Keep the distance inside the minimap. No solid background.
     local labelFrame=CreateFrame("Frame",nil,Minimap)
     labelFrame:SetSize(86,14)
     labelFrame:SetPoint("BOTTOM",Minimap,"BOTTOM",0,5)
@@ -706,7 +612,6 @@ local function refresh()
     local distanceOK,yards=pcall(distanceStatus)
     if not distanceOK then yards=nil end
     pcall(drawMeter,yards)
-    pcall(drawHud)
     local directionOK,why=pcall(drawBearing)
     if not directionOK then
         if bearing then bearing:Hide() end
@@ -737,7 +642,6 @@ function AT.InitQuestRoute()
     end
     pcall(makeMeter)
     pcall(makeBearing)
-    pcall(makeHud)
     local observer = CreateFrame("Frame")
     observer:SetScript("OnUpdate", function(_, dt)
         elapsed = elapsed + dt

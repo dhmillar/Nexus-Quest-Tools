@@ -2,7 +2,7 @@ local _, AT = ...
 local Q, M, S = C_QuestLog, C_Map, C_SuperTrack
 local ENTER_YARDS, EXIT_YARDS, ORDER_LIMIT = 100, 125, 10
 local focus, ownedWatch, ownedSuper, lastNear, focusFromOrder, running, queued, initialized
-local manualHUDQuest, retiringManual
+local manualHUDQuest, manualWasReady, retiringManual
 
 local function ordinary(v)
     return not issecretvalue or not issecretvalue(v)
@@ -432,7 +432,7 @@ end
 
 local function distance(id, ctx, poi, yards)
     local d = nativeDistance(id, ctx, poi)
-    if d and d <= yards * yards then return d end
+    if d and d <= (yards or ENTER_YARDS)^2 then return d end
     local questie = call(questieDistance, id, ctx)
     if questie and (not d or questie < d) then return questie end
     return d
@@ -474,11 +474,11 @@ local function measureProximity(id,ctx,poi,parent,blocked,limit)
     if task==true or blob==true then return 0,"inside" end
     if not blocked then
         local dist=distance(id,ctx,poi,limit)
-        if parent and (not dist or dist>limit*limit) then
+        if parent and (not limit or not dist or dist>limit*limit) then
             local other=distance(id,parent,parent.points and parent.points[id],limit)
             if other and (not dist or other<dist) then dist=other end
         end
-        if dist then return dist,dist<=limit*limit and "near" or "outside" end
+        if dist then return dist,limit and dist<=limit*limit and "near" or "outside" end
     end
     if task==false or blob==false then return nil,"possible_exit" end
 end
@@ -543,13 +543,15 @@ local function manualEligible(id)
     return false
 end
 function AT.GetQuestHUDManualFocus()
-    if manualEligible(manualHUDQuest) then return manualHUDQuest end
+    if manualEligible(manualHUDQuest) and (manualWasReady or not completed(manualHUDQuest)) then
+        return manualHUDQuest
+    end
 end
 function AT.ToggleQuestHUDManualFocus(id)
     if manualHUDQuest==id and validID(id) then
-        retiringManual,manualHUDQuest=manualHUDQuest,nil
+        retiringManual,manualHUDQuest,manualWasReady=manualHUDQuest,nil,nil
     elseif manualEligible(id) then
-        manualHUDQuest=id
+        manualHUDQuest,manualWasReady=id,completed(id)
     else return false end
     AT.RefreshQuests()
     if AT.RefreshQuestRoute then AT.RefreshQuestRoute() end
@@ -559,8 +561,11 @@ end
 local function run()
     local db = AT.db
     if not db or not Q or (InCombatLockdown and InCombatLockdown()) then return end
-    if not db.enabled then manualHUDQuest,retiringManual=nil,nil; release(); return end
+    if not db.enabled then manualHUDQuest,manualWasReady,retiringManual=nil,nil,nil; release(); return end
     if AT.GetLevelGuideRoutePoint and call(AT.GetLevelGuideRoutePoint) then return end
+    if manualHUDQuest and not AT.GetQuestHUDManualFocus() then
+        retiringManual,manualHUDQuest,manualWasReady=manualHUDQuest,nil,nil
+    end
     local ids, watchedIDs = snapshot()
     if db.hideCompleted then
         for _, id in ipairs(watchedIDs) do
@@ -588,9 +593,6 @@ local function run()
         -- Leave a qualifying completed watch alone if that option is disabled.
         if not db.hideCompleted and completed(focus) then ownedWatch = nil end
         release()
-    end
-    if manualHUDQuest and not manualEligible(manualHUDQuest) then
-        retiringManual,manualHUDQuest=manualHUDQuest,nil
     end
     if retiringManual then
         if focus==retiringManual and focus~=manualHUDQuest then release() end
@@ -622,27 +624,24 @@ local function run()
     for id in pairs(poiByID) do
         if activeQuest(id,ids) then ids[id]=true end
     end
-    if focus then
-        local d = measureProximity(focus,ctx,poiByID[focus],parent,blocked,EXIT_YARDS)
-        if d ~= nil and d <= EXIT_YARDS * EXIT_YARDS then
-            noteNear(focus, ctx, d)
-            return
-        end
-        -- Temporary loss of coordinates does not count as departure;
-        -- a verified move into a distinct zone can still open the scan.
-        if d == nil and (blocked or not confirmedDeparture(ctx)) then return end
-    end
-    local best, bestDist
+    local best, bestDist, currentDistance
     for id in pairs(ids) do
-        if id ~= focus and not AT.IsQuestExcluded(id) and not completed(id) then
-            local d = measureProximity(id,ctx,poiByID[id],parent,blocked,ENTER_YARDS)
-            if d and d <= ENTER_YARDS * ENTER_YARDS and
-                (not bestDist or d < bestDist or (d == bestDist and id < best)) then
+        if not AT.IsQuestExcluded(id) and not completed(id) then
+            local d = measureProximity(id,ctx,poiByID[id],parent,blocked)
+            if id==focus then currentDistance=d end
+            -- No yardage cutoff for focus; highlights still use 100/125 yd.
+            -- Keep the current quest on exact ties, including overlapping blobs.
+            if finite(d) and d >= 0 and (not bestDist or d < bestDist
+                or (d == bestDist and (id == focus or best ~= focus and id < best))) then
                 best, bestDist = id, d
             end
         end
     end
-    if best and acquire(best, tracker) then noteNear(best, ctx, bestDist) end
+    if best then
+        if best == focus or acquire(best, tracker) then noteNear(best, ctx, bestDist) end
+    elseif currentDistance == math.huge or confirmedDeparture(ctx) then
+        release()
+    end
 end
 
 -- Navigation follows the first eligible order entry even if Blizzard's quest
@@ -993,7 +992,7 @@ function AT.ForgetRemovedQuest(id)
         end
     end
     if id==manualHUDQuest then
-        retiringManual,manualHUDQuest=manualHUDQuest,nil
+        retiringManual,manualHUDQuest,manualWasReady=manualHUDQuest,nil,nil
         changed=true
     end
     if changed and AT.RefreshQuestRoute then AT.RefreshQuestRoute() end
@@ -1012,7 +1011,7 @@ function AT.InitQuests()
         local origin = AT.char.questLastNear
         if type(origin) == "table" and origin.id == focus and validID(origin.zone)
             and finite(origin.world) and finite(origin.x) and finite(origin.y)
-            and finite(origin.d2) and origin.d2 >= 0 and origin.d2 <= EXIT_YARDS * EXIT_YARDS then
+            and finite(origin.d2) and origin.d2 >= 0 then
             lastNear = origin
         end
     end

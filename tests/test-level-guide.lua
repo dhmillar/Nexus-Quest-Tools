@@ -619,3 +619,22 @@ for _,row in ipairs(rg.quests) do if row.id==94885 then log=row end end
 assert(log and log.giver.pickup and log.giver.sourceName=="Twilight Neophyte")
 assert(real.TrackLevelGuideGiver(log) and not real.GetLevelGuideRoutePoint())
 print("PASS exact Forever starter areas, including chest, dungeon, replaced quest items and real Riverglades tracking")
+do
+    local initialSide,initialLocale=UnitFactionGroup,GetLocale
+    local prior=AT.LevelGuideItemStarts
+    AT.LevelGuideItemStarts={[717001]={4881,{{1436,.4,.5,.035,2,3239,"Benedict's Chest","Guard tower"}}}}
+    UnitFactionGroup=function() return "Alliance" end
+    GetLocale=function() return "enUS" end
+    assert(AT.GetShareQuestStart(101,1436)=="Starts at: Giver of Westfall  |  Westfall 45.0, 72.0")
+    assert(AT.GetShareQuestStart(109,1436,"Deadmines"):find("Westfall",1,true),"outdoor giver for a dungeon quest")
+    local pickup=assert(AT.GetShareQuestStart(717001,nil))
+    assert(pickup:find("Benedict's Chest",1,true) and pickup:find("Guard tower",1,true) and pickup:find("Westfall",1,true))
+    assert(not pickup:find("40.0",1,true),"approximate item areas must never gain exact coordinates")
+    GetLocale=function() return "frFR" end
+    assert(AT.GetShareQuestStart(101,1436)=="Starts at: Westfall 45.0, 72.0")
+    UnitFactionGroup=function() return "Horde" end
+    assert(not AT.GetShareQuestStart(101,1436))
+    assert(not AT.GetShareQuestStart(999999,nil),"unknown source remains unknown")
+    AT.LevelGuideItemStarts,UnitFactionGroup,GetLocale=prior,initialSide,initialLocale
+    print("PASS Share Verify source lookup: exact giver, outdoor dungeon start, approximate item area, faction and locale")
+end

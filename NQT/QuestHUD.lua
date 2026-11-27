@@ -535,7 +535,7 @@ function Share.key(roster)
 end
 
 function Share.missing(q,members)
-    local missing,unknown={},false
+    local missing,unknown,offered={},false,{}
     local rejected=Share.rejected[q]
     local pending=Share.pending[q]
     local now=Share.value(GetTime)
@@ -548,15 +548,17 @@ function Share.missing(q,members)
             if not ordinary(has) then has=nil end
             if has==true then
                 if pending then pending.members[m.guid]=nil end
+            elseif pending and pending.members[m.guid] then
+                offered[#offered+1]=m
             elseif has==false and Share.value(UnitIsVisible,m.unit)==true and Share.value(UnitIsConnected,m.unit)==true then
-                if not pending or not pending.members[m.guid] then missing[#missing+1]=m end
+                missing[#missing+1]=m
             else
                 unknown=true
             end
         end
     end
     if pending and not next(pending.members) then Share.pending[q]=nil end
-    return missing,unknown
+    return missing,unknown,offered
 end
 
 function Share.lookup(message,template,members)
@@ -617,7 +619,8 @@ function Share.attempt(q,title,memberGUID)
         return "stopped"
     end
     Share.groupKey=key
-    local missing=Share.missing(q,roster)
+    local missing,_,offered=Share.missing(q,roster)
+    if #offered>0 then return "pending" end -- WoW can only make a group offer
     if #missing==0 then return end
     if memberGUID then
         local stillMissing=false
@@ -643,7 +646,7 @@ function Share.attempt(q,title,memberGUID)
     return "attempted"
 end
 
-function Share.snapshot(scope)
+function Share.snapshot(scope,includePending)
     local z,name=playerZone()
     if logCache and not logCache.full then logDirty=true end
     local snapshot=build(z,name)
@@ -652,9 +655,13 @@ function Share.snapshot(scope)
     for q,row in pairs(snapshot.rows) do
         local matches=scope=="all" or scope=="dungeons" and row.dungeon or scope=="zone" and bucket and bucket.rows[q]
         if matches and not row.partyOnly and Share.value(Q.IsPushableQuest,q)==true then
-            local missing,uncertain=Share.missing(q,roster)
+            local missing,uncertain,offered=Share.missing(q,roster)
             unknown=unknown or uncertain
-            if #missing>0 then rows[#rows+1]={qid=q,title=row.title,order=row.logIndex or 0,missing=missing} end
+            if (#missing>0 and #offered==0) or (includePending and #offered>0) then
+                rows[#rows+1]={qid=q,title=row.title,order=row.logIndex or 0,missing=missing,offered=offered,
+                    level=row.level,origin=row.origin,recorded=row.recorded,dungeon=row.dungeon,header=row.header,
+                    destination=row.destination}
+            end
         end
     end
     table.sort(rows,function(a,b) return a.order==b.order and a.qid<b.qid or a.order<b.order end)
@@ -829,33 +836,60 @@ local function setExtent(scroll,child,height)
     if current>limit then scroll:SetVerticalScroll(limit) end
 end
 
+function Share.source(data)
+    local known=call(AT.GetShareQuestStart,data.qid,data.origin,data.dungeon)
+    if is(known,"string") and known~="" then return known end
+    local origin=id(data.origin) and mapName(data.origin)
+    if is(origin,"string") and origin~="" then
+        return (data.recorded and "Accepted in: " or "Starts in: ")..origin
+    end
+    -- A dungeon, objective waypoint or quest-log header is context, not a
+    -- verified origin. Never relabel a destination as the pickup location.
+    local context=data.dungeon and ("Dungeon: "..data.dungeon)
+    if not context and id(data.destination) then
+        local destination=mapName(data.destination)
+        if destination then context="Objective: "..destination end
+    end
+    if not context and is(data.header,"string") and data.header~="" then context="Quest log: "..data.header end
+    return "Start location unknown"..(context and ("  |  "..context) or "")
+end
+
 function Share.refresh()
     local f=Share.window
     if not f or not f:IsShown() then return end
-    local rows,unknown,members=Share.snapshot("all")
+    local rows,unknown,members=Share.snapshot("all",true)
     local status
     if members==0 then status="Join a party to verify quests."
     elseif #rows==0 then status="No verified quests to share right now."
-    else status=#rows..(#rows==1 and " quest available to offer" or " quests available to offer") end
+    else
+        local available=0
+        for _,data in ipairs(rows) do if #data.offered==0 then available=available+1 end end
+        status=available.." ready to share  |  "..(#rows-available).." pending"
+    end
     if unknown then status=status.." Some party progress is unavailable." end
     f.summary:SetText(status)
+    local offset=0
     for i,data in ipairs(rows) do
         local row=f.rows[i]
         if not row then
             row=CreateFrame("Frame",nil,f.content)
-            row:SetSize(394,46);row:SetPoint("TOPLEFT",f.content,"TOPLEFT",0,-(i-1)*47)
+            row:SetSize(438,62)
             local fill=box(row);fill:SetAllPoints(row);color(fill,.14,.19,.18,.50)
-            row.title=text(row,"GameFontNormal");row.title:SetPoint("TOPLEFT",10,-7);row.title:SetWidth(305)
+            row.title=text(row,"GameFontNormal");row.title:SetPoint("TOPLEFT",10,-7);row.title:SetWidth(347)
             row.title:SetJustifyH("LEFT");row.title:SetWordWrap(false)
-            row.detail=text(row,"GameFontHighlightSmall");row.detail:SetPoint("TOPLEFT",10,-25);row.detail:SetWidth(305)
-            row.detail:SetJustifyH("LEFT");row.detail:SetWordWrap(false)
+            row.source=text(row,"GameFontHighlightSmall");row.source:SetPoint("TOPLEFT",10,-25)
+            row.source:SetWidth(347);row.source:SetJustifyH("LEFT");row.source:SetWordWrap(true)
+            row.source:SetTextColor(.87,.83,.66)
+            row.detail=text(row,"GameFontHighlightSmall");row.detail:SetWidth(347)
+            row.detail:SetJustifyH("LEFT");row.detail:SetWordWrap(true)
             row.action=button(row,"Share",0,0,58,25,function()
-                if not row.qid or not f:IsShown() then return end
+                if not row.qid or row.offerPending or not f:IsShown() then return end
                 if shareJob then shareNotice("Stop or finish the bulk share first.");return end
-                local chosen,title=row.qid,row.title:GetText()
+                local chosen,title=row.qid,row.questTitle
                 local result=Share.attempt(chosen,title)
                 if result=="attempted" then shareNotice("Offer attempted: "..title)
                 elseif result=="wait" then shareNotice("Wait a moment before sending another offer.")
+                elseif result=="pending" then shareNotice("A group offer for this quest is still pending.")
                 elseif result=="stopped" then shareNotice("Sharing is unavailable during combat or outside a party.")
                 elseif result=="blocked" then shareNotice("WoW blocked that share.")
                 else shareNotice("No verified recipient still needs that quest.") end
@@ -865,27 +899,41 @@ function Share.refresh()
             row.action:RegisterForClicks("LeftButtonUp")
             f.rows[i]=row
         end
-        local names={}
+        local names,pendingNames={},{}
         for _,m in ipairs(data.missing) do names[#names+1]=m.name end
-        row.qid=data.qid
-        row.title:SetText(data.title);row.detail:SetText("Not in log: "..table.concat(names,", "))
+        for _,m in ipairs(data.offered) do pendingNames[#pendingNames+1]=m.name end
+        row.qid,row.questTitle=data.qid,data.title
+        row.title:SetText(id(data.level) and ("["..data.level.."] "..data.title) or data.title)
+        row.source:SetText(Share.source(data))
+        local detail=#names>0 and ("Not in log: "..table.concat(names,", ")) or ""
+        if #pendingNames>0 then detail=detail..(#names>0 and "\n" or "").."Offer pending: "..table.concat(pendingNames,", ") end
+        row.detail:SetText(detail)
+        row.offerPending=#pendingNames>0
+        row.action.label:SetText(row.offerPending and "Pending" or "Share")
+        if row.action.SetEnabled then row.action:SetEnabled(not row.offerPending) end
+        local sourceH=math.max(12,call(row.source.GetStringHeight,row.source) or 12)
+        local detailH=math.max(12,call(row.detail.GetStringHeight,row.detail) or 12)
+        row.detail:ClearAllPoints();row.detail:SetPoint("TOPLEFT",10,-29-sourceH)
+        row:SetHeight(math.max(61,38+sourceH+detailH))
+        row:ClearAllPoints();row:SetPoint("TOPLEFT",f.content,"TOPLEFT",0,-offset)
+        offset=offset+row:GetHeight()+3
         row:Show()
     end
     for i=#rows+1,#f.rows do f.rows[i].qid=nil; f.rows[i]:Hide() end
-    setExtent(f.scroll,f.content,#rows*47)
+    setExtent(f.scroll,f.content,offset)
 end
 
 function Share.open()
     if not Share.window then
         local f=CreateFrame("Frame","NQTShareVerify",UIParent)
-        f:SetSize(430,367);f:SetPoint("CENTER");f:SetFrameStrata("DIALOG")
+        f:SetSize(474,407);f:SetPoint("CENTER");f:SetFrameStrata("DIALOG")
         f:SetClampedToScreen(true);f:EnableMouse(true);f:SetMovable(true)
         local back=box(f);back:SetAllPoints(f);color(back,.042,.065,.061,.99)
         local rule=box(f,"ARTWORK");rule:SetHeight(2);rule:SetPoint("TOPLEFT",12,-36)
         rule:SetPoint("TOPRIGHT",-12,-36);color(rule,.34,.68,.40,.8)
         local title=text(f,"GameFontNormalLarge");title:SetPoint("TOPLEFT",16,-12);title:SetText("Share Verify")
         f.summary=text(f,"GameFontHighlightSmall");f.summary:SetPoint("TOPLEFT",16,-47)
-        f.summary:SetWidth(398);f.summary:SetHeight(31);f.summary:SetWordWrap(true);f.summary:SetJustifyH("LEFT")
+        f.summary:SetWidth(442);f.summary:SetHeight(31);f.summary:SetWordWrap(true);f.summary:SetJustifyH("LEFT")
         local close=button(f,"X",0,0,24,22,function() f:Hide() end)
         close:ClearAllPoints();close:SetPoint("TOPRIGHT",-10,-9);close:RegisterForClicks("LeftButtonUp")
         local drag=CreateFrame("Frame",nil,f);drag:SetPoint("TOPLEFT");drag:SetPoint("TOPRIGHT",-44,0);drag:SetHeight(36)
@@ -894,7 +942,7 @@ function Share.open()
         end)
         drag:SetScript("OnMouseUp",function() if f.StopMovingOrSizing then f:StopMovingOrSizing() end end)
         f.scroll=wheelFrame(f,65);f.scroll:SetPoint("TOPLEFT",16,-83);f.scroll:SetPoint("BOTTOMRIGHT",-16,16)
-        f.content=CreateFrame("Frame",nil,f.scroll);f.content:SetSize(394,2)
+        f.content=CreateFrame("Frame",nil,f.scroll);f.content:SetSize(438,2)
         f.scroll:SetScrollChild(f.content)
         f.rows={}
         Share.window=f
@@ -1664,10 +1712,12 @@ local function renderObjectives(b,row,width,theme,hasItem,hasDetail)
     end
     local partyEnabled=AT.db.questPartyProgress~=false
     local showParty=partyEnabled and inlineParty
-    local missing,missingGUIDs={},{}
+    local missing,missingGUIDs,offered={}, {}, {}
     if showParty and not row.partyOnly and Share.value(Q.IsPushableQuest,row.id)==true then
-        missing=Share.missing(row.id,Share.roster())
+        local uncertain
+        missing,uncertain,offered=Share.missing(row.id,Share.roster())
         for _,member in ipairs(missing) do missingGUIDs[member.guid]=true end
+        for _,member in ipairs(offered) do missingGUIDs[member.guid]=true end
     end
     local function partyLine(line,indent)
         if theme.questie then add(line,indent,.56,.90,.87)
@@ -1704,6 +1754,11 @@ local function renderObjectives(b,row,width,theme,hasItem,hasDetail)
             end
         end
     end
+    for _,member in ipairs(offered) do partyLine(member.name.."  -  Offer pending",0) end
+    if #offered>0 then
+        for _,member in ipairs(missing) do add(member.name.."  -  Not on quest",0,1,.31,.29) end
+        missing={} -- no group-wide retry while a prior recipient is deciding
+    end
     b.partyShareButtons=b.partyShareButtons or {}
     for i,member in ipairs(missing) do
         local label,lineTop,lineHeight=add(member.name.."  -  Not on quest",0,1,.31,.29)
@@ -1736,6 +1791,7 @@ local function renderObjectives(b,row,width,theme,hasItem,hasDetail)
                 local result=Share.attempt(self.questID,title,self.memberGUID)
                 if result=="attempted" then shareNotice("Group offer attempted: "..title)
                 elseif result=="wait" then shareNotice("Wait a moment before sending another offer.")
+                elseif result=="pending" then shareNotice("A group offer for this quest is still pending.")
                 elseif result=="stopped" then shareNotice("Sharing is unavailable during combat or outside a party.")
                 elseif result=="blocked" then shareNotice("WoW blocked that share.")
                 else shareNotice(name.." is no longer a verified recipient.") end

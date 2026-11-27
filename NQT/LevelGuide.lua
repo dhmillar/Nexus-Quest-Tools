@@ -1420,6 +1420,38 @@ startDescription=function(g)
     if not validPoint(g.x,g.y) then return who.."  |  Location not recorded" end
     return ("%s  |  %s %.1f, %.1f"):format(who,mapName or "Map",g.x*100,g.y*100)
 end
+-- Single-quest read-only lookup for Share Verify. Reuse the source tables
+-- and faction/ambiguity checks without building the whole Level Guide.
+function AT.GetShareQuestStart(q,origin,dungeon)
+    if not positive(q) then return end
+    local faction=safe(UnitFactionGroup,"player")
+    local side=faction=="Alliance" and 1 or faction=="Horde" and 2 or -1
+    local g=chooseGiver(q,{map=origin,kind=dungeon and "dungeon"},side,nil,
+        dungeon and optionalDatabase() or nil,{})
+    if not g then return end
+    local locale=safe(GetLocale)
+    local english=not locale or locale=="enUS" or locale=="enGB"
+    local area=positive(g.map) and field(mapInfo(g.map),"name")
+    if not positive(g.map) and positive(origin) then area=field(mapInfo(origin),"name") end
+    if g.pickup then
+        local item=safe(C_Item and C_Item.GetItemNameByID,g.item) or safe(GetItemInfo,g.item)
+        if not validName(item) and not requestedItems[g.item] then
+            requestedItems[g.item]=true;safe(C_Item and C_Item.RequestLoadItemDataByID,g.item)
+        end
+        local what=validName(item) and item or ("Item #"..g.item)
+        local source=english and validName(g.sourceName) and g.sourceName or nil
+        local place=english and validName(g.sourceArea) and g.sourceArea or nil
+        local detail=what..(source and (" from "..source) or "")
+        if place then detail=detail.."  |  "..place end
+        if validName(area) then detail=detail.."  |  "..area end
+        return "Pickup: "..detail
+    end
+    local name=english and validName(g.name) and g.name
+    if not name and not validName(area) then return end
+    local coords=validName(area) and validPoint(g.x,g.y) and ("%s %.1f, %.1f"):format(area,g.x*100,g.y*100)
+    return "Starts at: "..(name or coords or area)..(name and (coords or area) and ("  |  "..(coords or area)) or "")
+end
+
 local function currentQuestView(p,mode,hideHeld)
     local out={}
     for _,q in ipairs(p.quests) do

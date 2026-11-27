@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.5.163 - 2026-11-27
+
+- **Rank Quest:** Automatically follows the closest unfinished quest with a known distance, even outside the highlight range. A manual pick stays active until its objectives are complete; explicit tracking order still takes priority over distance.
+- **Quest-starting item popup:** A newly acquired quest starter can appear above your character. Click the item to open WoW’s quest offer. Accepting the quest clears the icon immediately. On by default in Rank Quest settings; right-click to dismiss.
+- **Share Verify:** Shows the quest level and available starter details, such as giver, coordinates, or item pickup area. Offers stay visible as pending until WoW confirms acceptance or ineligibility, or the offer times out.
+- **Minimap:** Removed the separate quest panel under the minimap. The route line and yard count are unchanged.
+
 ## 1.5.158 - 2026-11-26
 - Rank Quest: bulk sharing verifies party quest ownership. Added Share Verify, per-quest and inline party Share buttons, pending offer deduplication, acceptance refresh, and handling for explicit WoW completion and eligibility replies.
 

@@ -26,6 +26,7 @@ local defaults = {
     showObservedQuestGivers = false,
     rankQuestDropRates = true,
     questLeftoverMarks = false,
+    questStartItemAlert = true,
     questHUDCollapsed = false,
     questHUDRailOpen = false,
     questHUDFontOffset = 0,
@@ -72,6 +73,7 @@ loader:SetScript("OnEvent", function(self, event, arg)
         safeInit("Standalone map pins", AT.InitQuestMapPins)
         safeInit("Quest leftover bag marks", AT.InitQuestLeftovers)
         safeInit("Bag quest links", AT.InitBagQuestLink)
+        safeInit("Quest-starting item alerts", AT.InitQuestStartItemAlert)
         safeInit("Dungeons", AT.InitDungeonPosition)
         safeInit("Boss Target Marking", AT.InitBossTargetMarking)
         safeInit("Hunter Deadzone", AT.InitHunterDeadzone)
