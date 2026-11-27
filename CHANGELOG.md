@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.181 - 2026-11-27
+
+- **Level Guide pickups:** Theocritus’ Retrieval now highlights two observed Redridge pickup areas for the Glowing Shadowhide Pendant. It does not show a drop percentage from the small samples. The Horde version of Sign Me Up! now points to the correct Advertising License Application sold by Gishah in The Barrens. Neither reference sets native GPS.
+
 ## 1.5.180 - 2026-11-27
 
 - **Level Guide pickup maps:** Added highlighted pickup areas for Sully Balloo’s Letter (Waterlogged Letter, Thandol Span), Attack on Camp Narache (Dirt-stained Map, Brambleblade Ravine), and Sign Me Up! (Alliance vendor Tamelyn Aldridge, Three Corners). Vendor pickups are labeled as purchases, not monster drops. Pickup references do not set native GPS waypoints.

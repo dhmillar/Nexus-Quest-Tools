@@ -613,10 +613,10 @@ local log
 for _,row in ipairs(rg.quests) do if row.id==94885 then log=row end end
 assert(log and log.giver.pickup and log.giver.sourceName=="Twilight Neophyte")
 assert(real.TrackLevelGuideGiver(log) and not real.GetLevelGuideRoutePoint())
-for quest,item in pairs({[178]=1962,[637]=4433,[781]=4851,[95816]=270888}) do
+for quest,item in pairs({[178]=1962,[637]=4433,[781]=4851,[95816]=270888,[95819]=270887}) do
     local packed=real.LevelGuideItemStarts[quest]
     assert(packed[1]==item,"exact quest-starting item")
-    if quest==178 then assert(#packed[2]==0,"no fabricated Redridge spawn")
+    if quest==178 then assert(#packed[2]==2 and packed[2][1][6]==434 and packed[2][2][6]==579,"two exact Redridge creatures")
     else assert(#packed[2]==1 and packed[2][1][4]>0,"real pickup area") end
 end
 print("PASS exact Forever starter areas, including chest, dungeon, corrected starter items and real Riverglades tracking")
@@ -626,8 +626,12 @@ do
     UnitFactionGroup=function() return "Alliance" end
     assert(real.GetShareQuestStart(637,1417):find("Waterlogged Letter",1,true))
     assert(real.GetShareQuestStart(95816,1433):find("Tamelyn Aldridge",1,true))
+    assert(not real.GetShareQuestStart(95819,1413):find("Gishah",1,true))
+    assert(real.GetShareQuestStart(178,1433):find("Near Stonewatch Keep",1,true))
     UnitFactionGroup=function() return "Horde" end
     assert(real.GetShareQuestStart(781,1412):find("Brambleblade Ravine",1,true))
+    assert(real.GetShareQuestStart(95819,1413):find("Gishah",1,true))
+    assert(not real.GetShareQuestStart(178,1433):find("Shadowhide",1,true))
     assert(not real.GetShareQuestStart(95816,1433):find("Tamelyn Aldridge",1,true))
     UnitFactionGroup,GetLocale=initialSide,initialLocale
     local prior=AT.LevelGuideItemStarts

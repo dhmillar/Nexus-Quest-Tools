@@ -1989,7 +1989,8 @@ AT.LevelGuideItemStarts={
  [162]={8594,{}},
  [164]={1922,{}},
  [172]={18597,{}},
- [178]={1962,{}}, -- Forever 71139 client StartQuestID; https://www.wowhead.com/forever/item=1962
+ -- Exact loot and representative areas: https://guide.wow4ever.se/en/items/1962 ; https://guide.wow4ever.se/en/npc/434 ; https://guide.wow4ever.se/en/npc/579
+ [178]={1962,{{1433,.680,.550,.035,1,434,"Rabid Shadowhide Gnoll","Near Stonewatch Keep",1},{1433,.750,.540,.035,1,579,"Shadowhide Assassin","Redridge Mountains",1}}}, -- Forever 71139 client StartQuestID; https://www.wowhead.com/forever/item=1962
  [198]={2252,{}},
  [199]={2563,{}},
  [210]={4085,{}},
@@ -3118,7 +3119,8 @@ AT.LevelGuideItemStarts={
  [95805]={277199,{}},
  [95809]={270901,{}},
  [95816]={270888,{{1433,.085,.728,.025,3,256389,"Tamelyn Aldridge","Three Corners",1}}}, -- Forever 71139 client StartQuestID; https://www.wowhead.com/forever/item=270888
- [95819]={270896,{}},
+ -- Horde item and vendor: https://foreverquestlog.com/items/270887/ ; https://warcraftforever.wiki/wiki/Gishah
+ [95819]={270887,{{1413,.494,.294,.025,3,256384,"Gishah","Durotar Supply and Logistics camp",2}}},
  -- Beren's Peril cave entrance represents the pickup area, not a corpse waypoint.
  [95884]={271343,{{1421,0.605,0.725,0.043,1,1973,"Ravenclaw Guardian / Ravenclaw Drudger"},{1421,0.605,0.725,0.043,1,1974,"Ravenclaw Drudger"}}},
  [95885]={210713,{}},
