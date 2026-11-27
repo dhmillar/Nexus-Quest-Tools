@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.178 - 2026-11-27
+
+- **Rank Quest portraits:** Added 27 verified monster portraits across 18 quests, including Cirrusfly Queen, Roiling Winds, Living Lightning, and all five Hatefury mob entries. The portraits display from quest data without needing to target the mob first.
+
 ## 1.5.177 - 2026-11-27
 
 - **Rank Quest portraits:** Added missing display IDs for 1,736 bundled mob records, including Seeking Remnant, Saturated Remnant, and Mana Echo. Kill objectives use exact quest creature IDs when identical names have different portraits, including the Riverglades Redridge Brute.

@@ -27,6 +27,44 @@ assert(AT.GetQuestMobDisplayID("Mana Echo",true,92457)==14272)
 assert(AT.GetQuestMobDisplayID("Redridge Brute",true,94532)==609)
 assert(AT.GetQuestMobDisplayID("Redridge Brute",true,94678)==609)
 assert(not AT.GetQuestMobDisplayID("Redridge Brute",true),"do not pick a same-name model without quest context")
+-- Verify the new portraits resolve cold from exact quest objective IDs, without a target.
+for _,case in ipairs({
+    {764,2978,"Venture Co. Worker",7247},
+    {764,2979,"Venture Co. Supervisor",7245},
+    {1012,3941,"Uthil Mooncall",4165},
+    {1062,3989,"Venture Co. Logger",7228},
+    {1071,3989,"Venture Co. Logger",7228},
+    {1071,3991,"Venture Co. Deforester",7226},
+    {1087,4057,"Son of Cenarius",2432},
+    {1386,4632,"Kolkar Centaur",9447},
+    {1386,4633,"Kolkar Scout",9445},
+    {1434,4670,"Hatefury Rogue",6741},
+    {97265,4670,"Hatefury Rogue",6741},
+    {1434,4672,"Hatefury Felsworn",2014},
+    {97265,4672,"Hatefury Felsworn",2014},
+    {1434,4673,"Hatefury Betrayer",11331},
+    {1434,4675,"Hatefury Hellcaller",2014},
+    {97265,4675,"Hatefury Hellcaller",2014},
+    {1487,3636,"Deviate Ravager",1747},
+    {1487,5761,"Deviate Shambler",1084},
+    {1487,5056,"Deviate Dreadfang",3006},
+    {5581,11937,"Demon Portal Guardian",9017},
+    {5728,11519,"Bazzalan",2007},
+    {6143,4714,"Slitherblade Myrmidon",6748},
+    {6143,4712,"Slitherblade Sorceress",11266},
+    {8366,7855,"Southsea Pirate",6944},
+    {8366,7856,"Southsea Freebooter",6948},
+    {8424,6004,"Shadowsworn Cultist",7838},
+    {81838,221333,"Doomkin",118604},
+    {92463,251404,"Cirrusfly Queen",136996},
+    {92465,251143,"Roiling Winds",137907},
+    {92550,251662,"Living Lightning",137158},
+    {97265,4674,"Hatefury Shadowstalker",11332},
+}) do
+    local qid,npc,name,display=case[1],case[2],case[3],case[4]
+    local actual,source=AT.GetQuestMobDisplayID(name,true,qid)
+    assert(actual==display and source==npc,"Bundled portrait: "..qid.."/"..name)
+end
 local prior=AT.ObservedQuestDrops
 AT.ObservedQuestDrops={items={[99999]={{259987,1,2,3,1,1}}}}
 assert(not AT.GetQuestDropMobNames(99999),"object IDs must not become NPC names")
