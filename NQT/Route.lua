@@ -91,13 +91,19 @@ local function lineFor(i)
     if not line then
         local glow=frame:CreateLine(nil,"ARTWORK")
         glow:SetThickness(4)
-        glow:SetColorTexture(.10,.88,.68,.27)
+
         line = frame:CreateLine(nil, "OVERLAY")
         line.autoTrackGlow=glow
         lines[i] = line
     end
     line:SetThickness(1.65)
-    line:SetColorTexture(.22, .90, .78, .80)
+    if scopeTurnIn then
+        line:SetColorTexture(.27,1,.32,.96)
+        line.autoTrackGlow:SetColorTexture(.17,.96,.24,.29)
+    else
+        line:SetColorTexture(1,.88,.19,.96)
+        line.autoTrackGlow:SetColorTexture(1,.69,.10,.29)
+    end
     if line.Show then line:Show(); line.autoTrackGlow:Show() end
     return line
 end
@@ -477,13 +483,15 @@ local function makeBearing()
     if dotFrame.SetFrameStrata then dotFrame:SetFrameStrata("HIGH") end
     dotFrame:SetFrameLevel(Minimap:GetFrameLevel()+13)
     dotFrame:EnableMouse(false)
-    local glow=dotFrame:CreateLine(nil,"ARTWORK")
-    glow:SetThickness(4)
-    glow:SetColorTexture(1,.52,.10,.28)
-    local core=dotFrame:CreateLine(nil,"OVERLAY")
-    core:SetThickness(1.4)
-    core:SetColorTexture(1,.81,.38,1)
-    dotFrame.glow,dotFrame.core=glow,core
+    dotFrame.dashes={}
+    for i=1,3 do
+        local glow=dotFrame:CreateLine(nil,"ARTWORK")
+        glow:SetThickness(3)
+        local core=dotFrame:CreateLine(nil,"OVERLAY")
+        core:SetThickness(1.4)
+        dotFrame.dashes[i]={glow,core}
+    end
+    dotFrame.glow,dotFrame.core=unpack(dotFrame.dashes[1])
     dotFrame:Hide()
     bearing=dotFrame
 end
@@ -501,7 +509,7 @@ local function drawBearing()
     local rotating=rotateEnabled()
     if not ordinary(rotating) then bearingStatus="rotation setting protected"; return end
     local heading=0
-    if minimapProjection and rotating then
+    if rotating then
         heading=GetPlayerFacing and GetPlayerFacing()
         if not finite(heading) then
             bearingStatus="facing unavailable"
@@ -516,12 +524,18 @@ local function drawBearing()
     local east,north=dx,-dy
     local vx=(east*math.cos(heading)+north*math.sin(heading))/distance
     local vy=(-east*math.sin(heading)+north*math.cos(heading))/distance
-    -- Amber projection is intentionally distinct from a teal walking route.
+    -- A bearing uses the quest color, but is dashed rather than a walk.
     local px,py=display*vx,display*vy
-    for _,region in ipairs({bearing.glow,bearing.core}) do
-        region:SetStartPoint("CENTER",bearing,0,0)
-        region:SetEndPoint("CENTER",bearing,px,py)
-        region:Show()
+    for i,pair in ipairs(bearing.dashes) do
+        local lo,hi=(i-1)/3,((i-1)+.62)/3
+        for j,region in ipairs(pair) do
+            local alpha=j==1 and .22 or .84
+            if scopeTurnIn then region:SetColorTexture(.38,1,.33,alpha)
+            else region:SetColorTexture(1,.87,.24,alpha) end
+            region:SetStartPoint("CENTER",bearing,px*lo,py*lo)
+            region:SetEndPoint("CENTER",bearing,px*hi,py*hi)
+            region:Show()
+        end
     end
     bearingStatus="estimated direction"
     bearing:Show()
@@ -590,7 +604,7 @@ local function draw()
     clearLines(count+1)
     if caption then
         caption:SetText(d.path.roadAware and "ROAD-AWARE WALK" or "WALK ROUTE")
-        caption:SetTextColor(.22,.90,.78,.85)
+        if scopeTurnIn then caption:SetTextColor(.31,1,.35,.9) else caption:SetTextColor(1,.88,.19,.9) end
     end
     frame:Show()
 end

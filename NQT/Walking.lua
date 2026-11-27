@@ -203,7 +203,12 @@ function AT.GetFocusedQuestWalkingPath(quest, from, width, height)
     if not state and not cache.stale then
         state = {quest=quest, from=from, api=api, nav=nav, targets=cache.points, key=cache.key,
             started=now, phase=0, road=road}
-        estimateNext(state, 1)
+        if #cache.points==1 and AT.IsQuestTurnInNavigation and AT.IsQuestTurnInNavigation(quest) then
+            state.best=cache.points[1]
+            requestPath(state)
+        else
+            estimateNext(state, 1)
+        end
     end
     if state and state.waitingPath and not cache.stale then
         state.path,state.waitingPath=state.waitingPath,nil

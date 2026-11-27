@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.220
+
+- Auto Focus chooses only current-zone objectives or hand-ins and clears when none qualify. Manual selections can still route across zones. Verified Mai'Zoth's hand-in at Brother Nimetz. Both maps, including MapWise, draw progress in yellow and turn-ins in green.
+
 ## 1.5.219
 
 - Ready quests on both maps can route to a verified outdoor hand-in even if the game omits the native pin. A single watched ready quest can supply the destination. Being inside an unmeasured objective area no longer beats an actual measured hand-in, and ambiguous or wrong-faction recipients are not guessed.

@@ -6,6 +6,9 @@
 -- Observed interactions: Efficient Games (https://efficient.games), CC BY 4.0.
 local _,AT=...
 AT.ForeverVerifiedEndpointReferences={
+ -- Mai'Zoth ends at Brother Nimetz at the Rebel Camp, not the ogre objective.
+ -- https://questing.wiki/wow-forever/quests/206/
+ [206]={{1434,.378,.036,1,739,1,"Brother Nimetz"}},
  -- QuestieDB 1.1.6 identity; cross-checked Forever Quest Log and independently observed EG position.
  [94892]={{2548,0.6658,0.81,1,257558,1,"Demar Brant"}},
  [94907]={{2548,0.6672,0.8108,1,257591,1,"Ashe Amberhall"}},
@@ -20,6 +23,8 @@ AT.ForeverVerifiedEndpointReferences={
  -- https://www.wowhead.com/forever/quest=96084/somethings-in-the-water
  -- https://wow-forever.gg/db/npcs/262031-sister-rowland/
  [96084]={{2548,.6178,.8318,1,262031,1,"Sister Rowland"}},
+ -- Upstream Contamination returns to the same verified chapel NPC: https://guide.wow4ever.se/en/quests/96085
+ [96085]={{2548,.6178,.8318,1,262031,1,"Sister Rowland"}},
  [96081]={{2548,0.6551,0.79,1,263613,1,"Brother Lowley"}},
  [96082]={{2548,0.6551,0.79,1,263613,1,"Brother Lowley"}},
  [84400]={{1458,.7338,.3303,1,7825,2,"Oran Snakewrithe"}}, -- verified Horde hand-in, no inferred Alliance recipient

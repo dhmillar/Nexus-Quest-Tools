@@ -2,6 +2,7 @@ local AT={db={enabled=true,autoFocus=true,hideCompleted=true,questHUDEnabled=fal
 local held,ready,watch={[11]=true,[12]=true,[13]=true},{[12]=true,[13]=true},{}
 local current=0
 C_QuestLog={
+    GetQuestUiMapID=function() return 1 end,
     GetNumQuestLogEntries=function()return 3 end,
     GetInfo=function(i) return {questID=i+10} end,
     IsOnQuest=function(id)return held[id]==true end,

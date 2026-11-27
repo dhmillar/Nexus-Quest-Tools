@@ -3,6 +3,7 @@ local measured,ready,waypoints,inside,watch,cont,pois={},{},{},{},{},{},{}
 local selected,map,instance=0,1,false
 local ids={11,12,13,14}
 C_QuestLog={
+    GetQuestUiMapID=function() return map==2 and 1 or map end,
     GetNumQuestLogEntries=function() return #ids end,
     GetInfo=function(i) return {questID=ids[i]} end,
     IsOnQuest=function(id) for _,qid in ipairs(ids) do if id==qid then return true end end return false end,
@@ -124,14 +125,12 @@ local stockTrack=C_SuperTrack.SetSuperTrackedQuestID
 C_SuperTrack.SetSuperTrackedQuestID=function(id)
     if id~=11 or watch[11] then stockTrack(id) end
 end
-expect(11)
-assert(watch[11] and not AT.ShouldHideCompletedQuest(11))
-assert(AT.GetFocusedQuestRoutePoint()==11 and select(2,AT.GetFocusedQuestRoutePoint())==nil,
-    "native distance alone never becomes GPS coordinates")
+expect(14)
+assert(not watch[11],"unknown turn-in location cannot auto-track on same-continent distance alone")
 measured[14]=20;expect(14)
-inside[14]=nil;measured[14]=nil;expect(11)
+inside[14]=nil;measured[14]=nil;expect(nil)
 measured[11]=101;measured[14]=90;expect(14)
-inside[14]=nil;measured[14]=300;expect(11)
+inside[14]=nil;measured[14]=300;expect(14)
 measured[14]=50;expect(14)
 inside[14]=nil;measured[14]=200
 measured[11]=nil
@@ -148,8 +147,10 @@ C_Map.GetWorldPosFromMapPos=function(m,pos)
     return 1,CreateVector2D(1000*px,1000*py)
 end
 pois[1]=nil;pois[3]={{questID=11,x=.57,y=.5,inProgress=false}}
-expect(11)
+expect(14)
+assert(AT.ToggleQuestHUDManualFocus(11));expect(11)
 assert(select(2,AT.GetFocusedQuestRoutePoint())==3)
+assert(AT.ToggleQuestHUDManualFocus(11));expect(14)
 ready[13]=true
 AT.GetCachedRankQuestIDs=function()return {[11]=true,[13]=true} end
 pois[3][2]={questID=13,x=.53,y=.5,inProgress=false}
@@ -157,10 +158,10 @@ local count=0
 local oldPoints=C_QuestLog.GetQuestsOnMap
 C_QuestLog.GetQuestsOnMap=function(m) if m==3 then count=count+1 end;return oldPoints(m) end
 AT.char.zoneQuestOrigins={[13]=3}
-expect(13);assert(count==1,"shared turn-in map fetched once per focus scan")
-table.remove(ids,2);expect(11)
+expect(14);assert(count==1,"shared turn-in map fetched once per focus scan")
+table.remove(ids,2);expect(14)
 assert(AT.ToggleQuestHUDManualFocus(14));expect(14)
-assert(AT.ToggleQuestHUDManualFocus(14));expect(11)
+assert(AT.ToggleQuestHUDManualFocus(14));expect(14)
 C_QuestLog.GetQuestsOnMap=oldPoints
 C_QuestLog.GetNextWaypoint=nil;pois[3]=nil
 measured[14]=100
@@ -189,8 +190,7 @@ do
     expect(11)
     assert(select(2,AT.GetFocusedQuestRoutePoint())==nil,"reference is not a GPS waypoint")
     playerX=.72;expect(13)
-    -- Compare local and remote map pins on a single yard scale; 420 beats 380
-    -- only in the old, mismatched comparison (300 versus 380).
+    -- A closer hand-in on another map still loses automatic zone selection.
     playerX=.5;pois[1][1].x=.8
     pois[3]={{questID=11,x=.02,y=.5,inProgress=false}}
     C_QuestLog.GetNextWaypoint=function(q) if q==11 then return 3,.02,.5 end end
@@ -198,7 +198,7 @@ do
         local x,y=pos:GetXY()
         return m==4 and 2 or 1,CreateVector2D((m==3 and 1052 or 0)+1400*x,1400*y)
     end
-    expect(11)
+    expect(13)
     -- A genuine foreign-world pin must not fall back to the old 10-yard number.
     pois[4]=pois[3];pois[3]=nil
     C_QuestLog.GetNextWaypoint=function(q) if q==11 then return 4,.02,.5 end end
@@ -304,4 +304,49 @@ do
     assert(select(3,AT.GetFocusedQuestRoutePoint())==.6178)
     print("PASS ready-quest GPS: auto, manual and single watch; verified coordinates; stale pin, faction and conflicting evidence guards")
     print("PASS Farholde screenshot coordinates, exact hand-in fallback, closer unfinished quest, and manual completion reset")
+end
+
+
+do
+    -- Screenshot: in Riverglades, manually select the Stranglethorn hand-in.
+    map=2548;ids={206,77};ready[206]=true;visibleReady={};ready[77]=false
+    AT.db.autoFocus=true;selected=0
+    pois[2548]=nil
+    local oldZone=C_QuestLog.GetQuestUiMapID
+    C_QuestLog.GetQuestUiMapID=function(id) return id==77 and 1434 or oldZone(id) end
+    C_QuestLog.GetNextWaypoint=function(id) if id==77 then return 1434,.28,.08 end end
+    inside[77]=true;measured[77]=4;cont[77]=true
+    C_Map.GetMapWorldSize=function() return 5500,5500 end
+    C_Map.GetPlayerMapPosition=function() return CreateVector2D(.6337,.3930) end
+    C_Map.GetWorldPosFromMapPos=function(m,p)
+        local x,y=p:GetXY();return 0,CreateVector2D(x*5500+(m==1434 and 5200 or 0),y*5500)
+    end
+    C_QuestLog.GetNumQuestWatches=function()return 1 end
+    C_QuestLog.GetQuestIDForQuestWatchIndex=function()return 206 end
+    expect(nil)
+    assert(AT.GetQuestNavigationID()==nil,"a leftover nonlocal watch must not produce a line")
+    assert(AT.ToggleQuestHUDManualFocus(206));expect(206)
+    local id,goals=AT.GetFocusedQuestRouteTargets(2548)
+    assert(id==206 and #goals==1 and goals[1].map==1434 and goals[1].x==.378 and goals[1].y==.036)
+    ShortestPathForever={API={
+        version=2,minor=13,NavVersion=function()return "test-route"end,
+        EstimateWalks=function()error("a verified single hand-in does not need an estimate pass")end,
+        WalkPath=function(_,from,to,reply)
+            assert(from.map==2548 and to.map==1434 and to.x==.378 and to.y==.036)
+            reply({navVersion="test-route",yards=6400,waypoints={from,to}})
+            return function()end
+        end
+    }}
+    assert(loadfile("NQT/Walking.lua"))("NQT",AT)
+    local walking,handIn=AT.GetFocusedQuestWalkingPath(206,{map=2548,x=.6337,y=.3930},5500,5500)
+    assert(walking and handIn.map==1434,"verified manual turn-in is sent across zones to the walking solver")
+    assert(AT.ToggleQuestHUDManualFocus(206));expect(nil)
+    ids[#ids+1]=96085;ready[96085]=true
+    C_Map.GetPlayerMapPosition=function() return CreateVector2D(.6163,.8442) end
+    expect(96085)
+    assert(select(2,AT.GetFocusedQuestRoutePoint())==2548 and select(3,AT.GetFocusedQuestRoutePoint())==.6178,
+        "Farholde screenshot: prefer the local ready quest at Sister Rowland")
+    assert(AT.ToggleQuestHUDManualFocus(206));expect(206)
+    assert(AT.ToggleQuestHUDManualFocus(206));expect(96085)
+    print("PASS Riverglades: no automatic route out of zone, manual Mai'Zoth routes to Brother Nimetz in Stranglethorn")
 end

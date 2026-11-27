@@ -1,7 +1,8 @@
 local _, AT = ...
 local overlay, canvas, pin, legend, lines
 local projectedPath, projectedMap, points
-local stitch,viewBounds
+local stitch,viewBounds,mapWise,mapWiseKey
+local surfaces={}
 
 local function clean(v)
     return not issecretvalue or not issecretvalue(v)
@@ -13,6 +14,21 @@ local function call(fn,...)
     if type(fn)~="function" then return end
     local ok,a,b,c=pcall(fn,...)
     if ok then return a,b,c end
+end
+-- MapWise replaces the world-map projection with its own terrain/paper
+-- canvas. Reuse its exposed projection; do not change its current journey.
+local function mapWiseSurface(map)
+    local api=MapWiseAPI
+    if not clean(api) or type(api)~="table" then return end
+    local m=api.Map
+    local r=api.RouteUI
+    local db=api.db
+    local ui=api.UI and api.UI.frame
+    if not (m and m.view and m.canvas and m.container and r and type(r.Projection)=="function"
+        and db and ui and call(ui.IsVisible,ui) and call(m.view.IsVisible,m.view)
+        and api.Integration and api.Integration.native==map
+        and not (api.Instances and api.Instances.active)) then return end
+    return api,m,r,db
 end
 local function fraction(x,y)
     return finite(x) and finite(y) and x>=0 and x<=1 and y>=0 and y<=1 and (x~=0 or y~=0)
@@ -27,8 +43,17 @@ local function outdoor(id)
 end
 local function project(src,x,y,dst,allowSibling)
     if not finite(src) or not finite(x) or not finite(y) then return end
-    if src==dst and not stitch then return x,y end
+    if src==dst and not stitch and not mapWise then return x,y end
     if not (CreateVector2D and C_Map.GetWorldPosFromMapPos) then return end
+    if mapWise then
+        local world,vec=call(C_Map.GetWorldPosFromMapPos,src,CreateVector2D(x,y))
+        if not finite(world) or not clean(vec) or not vec then return end
+        local wx,wy=call(vec.GetXY,vec)
+        if not finite(wx) or not finite(wy) then return end
+        local a,b=call(mapWise.Projection,mapWise,{c=world,x=wx,y=wy})
+        if finite(a) and finite(b) then return a,b end
+        return
+    end
     if stitch then
         local world,vec=C_Map.GetWorldPosFromMapPos(src,CreateVector2D(x,y))
         if not finite(world) or not clean(vec) or not vec then return end
@@ -73,22 +98,29 @@ local function clip(ax,ay,bx,by)
         return ax+dx*lo,ay+dy*lo,ax+dx*hi,ay+dy*hi
     end
 end
-local function line(i,w,h,ax,ay,bx,by,isRoute)
+local function line(i,w,h,ax,ay,bx,by,isRoute,turnIn,artScale)
     local x,y,u,v=clip(ax,ay,bx,by)
     if not x or (math.abs(x-u)+math.abs(y-v))<.00001 then return false end
     local region=lines[i]
     if not region then
         local glow=overlay:CreateLine(nil,"ARTWORK")
-        glow:SetThickness(4)
         region=overlay:CreateLine(nil,"OVERLAY")
         region.autoTrackGlow=glow
         lines[i]=region
     end
-    region:SetThickness(1.45)
-    local glow=region.autoTrackGlow
+    region:SetThickness(1.65/artScale)
+    local glow=region.autoTrackGlow; glow:SetThickness(4/artScale)
     if isRoute then
-        region:SetColorTexture(.15,1,.77,1)
-        glow:SetColorTexture(.10,.88,.68,.27)
+        if turnIn then
+            region:SetColorTexture(.32,1,.22,1)
+            glow:SetColorTexture(.22,.85,.14,.29)
+        else
+            region:SetColorTexture(1,.85,.13,1)
+            glow:SetColorTexture(1,.64,.08,.34)
+        end
+    elseif turnIn then
+        region:SetColorTexture(.58,.92,.46,1)
+        glow:SetColorTexture(.25,.64,.25,.26)
     else
         region:SetColorTexture(1,.81,.38,1)
         glow:SetColorTexture(1,.52,.10,.28)
@@ -105,6 +137,8 @@ local function setup(parent)
     if parent==canvas then return end
     if overlay then overlay:Hide() end
     canvas=parent
+    local saved=surfaces[parent]
+    if saved then overlay,lines,pin,legend=unpack(saved);return end
     overlay=CreateFrame("Frame",nil,canvas)
     lines={}
     overlay:SetAllPoints(canvas)
@@ -116,6 +150,7 @@ local function setup(parent)
     legend=overlay:CreateFontString(nil,"OVERLAY","GameFontHighlight")
     legend:SetPoint("TOP",canvas,"TOP",0,-15)
     legend:SetShadowOffset(1,-1)
+    surfaces[parent]={overlay,lines,pin,legend}
     overlay:Hide()
 end
 
@@ -129,18 +164,18 @@ local function objective(quest,id)
         local m,x,y=call(AT.GetQuestTurnInPoint,quest,id)
         if finite(m) and fraction(x,y) then
             local px,py=project(m,x,y,id,false)
-            if finite(px) and finite(py) and (stitch or fraction(px,py)) then return px,py,m end
+            if finite(px) and finite(py) and (stitch or mapWise or fraction(px,py)) then return px,py,m end
         end
         return
     end
     -- Prefer the displayed map's native quest marker to stale coordinates
     -- when the user has opened the destination map from another zone.
     local q=C_QuestLog
-    if not stitch and q and q.GetNextWaypointForMap then
+    if not stitch and not mapWise and q and q.GetNextWaypointForMap then
         local x,y=call(q.GetNextWaypointForMap,quest,id)
         if fraction(x,y) then return x,y,id end
     end
-    if not stitch and AT.GetNativeQuestRoutePointForMap then
+    if not stitch and not mapWise and AT.GetNativeQuestRoutePointForMap then
         local x,y=AT.GetNativeQuestRoutePointForMap(quest,id)
         if fraction(x,y) then return x,y,id end
     end
@@ -150,7 +185,7 @@ local function objective(quest,id)
         else qid,m,x,y=AT.GetFocusedQuestRoutePoint() end
         if finite(qid) and qid==quest and fraction(x,y) then
             x,y=project(m,x,y,id,false)
-            if finite(x) and finite(y) and (stitch or fraction(x,y)) then return x,y,m end
+            if finite(x) and finite(y) and (stitch or mapWise or fraction(x,y)) then return x,y,m end
         end
     end
     if q and q.GetQuestsOnMap then
@@ -180,11 +215,20 @@ function AT.RenderWorldQuestRoute(status,quest,snapshot)
         return
     end
     local id,parent=map:GetMapID(),map:GetCanvas()
+    local mw,m,r,db=mapWiseSurface(map)
+    if mw then parent=m.view end
     if not finite(id) or not parent then AT.HideWorldQuestRoute(); return end
-    local w,h=parent:GetWidth(),parent:GetHeight()
+    local sizeHost=m and m.canvas or parent
+    local w,h=sizeHost:GetWidth(),sizeHost:GetHeight()
     if not finite(w) or not finite(h) or w<1 or h<1 then AT.HideWorldQuestRoute(); return end
     setup(parent)
-    local api=OpenMapAPI
+    local nextKey=m and (tostring(parent)..":"..tostring(db.map)..":"..tostring(db.mode)..":"..tostring(m.active)
+        ..":"..tostring(mw.PaperAtlas and mw.PaperAtlas.state)..":"..tostring(mw.Seamless and mw.Seamless.state))
+    if mapWise~=r or mapWiseKey~=nextKey then
+        mapWise,mapWiseKey=r,nextKey
+        projectedPath,projectedMap,points=nil,nil,nil
+    end
+    local api=not mapWise and OpenMapAPI
     local nextStitch=type(api)=="table" and api.major==1 and finite(api.version) and api.version>=2
         and type(api.IsStitched)=="function" and type(api.CanvasFromWorldPos)=="function" and api.IsStitched() and api or nil
     if stitch~=nextStitch then
@@ -194,7 +238,16 @@ function AT.RenderWorldQuestRoute(status,quest,snapshot)
     viewBounds={0,1,0,1}
     local port=map.ScrollContainer
     local level=canvas:GetFrameLevel()+15
-    if stitch then
+    local artScale=1
+    if m then
+        local rect,scale=call(m.Viewport,m)
+        local l,t,right,b
+        if type(rect)=="table" then l,t,right,b=unpack(rect) end
+        if finite(l) and finite(t) and finite(right) and finite(b) and right>l and b>t then
+            viewBounds={l,right,t,b}
+            if finite(scale) and scale>0 then artScale=math.max(1,scale) end
+        end
+    elseif stitch then
         local art=stitch.ArtTopLevel and stitch.ArtTopLevel()
         if finite(art) then level=math.max(level,art+2) end
         if port and port.GetRect and port.GetEffectiveScale and canvas.GetRect and canvas.GetEffectiveScale then
@@ -216,6 +269,7 @@ function AT.RenderWorldQuestRoute(status,quest,snapshot)
     legend:ClearAllPoints()
     legend:SetPoint("TOP",canvas,"TOPLEFT",w*(viewBounds[1]+viewBounds[2])/2,-h*viewBounds[3]-15)
     local used,x,y,text=0
+    local turnIn=AT.IsQuestTurnInNavigation and AT.IsQuestTurnInNavigation(quest)
     if snapshot and snapshot.quest==quest and (status=="routed" or status=="road") then
         local path=snapshot.path
         if path~=projectedPath or id~=projectedMap then
@@ -227,7 +281,7 @@ function AT.RenderWorldQuestRoute(status,quest,snapshot)
                 local pt=path.waypoints[i]
                 local u,v=project(pt.map,pt.x,pt.y,id,true)
                 p=u and {u,v} or false
-                points[i]=p
+                if p or not mapWise then points[i]=p end
             end
             if p then return p[1],p[2] end
         end
@@ -241,7 +295,7 @@ function AT.RenderWorldQuestRoute(status,quest,snapshot)
                     startX=a+(u-a)*snapshot.fraction
                     startY=b+(v-b)*snapshot.fraction
                 end
-                if line(used+1,w,h,startX,startY,u,v,true) then used=used+1 end
+                if line(used+1,w,h,startX,startY,u,v,true,turnIn,artScale) then used=used+1 end
             end
             a,b=u,v
         end
@@ -263,7 +317,6 @@ function AT.RenderWorldQuestRoute(status,quest,snapshot)
         local source
         x,y,source=objective(quest,id)
         if x then
-            local turnIn=AT.IsQuestTurnInNavigation and AT.IsQuestTurnInNavigation(quest)
             text=(turnIn and "TURN-IN LOCATION" or "QUEST OBJECTIVE") .. "  |  NO WALKING LINE ON THIS MAP"
             local player=call(C_Map.GetBestMapForUnit,"player")
             local comparable=player==source
@@ -272,7 +325,7 @@ function AT.RenderWorldQuestRoute(status,quest,snapshot)
             if not comparable and turnIn and finite(player) and outdoor(player) and outdoor(source) then
                 local root=call(C_Map.GetMapInfo,id)
                 local kinds=Enum and Enum.UIMapType
-                comparable=root and (root.mapType==(kinds and kinds.Continent or 2))
+                comparable=mapWise~=nil or root and (root.mapType==(kinds and kinds.Continent or 2))
             end
             if status~="interior" and finite(player) and comparable and outdoor(player)
                 and not (IsIndoors and IsIndoors()) and C_Map.GetPlayerMapPosition then
@@ -281,7 +334,7 @@ function AT.RenderWorldQuestRoute(status,quest,snapshot)
                     local px,py=p:GetXY()
                     if fraction(px,py) then px,py=project(player,px,py,id,false) else px,py=nil,nil end
                     if finite(px) and finite(py) then
-                        if (source==player or (inView(px,py) and inView(x,y))) and line(1,w,h,px,py,x,y,false) then
+                        if (source==player or (inView(px,py) and inView(x,y))) and line(1,w,h,px,py,x,y,false,turnIn,artScale) then
                             used=1
                             text="ESTIMATED DIRECTION  |  NOT A WALKING ROUTE"
                         end
@@ -294,12 +347,12 @@ function AT.RenderWorldQuestRoute(status,quest,snapshot)
     if inView(x,y) then
         pin:ClearAllPoints()
         pin:SetPoint("CENTER",canvas,"TOPLEFT",x*w,-y*h)
-        if real then pin:SetTextColor(.15,1,.77) else pin:SetTextColor(1,.7,.25) end
+        if turnIn then pin:SetTextColor(.32,1,.22) else pin:SetTextColor(1,.85,.13) end
         pin:Show()
     else pin:Hide() end
     if text then
         legend:SetText(text)
-        if real then legend:SetTextColor(.15,1,.77) else legend:SetTextColor(1,.83,.53) end
+        if turnIn then legend:SetTextColor(.42,1,.38) else legend:SetTextColor(1,.85,.30) end
         overlay:Show()
     else
         overlay:Hide()

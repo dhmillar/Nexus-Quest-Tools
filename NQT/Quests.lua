@@ -319,26 +319,6 @@ local function noteNear(id, ctx, d2)
     save()
 end
 
-local function confirmedDeparture(ctx)
-    if not ctx or not lastNear or lastNear.id ~= focus then return false end
-    local zone = zoneID(ctx.id)
-    if not zone or zone == lastNear.zone then return false end
-    local world, x, y = getPlayerWorld(ctx)
-    if world == nil then return false end
-    local oldRect, newRect = worldRect(lastNear.zone), worldRect(zone)
-    if not oldRect or not newRect or oldRect.world ~= lastNear.world or newRect.world ~= world then
-        return false
-    end
-    if world ~= lastNear.world then return true end
-    local disjoint = oldRect.maxX <= newRect.minX or newRect.maxX <= oldRect.minX
-        or oldRect.maxY <= newRect.minY or newRect.maxY <= oldRect.minY
-    if not disjoint then return false end
-    local dx, dy = x - lastNear.x, y - lastNear.y
-    -- Previous distance is included so merely stepping across a border
-    -- cannot make an objective still within the exit radius appear far.
-    local minTravel = EXIT_YARDS + math.sqrt(lastNear.d2) + 25
-    return dx * dx + dy * dy > minTravel * minTravel
-end
 local function nativeDistance(id, ctx, poi)
     local d, continent = call(Q.GetDistanceSqToQuest, id)
     local native = finite(d) and d>0 and continent==true and d or nil
@@ -425,9 +405,9 @@ local function turnInPin(p)
     return field(p,"isQuestStart")~=true and field(p,"inProgress")==false
 end
 
-local function turnInDistance(id,ctx,poi,parent,blocked,lookup)
+local function turnInDistance(id,ctx,poi,parent,blocked,lookup,onlyZone)
     local function pointDistance(map,x,y,knownContext)
-        if not xyValid(x,y) then return end
+        if not xyValid(x,y) or onlyZone and zoneID(map)~=onlyZone then return end
         -- Use the same yard coordinate system for both local and cross-zone
         -- endpoints when available; indoor and legacy clients still get local geometry.
         if not blocked then
@@ -468,7 +448,7 @@ local function turnInDistance(id,ctx,poi,parent,blocked,lookup)
         map,x,y=resolveTurnInPoint(id,ctx.id,false,lookup)
         if map then
             d,point=pointDistance(map,x,y,map==ctx.id and ctx or parent and map==parent.id and parent or nil)
-            if d then return d,point end
+            if d or onlyZone and zoneID(map)~=onlyZone then return d,point end
         end
         -- A cross-checked endpoint can inform ranking without masquerading
         -- as a native GPS destination. Ignore ambiguous or wrong-faction rows.
@@ -479,7 +459,8 @@ local function turnInDistance(id,ctx,poi,parent,blocked,lookup)
             if d then return d,{} end
         end
     end
-    -- Native same-continent distance can focus a ready quest without a
+    if onlyZone then return end
+    -- Native same-continent distance can describe a ready quest without a
     -- pin, unless the map still advertises it as an unfinished objective.
     -- No coordinates are inferred from this distance.
     local parentPOI=parent and parent.points and parent.points[id]
@@ -487,6 +468,24 @@ local function turnInDistance(id,ctx,poi,parent,blocked,lookup)
         local native,localWorld=call(Q.GetDistanceSqToQuest,id)
         if finite(native) and native>0 and localWorld==true then return native,{},true end
     end
+end
+
+-- Require evidence about where the current objective is, not where it was
+-- accepted. Prefer exact waypoint maps; GetQuestUiMapID is a fallback for
+-- an incomplete quest when the client supplies only a numeric distance.
+local function progressInZone(id,ctx,poi,parent,zone)
+    if not zone or not ctx then return end
+    local function localPoint(context,row)
+        if not context or zoneID(context.id)~=zone then return false end
+        local x,y=call(Q.GetNextWaypointForMap,id,context.id)
+        return xyValid(x,y) or (field(row,"isQuestStart")~=true and field(row,"inProgress")~=false
+            and xyValid(field(row,"x"),field(row,"y")))
+    end
+    if localPoint(ctx,poi) or parent and localPoint(parent,parent.points and parent.points[id]) then return true end
+    local map,x,y=call(Q.GetNextWaypoint,id)
+    if validID(map) and xyValid(x,y) then return zoneID(map)==zone end
+    local known=zoneID(call(Q.GetQuestUiMapID,id,false))
+    if known then return known==zone end
 end
 
 local function measureProximity(id,ctx,poi,parent,blocked,limit,forFocus)
@@ -700,7 +699,8 @@ local function run()
     for id in pairs(poiByID) do
         if activeQuest(id,ids) then ids[id]=true end
     end
-    local best,bestDist,bestTurnIn,currentDistance,areaFallback
+    local best,bestDist,bestTurnIn,areaFallback
+    local currentZone=not blocked and ctx and zoneID(ctx.id)
     local mapLists,remaining={},24
     if ctx then mapLists[ctx.id]=ctx.points or false end
     if parent then mapLists[parent.id]=parent.list or false end
@@ -712,49 +712,40 @@ local function run()
         return mapLists[map]
     end
     local function consider(id,d,point)
-        if id==focus then currentDistance=d end
         if finite(d) and d>=0 and (not bestDist or d<bestDist
             or d==bestDist and (id==focus or best~=focus and id<best)) then
             best,bestDist,bestTurnIn=id,d,point
         end
     end
-    local estimatedTurnIns,measuredTurnIn={},false
     for id in pairs(ids) do
         if not AT.IsQuestExcluded(id) then
             local d,turnIn
             if completed(id) then
-                if activeQuest(id,ids) then
-                    local estimated
-                    d,turnIn,estimated=turnInDistance(id,ctx,poiByID[id],parent,blocked,lookup)
-                    if finite(d) and d>=0 then
-                        if estimated then estimatedTurnIns[#estimatedTurnIns+1]={id,d,turnIn}
-                        else measuredTurnIn=true;consider(id,d,turnIn) end
-                    end
+                if currentZone and activeQuest(id,ids) then
+                    d,turnIn=turnInDistance(id,ctx,poiByID[id],parent,blocked,lookup,currentZone)
+                    consider(id,d,turnIn)
                 end
             else
-                local dist,how=measureProximity(id,ctx,poiByID[id],parent,blocked,nil,true)
-                if how=="inside" then
+                local localObjective=progressInZone(id,ctx,poiByID[id],parent,currentZone)
+                local dist,how=measureProximity(id,ctx,poiByID[id],parent,blocked or not localObjective,nil,true)
+                if how=="inside" and localObjective~=false then
                     -- Being inside a broad objective area is not a measured
                     -- zero-yard route and must not outrank a measured hand-in.
                     if not areaFallback or id==focus or areaFallback~=focus and id<areaFallback then areaFallback=id end
-                else
+                elseif localObjective then
                     consider(id,dist)
                 end
             end
         end
     end
-    -- A bare client distance can still refer to an old objective.
-    -- Never let one outrank a measured hand-in NPC.
-    if not measuredTurnIn then
-        for _,candidate in ipairs(estimatedTurnIns) do consider(unpack(candidate)) end
-    end
+
     best=best or areaFallback
     if best then
         if best==focus or acquire(best,bestTurnIn) then
             focusTurnIn=bestTurnIn
             noteNear(best,ctx,bestDist)
         end
-    elseif focusTurnIn or currentDistance==math.huge or confirmedDeparture(ctx) then
+    elseif focus then
         release()
     end
 end
@@ -795,9 +786,19 @@ function AT.GetQuestNavigationID()
         local id = call(Q.GetQuestIDForQuestWatchIndex,1)
         if validID(id) and not AT.IsQuestExcluded(id) then
             local held=call(Q.IsOnQuest,id)
+            local ctx,poiByID,parent,blocked=proximityContext()
+            local zone=not blocked and ctx and zoneID(ctx.id)
             if completed(id) then
-                if held==true then return id,"turn-in" end
-            elseif held~=false then return id,"watched" end
+                if held==true and zone then
+                    local m=resolveTurnInPoint(id,ctx.id,false)
+                    if not m and not (AT.ObservedQuestTurnIns and AT.ObservedQuestTurnIns[id]) then
+                        m=observedTurnIn(id,nil,nil,nil,"verified",true)
+                    end
+                    if zoneID(m)==zone then return id,"turn-in" end
+                end
+            elseif held~=false and progressInZone(id,ctx,poiByID[id],parent,zone) then
+                return id,"watched"
+            end
         end
     end
 end
