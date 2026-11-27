@@ -1746,6 +1746,7 @@ do
     local stockBatch=1
     local fallbackCount=0
     local visibleBossPlates={}
+    local krolCycle={}
     local tokens={"target","mouseover","focus","targettarget","player","pet"}
     for i=1,5 do tokens[#tokens+1]="boss"..i end
     for i=1,4 do
@@ -2049,10 +2050,26 @@ do
                 if not sameOwner(other,ownerKey) then c.canMark=false;break end
             end
         end
+        local eligible=candidates
+        if id==3039 and #candidates>1 and lastPress then
+            -- Marker availability must not keep selecting the same boss.
+            -- Finish visiting this set before repeating; retain the usual
+            -- nearest/unmarked preference inside the remaining set.
+            eligible={}
+            for _,c in ipairs(candidates) do
+                if not krolCycle[c.label:lower()] then eligible[#eligible+1]=c end
+            end
+            if #eligible==0 then
+                for _,c in ipairs(candidates) do
+                    if c.label:lower()~=lastPress.name then eligible[#eligible+1]=c end
+                end
+            end
+            if #eligible==0 then eligible=candidates end
+        end
         local allMeasured=true
-        for _,candidate in ipairs(candidates) do if candidate.distance==nil then allMeasured=false;break end end
+        for _,candidate in ipairs(eligible) do if candidate.distance==nil then allMeasured=false;break end end
         local pick
-        for _,c in ipairs(candidates) do
+        for _,c in ipairs(eligible) do
             local preferred=index and c.canMark and not (pick and pick.canMark)
             local sameClass=pick and (not index or c.canMark==pick.canMark)
 
@@ -2065,7 +2082,7 @@ do
             for _,icon in ipairs(raidOrder) do
                 local retryOwner=retries[icon]
                 if retryOwner then
-                    for _,c in ipairs(candidates) do
+                    for _,c in ipairs(eligible) do
                         if sameOwner(retryOwner,{guid=c.guid,name=c.label:lower(),unit=c.unit}) then
                             c.index=icon;pick=c;break
                         end
@@ -2146,6 +2163,7 @@ do
         if id~=lastInstance then
             reservations,lastInstance,stockBatch,lastAttempt,lastPress={},id,1,nil,nil
             plans,planIDs,lastTargetLabel={},{},nil
+            krolCycle={}
         end
         if (kind=="raid" or safe(IsInRaid)==true) and safe(UnitIsGroupLeader,"player")~=true
             and safe(UnitIsGroupAssistant,"player")~=true then
@@ -2174,7 +2192,10 @@ do
             local action="/stopmacro [combat]"
             if unit~="target" then action=action.."\n/target "..alive end
             if pick.index then action=action.."\n/tm "..alive.." ~"..pick.index end
-            if AT.db.bossMarkPing then action=action.."\n/ping "..alive.." Attack" end
+            if AT.db.bossMarkPing and (not lastPress or lastPress.name~=pick.label:lower()
+                or (lastPress.guid and pick.guid and lastPress.guid~=pick.guid)) then
+                action=action.."\n/ping "..alive.." Attack"
+            end
             action=action.."\n/atmob k"..(pick.index or 0)..":"..planFor(pick.label:lower())..clearDead
             if maxBytes and #action>maxBytes then return true,nil,"Boss action does not fit." end
             lastBossMarkNote="Prepared a verified living boss: "..pick.label.."."
@@ -2296,9 +2317,18 @@ do
             end
         end) end
         lastTargetLabel=name
-        lastPress={name=name or "unknown boss",icon=index,at=GetTime(),
+        if id==3039 and name and name~=(lastPress and lastPress.name) then
+            if krolCycle[name] then krolCycle={} end
+            krolCycle[name]=true
+        end
+        lastPress={name=name or "unknown boss",guid=identity,icon=index,at=GetTime(),
             observed=validRaidIcon(observed) and observed or nil,readable=readable}
-        if index==0 then return end
+        if index==0 then
+            if id==3039 and C_Timer and C_Timer.After and AT.RefreshBossActionBar then
+                C_Timer.After(0,AT.RefreshBossActionBar)
+            end
+            return
+        end
 
         -- Set-unmarked can refuse if the boss already has another icon.
         -- Such a refusal must not consume a second slot in our ledger.
@@ -2408,6 +2438,7 @@ do
                 if id~=lastInstance or (kind~="party" and kind~="raid") then
                     reservations,lastInstance,stockBatch,lastAttempt,lastPress={},nil,1,nil,nil
                     plans,planIDs,lastTargetLabel={},{},nil
+                    krolCycle={}
                 end
             end
             if event=="NAME_PLATE_UNIT_ADDED" or event=="NAME_PLATE_UNIT_REMOVED" then

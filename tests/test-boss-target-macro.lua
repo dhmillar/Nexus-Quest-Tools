@@ -727,3 +727,41 @@ for _,smart in ipairs({false,true}) do
     C_NamePlate.GetNamePlates=original
 end
 print("PASS Krol'dok dynamic event plates, alternate frame field, name-masked party targets, three unique markers, and corpse/recycled-token removal")
+
+
+-- A press still cycles through all living bosses when no marker is free or
+-- when the visible bosses already have marks. A sole boss is not re-pinged.
+for _,smart in ipairs({false,true}) do
+    units={};kind="none";ui[1].scripts.OnEvent(ui[1],"PLAYER_ENTERING_WORLD")
+    kind="party";current=3039;ui[1].scripts.OnEvent(ui[1],"PLAYER_ENTERING_WORLD")
+    local a=mob(258964,9701,"Nar'gurk",8);a.dist=100
+    local b2=mob(258966,9702,"Slavecrusher Grox",7);b2.dist=225
+    local c=mob(258972,9703,"Twilight Commander Zarmok",4);c.dist=400
+    local corpse=mob(258968,9704,"Overlord Mugg");corpse.dead=true;corpse.dist=1
+    units.nameplate1=a;units.nameplate2=b2;units.nameplate3=c;units.nameplate4=corpse
+    actual={[a]=8,[b2]=7,[c]=4};pings={}
+    local queued={}
+    local savedTimer=C_Timer
+    C_Timer={After=function(_,fn)queued[#queued+1]=fn end}
+    local function flush()
+        local batch=queued;queued={}
+        for _,fn in ipairs(batch) do fn() end
+    end
+    assert(AT.RefreshBossActionBar())
+    for i,want in ipairs({a,b2,c,a,b2,c}) do
+        local action=smart and press() or body
+        assert(not action:find("/tm ",1,true))
+        native(action,{},false)
+        assert(units.target==want and pings[i]==want and #pings==i)
+        flush()
+    end
+    assert(actual[a]==8 and actual[b2]==7 and actual[c]==4 and not actual[corpse])
+    units.nameplate1=nil;units.nameplate2=nil
+    ui[1].scripts.OnEvent(ui[1],"NAME_PLATE_UNIT_REMOVED","nameplate1")
+    local last=smart and press() or body
+    assert(not last:find("/ping ",1,true))
+    native(last,{},false)
+    assert(units.target==c and #pings==6)
+    C_Timer=savedTimer
+end
+print("PASS Krol'dok: both buttons cycle three marked bosses without repeating, keep their markers, skip corpses, and suppress lone-boss ping spam")

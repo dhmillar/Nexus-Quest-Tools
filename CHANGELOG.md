@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.235
+
+- Krol'dok boss macros now cycle through verified living bosses on repeated presses even when they already have markers. Existing markers stay in place, and repeated presses do not keep pinging a lone boss.
+
 ## 1.5.234
 
 - Krol'dok boss targeting checks nameplates reported by the game and party targets, uses known boss IDs when names are hidden, and picks the next living, unmarked boss without searching for corpses by name.
