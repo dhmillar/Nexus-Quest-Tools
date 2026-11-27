@@ -1,7 +1,8 @@
 local _, AT = ...
 local panel, minimapButton, checks, status, targetStatus, primaryChoice, markerStatus
-local deadzonePreviewButton, deadzonePreviewHint, buffPreviewButton
-local titleColor = {0.26, 0.88, 0.80}
+local deadzonePreviewButton, deadzonePreviewHint, buffPreviewButton, buffScaleText
+local titleColor={.97,.81,.50}
+local function controlY(y) return -73+math.floor(y*1.18) end
 
 local function refreshPanel()
     if not panel or not panel:IsShown() then return end
@@ -18,6 +19,9 @@ local function refreshPanel()
     end
     if buffPreviewButton then
         buffPreviewButton:SetText(AT.IsSmartBuffPreview and AT.IsSmartBuffPreview() and "Done Moving" or "Preview / Move")
+    end
+    if buffScaleText and AT.GetSmartBuffAppearance then
+        buffScaleText:SetText(('%d%%'):format(math.floor(AT.GetSmartBuffAppearance()*100+.5)))
     end
     local id = AT.GetFocusedQuestID and AT.GetFocusedQuestID()
     local title = id and C_QuestLog and C_QuestLog.GetTitleForQuestID and C_QuestLog.GetTitleForQuestID(id)
@@ -57,20 +61,51 @@ end
 
 local function makeText(owner, template, y, value)
     local text = owner:CreateFontString(nil, "OVERLAY", template)
-    text:SetPoint("TOPLEFT", 19, y)
-    text:SetWidth(315)
+    text:SetPoint("TOPLEFT", 19, controlY(y))
+    text:SetWidth(520)
+    text:SetFont(STANDARD_TEXT_FONT or "Fonts/FRIZQT__.TTF",13,"")
     text:SetJustifyH("LEFT")
     text:SetText(value)
     return text
 end
 
-local function setupButton(parent, label, w, x, y, action)
-    local button = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
-    button:SetSize(w, 24)
-    button:SetPoint("TOPLEFT", x, y)
-    button:SetText(label)
-    button:SetScript("OnClick", action)
-    return button
+local art="Interface/Buttons/WHITE8X8"
+local function surface(frame,r,g,b)
+    frame:SetBackdrop({bgFile=art,edgeFile=art,edgeSize=1,insets={left=1,right=1,top=1,bottom=1}})
+    frame:SetBackdropColor(r,g,b,.99)
+    frame:SetBackdropBorderColor(.39,.31,.20,1)
+end
+local function shellText(parent,caption,x,y,points,tint)
+    local t=parent:CreateFontString(nil,"OVERLAY","GameFontHighlight")
+    t:SetPoint("TOPLEFT",x,y)
+    t:SetFont(STANDARD_TEXT_FONT or "Fonts/FRIZQT__.TTF",points,"")
+    t:SetTextColor(unpack(tint or titleColor));t:SetJustifyH("LEFT");t:SetText(caption)
+    return t
+end
+local function setupButton(parent,label,w,x,y,action,rail)
+    local b=CreateFrame("Button",nil,parent,"BackdropTemplate")
+    b:SetSize(w,rail and 42 or 32)
+    b:SetPoint("TOPLEFT",x,rail and y or controlY(y))
+    surface(b,.093,.081,.060)
+    local labelRegion=b:CreateFontString(nil,"OVERLAY","GameFontHighlight")
+    labelRegion:SetFont(STANDARD_TEXT_FONT or "Fonts/FRIZQT__.TTF",rail and 15 or 13,"")
+    labelRegion:SetTextColor(.94,.87,.73)
+    if rail then labelRegion:SetPoint("LEFT",15,0) else labelRegion:SetPoint("CENTER") end
+    b:SetFontString(labelRegion)
+    b:SetText(label)
+    local stripe=b:CreateTexture(nil,"OVERLAY")
+    stripe:SetPoint("TOPLEFT",1,-1);stripe:SetPoint("BOTTOMLEFT",1,1)
+    stripe:SetWidth(3);stripe:SetColorTexture(.92,.70,.35,1);stripe:Hide()
+    function b:SetNQTSelected(selected)
+        self.nqtSelected=selected==true
+        self:SetBackdropColor(selected and .24 or .093,selected and .17 or .081,selected and .086 or .060,1)
+        self:SetBackdropBorderColor(selected and .76 or .39,selected and .58 or .31,selected and .31 or .20,1)
+        stripe:SetShown(selected==true)
+    end
+    b:SetScript("OnClick",action)
+    b:SetScript("OnEnter",function(self) self:SetBackdropBorderColor(.85,.66,.35,1) end)
+    b:SetScript("OnLeave",function(self) self:SetNQTSelected(self.nqtSelected==true) end)
+    return b
 end
 
 local function saveCurrentTarget()
@@ -121,18 +156,14 @@ end
 
 local function buildPanel()
     panel = CreateFrame("Frame", "AutoTrackOptionsFrame", UIParent, "BackdropTemplate")
-    panel:SetSize(404, 426)
+    panel:SetSize(800, 592)
     panel:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
     panel:SetFrameStrata("DIALOG")
     panel:SetClampedToScreen(true)
     panel:SetMovable(true)
     panel:EnableMouse(true)
-    panel:SetBackdrop({
-        bgFile = "Interface/Buttons/WHITE8X8", edgeFile = "Interface/Tooltips/UI-Tooltip-Border",
-        edgeSize = 14, insets = {left=4, right=4, top=4, bottom=4},
-    })
-    panel:SetBackdropColor(0.027, 0.048, 0.059, 0.985)
-    panel:SetBackdropBorderColor(0.28, 0.67, 0.65, 1)
+    surface(panel,.036,.031,.024)
+    panel:SetBackdropBorderColor(.60,.47,.28,1)
     panel:Hide()
     local moving = false
     local function stopMoving()
@@ -142,6 +173,10 @@ local function buildPanel()
         moving = false
     end
     panel:SetScript("OnShow", function()
+        local w,h=UIParent:GetWidth(),UIParent:GetHeight()
+        if type(w)=="number" and w>320 and type(h)=="number" and h>240 then
+            panel:SetScale(math.min(1,(w-24)/800,(h-24)/592))
+        end
         panel:ClearAllPoints()
         panel:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
         refreshPanel()
@@ -161,40 +196,51 @@ local function buildPanel()
     end)
     titleDrag:SetScript("OnDragStop", stopMoving)
     table.insert(UISpecialFrames, panel:GetName())
-    local close = CreateFrame("Button", nil, panel, "UIPanelCloseButton")
-    close:SetPoint("TOPRIGHT", -4, -4)
-    local heading = makeText(panel, "GameFontNormalLarge", -17, "Nexus Quest Tools")
-    heading:SetTextColor(unpack(titleColor))
-    local desc = makeText(panel, "GameFontHighlightSmall", -44, "QUEST FOCUS  /  NAMED TARGET")
-    desc:SetTextColor(0.70, 0.79, 0.82)
+    local close=setupButton(panel,"X",34,0,0,function()panel:Hide()end,true)
+    close:SetSize(34,32);close:ClearAllPoints();close:SetPoint("TOPRIGHT",-15,-15)
+    local portrait=panel:CreateTexture(nil,"ARTWORK")
+    portrait:SetSize(45,45);portrait:SetPoint("TOPLEFT",19,-14)
+    portrait:SetTexture("Interface/AddOns/NQT/MinimapAT.tga")
+    shellText(panel,"Nexus Quest Tools",77,-15,24)
+    shellText(panel,"Settings",79,-45,13,{.76,.69,.57})
+    local beam=panel:CreateTexture(nil,"ARTWORK")
+    beam:SetPoint("TOPLEFT",16,-72);beam:SetPoint("TOPRIGHT",-16,-72)
+    beam:SetHeight(1);beam:SetColorTexture(.50,.38,.21,.9)
     checks = {}
-    local names = {"General", "Auto Macro", "Rank Quest", "Dungeons", "Classes"}
-    local widths = {67, 83, 80, 82, 66}
-    local pages, tabs = {}, {}
+    local rail=CreateFrame("Frame",nil,panel,"BackdropTemplate")
+    rail:SetPoint("TOPLEFT",16,-86);rail:SetPoint("BOTTOMLEFT",16,16);rail:SetWidth(170)
+    surface(rail,.063,.056,.044)
+    shellText(rail,"CATEGORIES",14,-14,12,{.82,.69,.48})
+    local names={"General","Auto Macro","Rank Quest","Dungeons","Classes"}
+    local subtitles={"Core behavior and navigation.","Targeting, pings, and action-bar shortcuts.",
+        "Quest tracking, drops, map pins, and party progress.","Instance maps, the live minimap, and boss markers.",
+        "Buff reminders, Hunter Deadzone, and the Pet Bar."}
+    local pages,tabs={},{}
     local function showPage(which)
-        for i, page in ipairs(pages) do
-            page:SetShown(i == which)
-            if i == which then tabs[i]:LockHighlight() else tabs[i]:UnlockHighlight() end
+        for i,page in ipairs(pages) do
+            page:SetShown(i==which)
+            tabs[i]:SetNQTSelected(i==which)
         end
         refreshPanel()
     end
-    local x = 14
-    for i, name in ipairs(names) do
-        local index = i
-        local page = CreateFrame("Frame", nil, panel)
-        page:SetPoint("TOPLEFT", 0, -103)
-        page:SetPoint("BOTTOMRIGHT", 0, 0)
-        pages[i] = page
-        tabs[i] = setupButton(panel, name, widths[i], x, -66, function() showPage(index) end)
-        x = x + widths[i] + 4
+    for i,name in ipairs(names) do
+        local index=i
+        local page=CreateFrame("Frame",nil,panel,"BackdropTemplate")
+        page:SetPoint("TOPLEFT",198,-86);page:SetPoint("BOTTOMRIGHT",-16,16)
+        surface(page,.072,.064,.051)
+        shellText(page,name,18,-15,20)
+        if i~=5 then shellText(page,subtitles[i],19,-42,13,{.78,.72,.61}) end
+        pages[i]=page
+        tabs[i]=setupButton(rail,name,146,12,-38-(i-1)*49,function()showPage(index)end,true)
     end
     local general, macro, rank, dungeon, classes = unpack(pages)
-    local function option(page, key, label, y, hint)
+    local function option(page, key, label, y, hint, x)
         local check = CreateFrame("CheckButton", nil, page, "UICheckButtonTemplate")
-        check:SetPoint("TOPLEFT", 14, y)
-        check:SetSize(26, 26)
+        check:SetPoint("TOPLEFT", x or 14, controlY(y))
+        check:SetSize(30, 30)
         local text = check:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-        text:SetPoint("LEFT", check, "RIGHT", 2, 0)
+        text:SetPoint("LEFT", check, "RIGHT", 5, 0)
+        text:SetFont(STANDARD_TEXT_FONT or "Fonts/FRIZQT__.TTF",14,"")
         text:SetText(label)
         check:SetScript("OnClick", function(self)
             if (key == "showQuestMapPins" or key == "showObservedQuestGivers") and AT.RefreshQuestMapPins then AT.RefreshQuestMapPins() end
@@ -227,25 +273,52 @@ local function buildPanel()
     option(general, "autoFocus", "Automatically focus the closest quest", -30)
     option(general, "hideCompleted", "Untrack ready-to-turn-in quests", -58)
     option(general, "showQuestRoute", "Show minimap walking route", -86)
-    option(classes, "hunterDeadzone", "Hunter Deadzone", -152,
+    local function card(y,height,name)
+        local bg=classes:CreateTexture(nil,"BACKGROUND")
+        bg:SetPoint("TOPLEFT",12,y);bg:SetPoint("TOPRIGHT",-12,y)
+        bg:SetHeight(height);bg:SetColorTexture(.11,.091,.063,.9)
+        local rule=classes:CreateTexture(nil,"ARTWORK")
+        rule:SetPoint("TOPLEFT",12,y);rule:SetPoint("TOPRIGHT",-12,y)
+        rule:SetHeight(1);rule:SetColorTexture(.42,.32,.17,1)
+        shellText(classes,name,20,y-9,15)
+    end
+    card(-49,212,"Smart Buff")
+    card(-273,110,"Hunter tools")
+    card(-395,87,"Pet health")
+    local function tune(delta)
+        if not AT.GetSmartBuffAppearance or not AT.SetSmartBuffAppearance then return end
+        local size=AT.GetSmartBuffAppearance()
+        AT.SetSmartBuffAppearance(size+delta)
+        refreshPanel()
+    end
+    setupButton(classes,"- Size",78,19,-113,function()tune(-.1)end)
+    setupButton(classes,"+ Size",78,102,-113,function()tune(.1)end)
+    buffScaleText=makeText(classes,"GameFontHighlight",-119,"100%")
+    buffScaleText:SetWidth(76)
+    buffScaleText:ClearAllPoints();buffScaleText:SetPoint("TOPLEFT",194,controlY(-119))
+    setupButton(classes,"Reset reminder",140,419,-113,function()
+        if AT.ResetSmartBuffAppearance then AT.ResetSmartBuffAppearance();refreshPanel() end
+    end)
+    option(classes,"smartBuffIconOnly","Icon only",-113,nil,273)
+    option(classes, "hunterDeadzone", "Hunter Deadzone", -203,
         "Shows a crossed-out bow when your current enemy is in melee range during Hunter combat and Auto Shot is not in range.")
-    deadzonePreviewButton = setupButton(classes, "Preview / Move", 128, 232, -153, function()
+    deadzonePreviewButton = setupButton(classes, "Preview / Move", 158, 397, -202, function()
         if AT.SetHunterDeadzonePreview and AT.IsHunterDeadzonePreview then
             AT.SetHunterDeadzonePreview(not AT.IsHunterDeadzonePreview())
             refreshPanel()
         end
     end)
-    deadzonePreviewHint = makeText(classes, "GameFontDisableSmall", -188, "Drag the bow to move it, then click Done Moving.")
+    deadzonePreviewHint = makeText(classes, "GameFontDisableSmall", -236, "Drag the bow to move it, then click Done Moving.")
     deadzonePreviewHint:Hide()
     classes:HookScript("OnHide", function()
         if AT.SetHunterDeadzonePreview then AT.SetHunterDeadzonePreview(false) end
         if AT.SetSmartBuffPreview then AT.SetSmartBuffPreview(false) end
     end)
-    option(classes, "petBarEnabled", "Pet Bar", -214,
+    option(classes, "petBarEnabled", "Pet Bar", -294,
         "Shows only your active pet’s overhead health where supported. Uses the pet category without changing friendly player or NPC settings. Bright green at 50% and above, red below 50%.")
     option(classes, "smartBuffEnabled", "Smart Buff reminders", -2,
         "Shows missing buffs for your class. Your action-bar button casts one recommended spell per press outside combat.")
-    buffPreviewButton = setupButton(classes,"Preview / Move",128,232,-3,function()
+    buffPreviewButton = setupButton(classes,"Preview / Move",158,397,-3,function()
         if AT.SetSmartBuffPreview then AT.SetSmartBuffPreview(not AT.IsSmartBuffPreview());refreshPanel() end
     end)
     setupButton(classes,"Place Smart Buff macro",172,18,-41,function()
@@ -260,10 +333,10 @@ local function buildPanel()
             if not ok and why then AT.Say(why) end
         end)
     end
-    makeText(classes,"GameFontHighlightSmall",-79,"The reminder shows the next missing buff.")
-    makeText(classes,"GameFontDisableSmall",-99,"Press the action-bar key once per cast, out of combat.")
+    makeText(classes,"GameFontHighlightSmall",-79,"Shows the next missing buff. Press once per cast outside combat.")
+    makeText(classes,"GameFontDisableSmall",-325,"A slim overhead bar shows the health of your active pet.")
     status = makeText(general, "GameFontHighlightSmall", -125, "")
-    status:SetTextColor(0.43, 0.88, 0.81)
+    status:SetTextColor(.86,.72,.46)
 
     option(macro, "quietTarget", "Mute target macro sounds", -2)
     option(macro, "pressSkull", "Raid marker on Smart Target press", -30, "Your existing stock action-bar shortcut automatically runs Smart Target out of combat. You can also bind Smart Target directly.")

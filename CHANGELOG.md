@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.5.205 - 2026-11-27
+
+- Rebuilt settings as a larger, MapWise-inspired window with a gold-edged category rail, bigger controls, and separate sections for Smart Buff, Hunter tools, and Pet health.
+- Smart Buff reminder now has size, icon-only, preview, and reset controls. It hides when no monitored buff is missing, unless Preview / Move is active.
+- Paladin overrides now accept full two-part Forever names, with a separate blessing choice for each character.
+- Left-click the reminder to cast the suggested buff outside combat. Paladins can right-click it to open the suggested character's assignment.
+
 ## 1.5.204 - 2026-11-27
 
 - Added Classes settings for Hunter Deadzone, Pet Bar, and Smart Buff. Smart Buff offers a movable reminder and an action-bar macro that casts the next recommended learned buff per press outside combat.

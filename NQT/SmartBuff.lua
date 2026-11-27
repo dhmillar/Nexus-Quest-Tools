@@ -30,7 +30,7 @@ local defaults={WARRIOR="might",PALADIN="kings",HUNTER="might",ROGUE="might",PRI
 local choices={"kings","might","wisdom","light","sanctuary","skip"}
 local choiceLabels={kings="Blessing of Kings",might="Blessing of Might",wisdom="Blessing of Wisdom",
     light="Blessing of Light",sanctuary="Blessing of Sanctuary",skip="Skip"}
-local overlay,preview,watcher,queued,nextAction,syncedBody
+local overlay,preview,watcher,queued,nextAction,syncedBody,clicker
 local function ordinary(v)
     return not issecretvalue or not issecretvalue(v)
 end
@@ -78,13 +78,29 @@ local function nameKey(name,realm)
     if type(name)~="string" then return end
     name=name:match("^%s*(.-)%s*$")
     if #name==0 or #name>96 or name:find("[%c%[%];/|]") then return end
-    local char,suffix=name:match("^([^%-]+)%-(.+)$")
-    char=char or name
-    realm=suffix or (type(realm)=="string" and realm~="" and realm) or ownRealm()
-    if char:find("[%s%-]") or type(realm)~="string" or realm=="" then return end
     local lower=strlower or string.lower
-    local shown=char.."-"..realm:gsub("[%s%-]","")
-    return lower(shown),shown
+    local function realmKey(s)
+        return type(s)=="string" and lower(s:gsub("[%s%-]","")) or ""
+    end
+    local localRealm=ownRealm()
+    -- Forever characters are identified by their complete two-part name.
+    -- A hyphen can be the name separator, not necessarily a realm suffix.
+    local bare,explicit=name:match("^([^@]+)@([^@]+)$")
+    if bare then name=bare:match("^%s*(.-)%s*$");realm=explicit
+    elseif name:find("@",1,true) then return end
+    local before,suffix=name:match("^(.+)%-(.-)$")
+    if suffix and suffix~="" and not explicit and (realmKey(suffix)==realmKey(localRealm)
+        or realmKey(suffix)==realmKey(realm) or (not before:find("[%s%-]") and suffix:find("%s"))) then
+        name,realm=before,suffix
+    end
+    local shown=name:gsub("[%s%-]+"," "):match("^%s*(.-)%s*$")
+    if shown:match("^%S+ %S+$") then return lower(shown),shown end
+    if not shown:match("^%S+$") then return end
+    local rkey=realmKey(realm)
+    if rkey=="" then rkey=realmKey(localRealm) end
+    if rkey=="" then return lower(shown),shown end
+    local label=type(realm)=="string" and realm~="" and realm or localRealm
+    return lower(shown).."-"..rkey,shown.."-"..label:gsub("[%s%-]","")
 end
 local function config(create)
     if not AT.char then return end
@@ -92,11 +108,16 @@ local function config(create)
     if type(cfg)~="table" and create then cfg={}; AT.char.smartBuffAssignments=cfg end
     return type(cfg)=="table" and cfg or nil
 end
+local function storedName(cfg,key)
+    local entries=cfg and cfg.names
+    if type(entries)~="table" or not key then return end
+    return entries[key] or (key:find(" ",1,true) and entries[(key:gsub(" ","-"))] or nil)
+end
 function AT.GetSmartBuffAssignment(class,name)
     local cfg=config()
     if name then
         local k=nameKey(name)
-        local v=k and cfg and cfg.names and cfg.names[k]
+        local v=storedName(cfg,k)
         return type(v)=="table" and choiceLabels[v.key] and v.key or nil
     end
     return cfg and cfg.classes and choiceLabels[cfg.classes[class]] and cfg.classes[class] or defaults[class]
@@ -113,6 +134,7 @@ function AT.SetSmartBuffAssignment(class,name,key)
             local n=0;for _ in pairs(cfg.names) do n=n+1 end
             if n>=100 then return false end
         end
+        if k:find(" ",1,true) then cfg.names[(k:gsub(" ","-"))]=nil end
         cfg.names[k]=key and {name=shown,key=key} or nil
     elseif defaults[class] then
         if type(cfg.classes)~="table" then cfg.classes={} end
@@ -197,7 +219,11 @@ end
 local function currentName(unit)
     local n,r=call(UnitFullName,unit)
     if not n then n,r=call(UnitName,unit) end
-    return n,r
+    local display=call(GetUnitName,unit,true)
+    local key=display and nameKey(display,r)
+    local nativeKey=n and nameKey(n,r)
+    if key and key:find(" ",1,true) and (not nativeKey or not nativeKey:find(" ",1,true)) then return display,r end
+    return n or display,r
 end
 local function makePlan(class)
     if not plans[class] then return {} end
@@ -235,7 +261,7 @@ local function makePlan(class)
                 local _,classToken=call(UnitClass,r.unit)
                 local n,realm=currentName(r.unit)
                 local k=nameKey(n,realm)
-                local entry=k and cfg and cfg.names and cfg.names[k]
+                local entry=storedName(cfg,k)
                 local explicit=type(entry)=="table" and choiceLabels[entry.key] and entry.key
                 local assigned=cfg and cfg.classes and choiceLabels[cfg.classes[classToken]] and cfg.classes[classToken]
                 local key=explicit or assigned or defaults[classToken]
@@ -263,8 +289,55 @@ local function makePlan(class)
 end
 AT.GetSmartBuffPlan=makePlan
 
+local function boundedScale(size)
+    size=tonumber(size)
+    if not size or size~=size then return 1 end
+    return math.max(.7,math.min(1.8,math.floor(size*10+.5)/10))
+end
+function AT.GetSmartBuffAppearance()
+    return boundedScale(AT.char and AT.char.smartBuffScale),AT.db and AT.db.smartBuffIconOnly==true
+end
+local function positionOverlay(f)
+    local pos=AT.char.smartBuffPosition
+    local x,y=type(pos)=="table" and tonumber(pos.x),type(pos)=="table" and tonumber(pos.y)
+    local scale=AT.GetSmartBuffAppearance()
+    f:ClearAllPoints()
+    f:SetPoint("CENTER",UIParent,"CENTER",(x or 0)/scale,(y or -190)/scale)
+end
+local function applyAppearance(f)
+    local size,iconOnly=AT.GetSmartBuffAppearance()
+    if not f.isMoving and f.nqtScale~=size then
+        f.nqtScale=size
+        f:SetScale(size)
+        positionOverlay(f)
+    end
+    if f.nqtIconOnly~=iconOnly then
+        f.nqtIconOnly=iconOnly
+        f:SetSize(iconOnly and 52 or 257,52)
+        f.icon:ClearAllPoints()
+        if iconOnly then f.icon:SetPoint("CENTER") else f.icon:SetPoint("LEFT",10,0) end
+        f.text:SetShown(not iconOnly)
+        f.detail:SetShown(not iconOnly)
+    end
+end
+function AT.SetSmartBuffAppearance(scale)
+    if not AT.char then return end
+    AT.char.smartBuffScale=boundedScale(scale)
+    AT.RefreshSmartBuff()
+end
+function AT.ResetSmartBuffAppearance()
+    if not AT.char or not AT.db then return end
+    if overlay and overlay.isMoving then overlay.finishDrag() end
+    AT.char.smartBuffPosition=nil
+    AT.char.smartBuffScale=nil
+    AT.db.smartBuffIconOnly=false
+    if overlay then overlay.nqtScale=nil end
+    AT.RefreshSmartBuff()
+end
+
 local function draw(plan)
     if not overlay then return end
+    applyAppearance(overlay)
     local entry=plan and plan[1]
     if preview then
         overlay.text:SetText("Buff reminder")
@@ -278,6 +351,75 @@ local function draw(plan)
     overlay:EnableMouse(preview==true)
     overlay:SetShown(preview==true or entry~=nil)
 end
+local function updateReminderClick(entry)
+    if not clicker or call(InCombatLockdown)==true then return end
+    if preview or not entry or not entry.unit or not entry.id or not overlay:IsShown() then
+        clicker.bound=nil;clicker:Hide();clicker:SetAttribute("type1",nil)
+        clicker:SetAttribute("spell1",nil);clicker:SetAttribute("unit1",nil)
+        return
+    end
+    local x,y=call(overlay.GetCenter,overlay)
+    local w,h=call(overlay.GetSize,overlay)
+    if type(x)~="number" or type(y)~="number" or type(w)~="number" or type(h)~="number" then return end
+    local scale=AT.GetSmartBuffAppearance()
+    local old=clicker.bound
+    if not old or old.unit~=entry.unit or old.id~=entry.id or not clicker:IsShown() then
+        clicker:SetAttribute("type1","spell")
+        clicker:SetAttribute("spell1",entry.name)
+        clicker:SetAttribute("unit1",entry.unit)
+    end
+    clicker.bound=entry
+    if clicker.x~=x*scale or clicker.y~=y*scale or clicker.w~=w*scale or clicker.h~=h*scale then
+        clicker.x,clicker.y,clicker.w,clicker.h=x*scale,y*scale,w*scale,h*scale
+        clicker:ClearAllPoints()
+        clicker:SetPoint("CENTER",UIParent,"BOTTOMLEFT",clicker.x,clicker.y)
+        clicker:SetSize(clicker.w,clicker.h)
+    end
+    clicker:Show()
+end
+local function createReminderClicker()
+    if type(RegisterStateDriver)~="function" or call(InCombatLockdown)==true then return end
+    local b=call(CreateFrame,"Button",nil,UIParent,"SecureActionButtonTemplate,SecureHandlerStateTemplate")
+    if not b then return end
+    b:Hide();b:EnableMouse(true);b:SetFrameStrata("HIGH")
+    b:SetFrameLevel(overlay:GetFrameLevel()+3)
+    b:RegisterForClicks("LeftButtonUp","RightButtonUp")
+    b:SetAttribute("useOnKeyDown",false)
+    b:SetAttribute("_onstate-nqtbuffcombat",[[
+        if newstate == "locked" then
+            self:SetAttribute("type1",nil)
+            self:SetAttribute("spell1",nil)
+            self:SetAttribute("unit1",nil)
+            self:Hide()
+        end
+    ]])
+    if not pcall(RegisterStateDriver,b,"nqtbuffcombat","[combat] locked; free") then return end
+    b:SetScript("PreClick",function(_,button)
+        if button=="LeftButton" and not InCombatLockdown() then AT.RefreshSmartBuff() end
+    end)
+    b:SetScript("PostClick",function(self,button)
+        local entry=self.bound
+        if button=="RightButton" and entry and AT.IsSmartBuffPaladin() and not InCombatLockdown() then
+            local name,realm=currentName(entry.unit)
+            local _,shown=nameKey(name,realm)
+            if shown then
+                local ok,why=AT.OpenSmartBuffSetup(shown)
+                if not ok and why and AT.Say then AT.Say(why) end
+            end
+        end
+    end)
+    b:SetScript("OnEnter",function(self)
+        if not GameTooltip then return end
+        GameTooltip:SetOwner(self,"ANCHOR_TOP")
+        GameTooltip:SetText("Click to cast")
+        if AT.IsSmartBuffPaladin() then GameTooltip:AddLine("Right-click to edit this character's blessing.") end
+        GameTooltip:Show()
+    end)
+    b:SetScript("OnLeave",function(self)
+        if GameTooltip and GameTooltip:IsOwned(self) then GameTooltip:Hide() end
+    end)
+    return b
+end
 local function body(entry)
     if not entry or not entry.unit then return "#showtooltip" end
     return "#showtooltip\n/cast [@"..entry.unit..",help,nodead,nocombat] "..entry.name
@@ -289,6 +431,8 @@ function AT.RefreshSmartBuff()
     nextAction=plan and plan[1]
     draw(plan)
     if call(InCombatLockdown)==true then return end
+    if overlay and not clicker then clicker=createReminderClicker() end
+    updateReminderClick(nextAction)
     local command=body(nextAction)
     if AT.SyncSmartBuffAction and syncedBody~=command then
         if AT.SyncSmartBuffAction(command,false) then syncedBody=command end
@@ -315,9 +459,6 @@ local function createOverlay()
     f:SetBackdrop({bgFile="Interface/Buttons/WHITE8X8",edgeFile="Interface/Tooltips/UI-Tooltip-Border",
         edgeSize=12,insets={left=3,right=3,top=3,bottom=3}})
     f:SetBackdropColor(.024,.049,.064,.97);f:SetBackdropBorderColor(.29,.74,.68,1)
-    local pos=AT.char.smartBuffPosition
-    local x,y=type(pos)=="table" and tonumber(pos.x),type(pos)=="table" and tonumber(pos.y)
-    f:SetPoint("CENTER",UIParent,"CENTER",x or 0,y or -190)
     f.icon=f:CreateTexture(nil,"ARTWORK");f.icon:SetSize(33,33);f.icon:SetPoint("LEFT",10,0)
     f.text=f:CreateFontString(nil,"OVERLAY","GameFontNormal");f.text:SetPoint("TOPLEFT",52,-9);f.text:SetPoint("RIGHT",-8,0)
     f.text:SetJustifyH("LEFT");f.text:SetWordWrap(false)
@@ -331,17 +472,19 @@ local function createOverlay()
         local cx,cy=f:GetCenter()
         local rx,ry=UIParent:GetCenter()
         if cx and cy and rx and ry then
-            AT.char.smartBuffPosition={x=cx-rx,y=cy-ry}
-            f:ClearAllPoints();f:SetPoint("CENTER",UIParent,"CENTER",cx-rx,cy-ry)
+            local scale=AT.GetSmartBuffAppearance()
+            AT.char.smartBuffPosition={x=cx*scale-rx,y=cy*scale-ry}
+            positionOverlay(f)
         end
     end
     f:SetScript("OnDragStop",f.finishDrag)
+    applyAppearance(f)
     f:Hide()
     return f
 end
 
 local setup
-function AT.OpenSmartBuffSetup()
+function AT.OpenSmartBuffSetup(prefill)
     if not AT.IsSmartBuffPaladin() then return false,"Your class uses the same buff rules for everyone." end
     if type(MenuUtil)~="table" or not MenuUtil.CreateContextMenu then return false,"WoW's dropdown API is unavailable." end
     if not setup then
@@ -386,19 +529,21 @@ function AT.OpenSmartBuffSetup()
         line("Named overrides  |  take priority over class",17,-282,"GameFontNormal")
         local input=CreateFrame("EditBox",nil,setup,"InputBoxTemplate")
         input:SetSize(192,24);input:SetPoint("TOPLEFT",25,-303);input:SetAutoFocus(false);input:SetMaxLetters(96)
-        line("Character or Character-Realm",25,-334)
+        line("Enter First Last or First-Last",25,-334)
         local message=line("",25,-351)
-        btn("Assign",68,224,-304,function(self)
+        setup.editName=function(name)input:SetText(name);message:SetText("Choose Blessing to change or reset.")end
+        local assign=btn("Blessing",78,222,-304,function(self)
             local raw=input:GetText()
             local k,shown=nameKey(raw)
             if not k then message:SetText("Enter a valid character name.");return end
             input:ClearFocus()
-            selectBlessing(self,shown,function(key)
+            selectBlessing(self,"Blessing for "..shown,function(key)
                 if AT.SetSmartBuffAssignment(nil,raw,key) then message:SetText(shown..": "..choiceLabel(key))
                 else message:SetText("Could not save the override.") end
             end)
         end)
-        btn("Saved",67,296,-304,function(self)
+        input:SetScript("OnEnterPressed",function()assign:Click()end)
+        btn("Saved",67,302,-304,function(self)
             MenuUtil.CreateContextMenu(self,function(_,root)
                 root:CreateTitle("Saved overrides")
                 local cfg=config()
@@ -408,13 +553,14 @@ function AT.OpenSmartBuffSetup()
                 for _,v in ipairs(entries) do
                     local name=v.name
                     root:CreateButton(name.."  |  "..choiceLabel(v.key),function()
-                        input:SetText(name);message:SetText("Choose Assign to change or reset.")
+                        input:SetText(name);message:SetText("Choose Blessing to change or reset.")
                     end)
                 end
             end)
         end)
     end
-    setup:SetShown(not setup:IsShown())
+    if prefill then setup:Show();setup.editName(prefill)
+    else setup:SetShown(not setup:IsShown()) end
     return true
 end
 function AT.InitSmartBuff()

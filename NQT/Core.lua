@@ -16,6 +16,7 @@ local defaults = {
     minimapAngle = 220,
     questHUDEnabled = false,
     smartBuffEnabled = false,
+    smartBuffIconOnly = false,
     rankQuestFocusCloseCompleted = false,
     dungeonPositionEnabled = true,
     dungeonPositionAutoOpen = true,

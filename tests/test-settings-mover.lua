@@ -10,6 +10,7 @@ function Frame:SetScript(k, f) self.scripts[k] = f end
 function Frame:HookScript(k, f) local prior=self.scripts[k];self.scripts[k]=function(...) if prior then prior(...) end;f(...) end end
 function Frame:SetPoint(...) self.anchors=rawget(self,"anchors") or {};table.insert(self.anchors,{...}) end
 function Frame:ClearAllPoints() self.anchors={} end
+function Frame:SetSize(w,h) self.width,self.height=w,h end
 function Frame:SetMovable(value) self.movable=value end
 function Frame:RegisterForDrag(button) self.dragButton=button end
 function Frame:StartMoving() assert(self.movable);self.moving=true end
@@ -105,3 +106,11 @@ for _,label in ipairs({"Place recall macro","Place primary macro","Place mouseov
     assert(buttons[label] and buttons[label].scripts.OnClick)
 end
 print("PASS: Auto Macro only shows the four placement actions")
+assert(panel.width==800 and panel.height==592,"larger settings canvas")
+local rail=buttons.Classes.parent
+assert(rail==buttons.General.parent and rail~=panel and rail.parent==panel,"shared vertical rail")
+buttons.Classes.scripts.OnClick()
+assert(buttons.Classes.nqtSelected and not buttons.General.nqtSelected)
+assert(buttons["Icon only"] and buttons["+ Size"] and buttons["- Size"] and buttons["Reset reminder"])
+assert(buttons["Hunter Deadzone"].parent==buttons["Pet Bar"].parent and buttons["Pet Bar"].parent==buttons["Icon only"].parent)
+print("PASS: large settings shell, category rail, and all editable reminder controls in Classes")

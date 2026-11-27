@@ -63,6 +63,22 @@ locked=false;AT.RefreshSmartBuff()
 assert(edits[#edits][1]:find("@party2",1,true))
 auras.party2={19740};AT.RefreshSmartBuff()
 assert(edits[#edits][1]=="#showtooltip","no queued action after coverage is complete")
+-- Two-part Forever names accept the chat separator and spaces, without
+-- matching another character who shares the same first name.
+members.party1.name="Mira"
+members.party3.name,members.party3.realm="Mira Dawn",""
+function GetUnitName(u)
+    if u=="party1" then return "Mira-Stone"
+    elseif u=="party3" then return "Mira Dawn" end
+end
+assert(AT.SetSmartBuffAssignment(nil,"  MIRA  Stone ","might"))
+assert(AT.GetSmartBuffAssignment(nil,"Mira-Stone")=="might")
+assert(AT.SetSmartBuffAssignment(nil,"Mira-Dawn","wisdom"))
+auras.party1={};auras.party3={}
+result=AT.GetSmartBuffPlan(class)
+assert(#result==2 and result[1].unit=="party1" and result[1].id==19834
+    and result[2].unit=="party3" and result[2].id==19742)
+GetUnitName=nil
 class="MAGE";knowns={[1459]=true};auras.player={23028};auras.party1={23028};auras.party2={}
 result=AT.GetSmartBuffPlan(class)
 assert(#result==2 and result[1].unit=="party2" and result[2].unit=="party3","generic spells ignore Paladin configuration")
@@ -88,3 +104,48 @@ function GetInventoryItemID(_,slot)if slot==16 then return 4 end end
 assert(AT.GetSmartBuffPlan(class)[1].name=="Apply main-hand poison")
 assert(not AT.PickupSmartBuffMacro())
 print("PASS Smart Buff plans for all nine classes, missing buffs, highest known rank, raid subgroup, Paladin defaults and exact named overrides, one safe cast per macro")
+do
+    local frames={}
+    local noop=function()end
+    local function obj()
+        local o={scripts={},attrs={}}
+        return setmetatable(o,{__index=function(_,k)
+            if k=="isMoving" or k=="nqtScale" or k=="nqtIconOnly" or k=="bound" then return nil end
+            if k=="CreateFontString" or k=="CreateTexture" then return function()return obj()end end
+            if k=="SetShown" then return function(self,v)self.visible=v end end
+            if k=="Hide" then return function(self)self.visible=false end end
+            if k=="SetSize" then return function(self,w,h)self.width,self.height=w,h end end
+            if k=="SetScale" then return function(self,s)self.scale=s end end
+            if k=="SetPoint" then return function(self,...)self.point={...}end end
+            if k=="SetScript" then return function(self,e,fn)self.scripts[e]=fn end end
+            if k=="GetCenter" then return function()return 500,350 end end
+            if k=="GetSize" then return function(self)return self.width,self.height end end
+            if k=="GetFrameLevel" then return function()return 5 end end
+            if k=="IsShown" then return function(self)return self.visible==true end end
+            if k=="Show" then return function(self)self.visible=true end end
+            if k=="SetAttribute" then return function(self,key,v)self.attrs[key]=v end end
+            return noop
+        end})
+    end
+    UIParent=obj()
+    function CreateFrame() local f=obj();frames[#frames+1]=f;return f end
+    function RegisterStateDriver(f,key,expr)f.stateRule=expr end
+    class="MAGE";knowns={[1459]=true};auras.player={1459};AT.db.smartBuffEnabled=true
+    AT.InitSmartBuff()
+    local f,click=frames[1],frames[3]
+    assert(not f.visible and f.scale==1 and not click.visible,"no reminder when all buffs are covered")
+    AT.SetSmartBuffPreview(true);assert(f.visible)
+    AT.SetSmartBuffAppearance(1.6)
+    AT.db.smartBuffIconOnly=true
+    AT.RefreshSmartBuff()
+    assert(f.scale==1.6 and f.width==52 and not f.text.visible)
+    f.scripts.OnDragStart();f.scripts.OnDragStop()
+    assert(AT.char.smartBuffPosition.x==300)
+    AT.SetSmartBuffPreview(false);assert(not f.visible)
+    auras.player={};AT.RefreshSmartBuff();assert(f.visible and click.visible and click.attrs.type1=="spell" and click.attrs.spell1=="Arcane Intellect" and click.attrs.unit1=="player")
+    assert(click.stateRule=="[combat] locked; free" and string.find(click.attrs["_onstate-nqtbuffcombat"],"self:Hide()",1,true))
+    AT.ResetSmartBuffAppearance()
+    assert(f.scale==1 and f.width==257 and f.text.visible and not AT.char.smartBuffPosition)
+    auras.player={1459};AT.RefreshSmartBuff();assert(not f.visible and not click.visible and not click.attrs.spell1)
+    print("PASS movable reminder scale, icon-only edit mode, reset and hide when covered")
+end
