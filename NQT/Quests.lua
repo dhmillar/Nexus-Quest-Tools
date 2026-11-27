@@ -679,6 +679,7 @@ local function run()
         if activeQuest(id,ids) then ids[id]=true end
     end
     local best,bestDist,bestTurnIn,currentDistance
+    local priorityTurnIn=false
     local inProgress={}
     local preferReady=db.rankQuestFocusCloseCompleted==true
     local radius2=ENTER_YARDS^2+1e-6
@@ -705,14 +706,20 @@ local function run()
             if completed(id) then
                 if preferReady and activeQuest(id,ids) then
                     d,turnIn=turnInDistance(id,ctx,poiByID[id],parent,blocked,lookup)
-                    if finite(d) and d<=radius2 then consider(id,d,turnIn) end
+                    if finite(d) and d>=0 then
+                        if d<=radius2 then
+                            if not priorityTurnIn then best,bestDist,bestTurnIn=nil,nil,nil end
+                            priorityTurnIn=true
+                        end
+                        if not priorityTurnIn or d<=radius2 then consider(id,d,turnIn) end
+                    end
                 end
             else
                 inProgress[#inProgress+1]=id
             end
         end
     end
-    if not bestTurnIn then
+    if not priorityTurnIn then
         for _,id in ipairs(inProgress) do
             consider(id,(measureProximity(id,ctx,poiByID[id],parent,blocked)))
         end

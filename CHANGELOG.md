@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.209
+
+- With Focus Close Completed Quests enabled, ready turn-ins beyond 100 yards now compete by distance with unfinished quests instead of being ignored. Turn-ins within 100 yards still have priority.
+
 ## 1.5.208
 
 - Rank Quest no longer announces quests that are already ready to turn in on acceptance. Quests completed after acceptance still announce in party chat.

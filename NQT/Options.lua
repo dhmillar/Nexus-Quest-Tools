@@ -356,7 +356,7 @@ local function buildPanel()
     option(rank, "rankQuestPartyAnnouncements", "Announce quest completion in party chat", -198,
         "Announces any completed quest to your party, with your Primary marker in front. Also shows kill and collection milestones on unfinished quests. On by default.")
     option(rank, "rankQuestFocusCloseCompleted", "Focus Close Completed Quests", -226,
-        "With Auto Focus enabled, switch to ready turn-ins within 100 yards, nearest first. Return to in-progress quests when none are nearby. Off by default.")
+        "With Auto Focus enabled, give ready turn-ins priority within 100 yards. Farther away, compare their distance with in-progress quests and track the closest. Off by default.")
     makeText(rank, "GameFontHighlightSmall", -265, "Right-click a quest to exclude it from automatic tracking.")
     makeText(rank, "GameFontDisableSmall", -286, "Ctrl-click quest titles to number them. /at order lists them.")
 

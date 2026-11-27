@@ -85,10 +85,18 @@ assert(watch[11] and not AT.ShouldHideCompletedQuest(11),"the current nearby tur
 assert(AT.SampleQuestAreas({[11]=true},{})[11]=="near","inclusive 100-yard hand-in boundary")
 measured[14]=50;expect(11);assert(watch[11],"nearby turn-ins interrupt even closer progress")
 measured[14]=250
-pois[1][1].x=.601;expect(14);assert(not watch[11])
+pois[1][1].x=.601;expect(11);assert(watch[11])
 assert(AT.SampleQuestAreas({[11]=true},{[11]="near"})[11]=="outside","outside the 100-yard turn-in range")
 measured[14]=100;expect(14)
-measured[14]=250;expect(14)
+measured[14]=250;expect(11)
+-- A 400-yard hand-in beats an in-progress quest a zone away. The reverse
+-- remains true when the in-progress quest is actually closer.
+pois[1][1].x=.9;measured[14]=1750;expect(11)
+assert(AT.IsQuestTurnInNavigation(11) and select(3,AT.GetFocusedQuestRoutePoint())==.9)
+measured[14]=399;expect(14)
+AT.db.rankQuestFocusCloseCompleted=false;measured[14]=1750;expect(14)
+AT.db.rankQuestFocusCloseCompleted=true;expect(11)
+measured[14]=250
 pois[1][1].x=.51;pois[1][1].inProgress=true;expect(14)
 assert(AT.SampleQuestAreas({[11]=true},{[11]="near"})[11]==nil,"stale objective pins and blobs cannot locate turn-in")
 pois[1][1].inProgress=false;map=2;expect(11);map=1
@@ -125,9 +133,9 @@ assert(AT.GetFocusedQuestRoutePoint()==11 and select(2,AT.GetFocusedQuestRoutePo
 measured[14]=20;expect(11)
 measured[14]=nil;expect(11)
 measured[11]=101;expect(14)
-measured[14]=300;expect(14)
+inside[14]=nil;measured[14]=300;expect(11)
 measured[14]=50;expect(14)
-measured[14]=nil
+inside[14]=true;measured[14]=nil
 measured[11]=nil
 pois[1]={{questID=11,x=.54,y=.5,inProgress=false}}
 expect(11)
