@@ -8,6 +8,10 @@ local _,AT=...
 -- https://www.wowhead.com/forever/quest=96084/somethings-in-the-water
 -- https://foreverquestlog.com/quests/96084/
 AT.LevelGuideQuestGivers={
+ -- Profession-sign follow-ups: exact giver IDs cross-checked against ATT 5.4.16. Positions from a firsthand walk-through or EG Link observations.
+ [95818]={{1455,.524,.425,1,10276,"Rotgath Stonebeard"}}, -- https://guided.news/en/guides/wow-forever-profession-sign-ironforge-quest-route-materials/
+ [95820]={{1413,.4991,.2935,2,256388,"Jornah"}}, -- https://www.wowhead.com/forever/quest=95820/karolek ; EG Link 70938
+ [95821]={{1454,.6287,.4459,2,3365,"Karolek"}}, -- https://github.com/ATTWoWAddon/AllTheThings/blob/5.4.16/.contrib/.db/forever/zones/kalimdor/1%20-%20orgrimmar.lua ; EG Link 70888
  [96084]={{2548,0.6178,0.8318,1,262031,"Sister Rowland"}},
  [5]={{1431,0.1817,0.5652,1,288,"Jitters"}},
  [6]={{1429,0.4814,0.4306,1,823,"Deputy Willem"}},

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.185 - 2026-11-27
+
+- **Level Guide:** Added three quest-giver pins for follow-ups in the profession-sign chains: Rotgath Stonebeard in the Great Forge, Jornah in The Barrens, and Karolek in Orgrimmar. The guide keeps the two A Quick Craft quests separate by faction.
+
 ## 1.5.184 - 2026-11-27
 
 - **Quest turn-ins:** Added six fallback hand-ins across the Alliance and Horde profession-sign chains. Rank Quest can show the correct recipient when the game omits its live pin. Elaine Compton has an area label only because the recorded coordinates disagree; approximate references do not create GPS routes.

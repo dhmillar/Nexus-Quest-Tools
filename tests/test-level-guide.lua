@@ -633,6 +633,13 @@ do
     assert(real.GetShareQuestStart(95819,1413):find("Gishah",1,true))
     assert(not real.GetShareQuestStart(178,1433):find("Shadowhide",1,true))
     assert(not real.GetShareQuestStart(95816,1433):find("Tamelyn Aldridge",1,true))
+    assert(real.GetShareQuestStart(95820,1413):find("Jornah",1,true))
+    assert(real.GetShareQuestStart(95821,1454):find("Karolek",1,true))
+    assert(not (real.GetShareQuestStart(95818,1455) or ""):find("Rotgath",1,true))
+    UnitFactionGroup=function() return "Alliance" end
+    assert(real.GetShareQuestStart(95818,1455):find("Rotgath Stonebeard",1,true))
+    assert(not (real.GetShareQuestStart(95821,1454) or ""):find("Karolek",1,true))
+    assert(not real.LevelGuideQuestGivers[95817],"do not pin conflicting Elaine locations")
     UnitFactionGroup,GetLocale=initialSide,initialLocale
     local prior=AT.LevelGuideItemStarts
     AT.LevelGuideItemStarts={[717001]={4881,{{1436,.4,.5,.035,2,3239,"Benedict's Chest","Guard tower"}}}}
