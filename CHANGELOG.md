@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.194 - 2026-11-27
+
+- Added Pet Bar under General, off by default. The thin bar shows your active pet’s health from 0% to 100%, green at 50% or more and red below 50%. It does not replace the stock pet frame.
+
 ## 1.5.193 - 2026-11-27
 
 - Keeps Rank Quest highlighted when stepping out of a quest area, using a 100-yard buffer from the last confirmed in-area position instead of relying only on the map pin.

@@ -43,6 +43,7 @@ local function updateState()
     if AT.RefreshQuestLeftovers then AT.RefreshQuestLeftovers() end
     if AT.RefreshDungeonPosition then AT.RefreshDungeonPosition() end
     if AT.RefreshHunterDeadzone then AT.RefreshHunterDeadzone() end
+    if AT.RefreshPetBar then AT.RefreshPetBar() end
     refreshPanel()
     if minimapButton then
         minimapButton.icon:SetDesaturated(not AT.db.enabled)
@@ -235,7 +236,9 @@ local function buildPanel()
     general:HookScript("OnHide", function()
         if AT.SetHunterDeadzonePreview then AT.SetHunterDeadzonePreview(false) end
     end)
-    status = makeText(general, "GameFontHighlightSmall", -177, "")
+    option(general, "petBarEnabled", "Pet Bar", -174,
+        "Shows a thin health bar for your active pet. Green at 50% and above, red below 50%.")
+    status = makeText(general, "GameFontHighlightSmall", -209, "")
     status:SetTextColor(0.43, 0.88, 0.81)
 
     option(macro, "quietTarget", "Mute target macro sounds", -2)

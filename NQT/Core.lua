@@ -10,6 +10,7 @@ local defaults = {
     reacquireEachPress = false,
     showQuestRoute = true,
     hunterDeadzone = true,
+    petBarEnabled = false,
     hunterDeadzoneX = 0,
     hunterDeadzoneY = 0,
     minimapAngle = 220,
@@ -113,6 +114,7 @@ loader:SetScript("OnEvent", function(self, event, arg)
         safeInit("Dungeons", AT.InitDungeonPosition)
         safeInit("Boss Target Marking", AT.InitBossTargetMarking)
         safeInit("Hunter Deadzone", AT.InitHunterDeadzone)
+        safeInit("Pet Bar", AT.InitPetBar)
         safeInit("Settings", AT.InitOptions)
     end
 end)
