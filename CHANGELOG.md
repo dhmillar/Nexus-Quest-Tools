@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.179 - 2026-11-27
+
+- **Drop rates:** 24 quest-item and monster party samples across 16 quests. The percentages show only observed party loot and do not claim solo odds.
+- **Quest starts:** Corrected the starting item for Theocritus’ Retrieval, Sully Balloo’s Letter, Attack on Camp Narache, and Sign Me Up! No unverified pickup areas were added.
+- **Turn-ins:** Added Betina Bigglezink for Plagued Hatchlings with an observed location and Lorekeeper Lydros in the Athenaeum for Arcane Refreshment. The Athenaeum entry is area-only.
+
 ## 1.5.178 - 2026-11-27
 
 - **Rank Quest portraits:** Added 27 verified monster portraits across 18 quests, including Cirrusfly Queen, Roiling Winds, Living Lightning, and all five Hatefury mob entries. The portraits display from quest data without needing to target the mob first.

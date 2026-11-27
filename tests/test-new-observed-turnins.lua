@@ -54,5 +54,11 @@ held=false
 assert(not AT.GetReadyQuestTurnInPoint(702),"unheld quest cannot use fallback")
 held=true;ready=false
 assert(not AT.GetReadyQuestTurnInPoint(702),"unready quest cannot use fallback")
+held=true;ready=true;locale="enUS"
+map,x,y,name,click,approx=AT.GetReadyQuestTurnInPoint(5529)
+assert(map==1423 and x==.7158 and y==.4989 and name=="Betina Bigglezink" and click and approx)
+assert(AT.ToggleQuestHUDManualFocus(5529) and not AT.GetQuestTurnInPoint(5529),"party field data cannot set native GPS")
+local area,recipient,clickable=AT.GetReadyQuestTurnInArea(7463)
+assert(area=="Dire Maul, the Athenaeum" and recipient=="Lorekeeper Lydros" and clickable and not AT.GetReadyQuestTurnInPoint(7463))
 assert(not AT.ForeverVerifiedEndpointReferences[95454],"keep conflicting completion recipient unresolved")
 print("PASS Forever turn-in observations: standalone display, factions, locale, live pin precedence, no guess and no reference GPS")

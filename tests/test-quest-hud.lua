@@ -429,6 +429,17 @@ do
             for i=3,#packed.ForeverQuestFacts[q] do if packed.ForeverQuestFacts[q][i][1]==item then typed=true end end
             assert(matched and typed,"verified party sample stays with its typed quest item")
         end
+        for _,r in ipairs({{2822,8973,5292,8,27,2,71091},{2822,8973,5295,7,16,2,71091},{2973,9369,5278,16,32,2,71037},{2974,9460,7725,12,26,2,71037},{2974,9460,7726,13,24,2,71037},{7730,18961,5247,22,22,2,71037},{1419,6166,2729,58,92,2,70959},{2258,7846,2729,14,92,2,70959},{572,3863,687,20,58,2,70959},{95773,270305,262397,20,57,2,70959},{1108,5797,2893,13,45,2,70959},{2258,7848,2735,7,33,2,70959},{710,4626,2735,6,22,2,70959},{1108,5797,2894,7,19,2,70959},{47,773,475,11,23,3,70938},{60,772,475,6,19,2,70938},{47,773,40,6,18,3,70938},{60,772,40,4,14,2,70938},{91775,248001,40,4,11,2,70938},{556,3714,2271,17,47,2,70888},{557,3715,2359,10,22,2,70888},{556,3714,2272,5,16,2,70888},{189,1519,588,3,11,2,70888},{189,1519,701,4,11,2,70888}}) do
+            local q,item,npc,drops,loots,contributors,build=unpack(r)
+            local found,typed
+            for _,x in ipairs(early[q] or {}) do
+                if x[1]==item and x[2]==npc then
+                    found=x[3]==drops and x[4]==loots and x[5]==contributors and x[6]==build and x[7]==1
+                end
+            end
+            for i=3,#packed.ForeverQuestFacts[q] do if packed.ForeverQuestFacts[q][i][1]==item then typed=true end end
+            assert(found and typed,"exact quest and item, correctly scoped sample")
+        end
         local prevEarly,comp,solo,group=AT.ForeverEarlyDropSamples,AT.ForeverRivergladesDropComparison,AT.ForeverQuestDropSamples,IsInGroup
         AT.ForeverEarlyDropSamples={[12]=early[94680]}
         AT.ForeverRivergladesDropComparison={[12]=true}

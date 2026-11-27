@@ -158,6 +158,7 @@ AT.ForeverVerifiedEndpointReferences={
  [2743]={{1435,.3425,.6599,1,7572,0,"Fallen Hero of the Horde"}}, -- wiki quest rev 5619898; interaction build 1.60.1.71091
  [2783]={{1435,.3425,.6599,1,7572,1,"Fallen Hero of the Horde"}}, -- wiki quest rev 5620187; interaction build 1.60.1.71091
  [3626]={{1435,.3425,.6599,1,7572,0,"Fallen Hero of the Horde"}}, -- wiki quest rev 5620074; interaction build 1.60.1.71091
+ [5529]={{1423,.7158,.4989,1,11035,0,"Betina Bigglezink"}}, -- https://www.wowhead.com/forever/quest=5529/plagued-hatchlings ; exact NPC observed in 71139
  [5531]={{1423,.7158,.4989,1,11035,0,"Betina Bigglezink"}}, -- wiki quest rev 6296864; interaction build 1.60.1.71139
  [6029]={{1420,.8313,.685,1,10839,2,"Argent Officer Garush"}}, -- wiki quest rev 6351370; interaction build 1.60.1.71139
  [8417]={{1435,.3425,.6599,1,7572,0,"Fallen Hero of the Horde"}}, -- wiki quest rev 5995133; interaction build 1.60.1.71091
@@ -185,6 +186,7 @@ AT.ForeverTurnInAreaReferences={
  [5722]={"Ragefire Chasm","Maur Grimtotem",true,2}, -- wiki rev 6693422
  [7044]={"Maraudon","Celebras the Redeemed",true,0}, -- wiki rev 6219314
  [7046]={"Maraudon","Celebras the Redeemed",true,0}, -- wiki rev 6850700
+ [7463]={"Dire Maul, the Athenaeum","Lorekeeper Lydros",true,0}, -- https://www.wowhead.com/forever/quest=7463/arcane-refreshment
  [96395]={"The Hall of Thanes","Ghostly Attendant",true,0}, -- wiki rev 6937497; Forever quest 96395
  [96987]={"Dalaran, near the sewer entrance","Rexxie Copperclutch",true,2}, -- wiki rev 6937495; Forever quest 96987
  [2953]={"Gnomeregan","The Sparklematic 5200",false,0}, -- https://www.wowhead.com/forever/quest=2953/more-sparklematic-action

@@ -613,7 +613,11 @@ local log
 for _,row in ipairs(rg.quests) do if row.id==94885 then log=row end end
 assert(log and log.giver.pickup and log.giver.sourceName=="Twilight Neophyte")
 assert(real.TrackLevelGuideGiver(log) and not real.GetLevelGuideRoutePoint())
-print("PASS exact Forever starter areas, including chest, dungeon, replaced quest items and real Riverglades tracking")
+for quest,item in pairs({[178]=1962,[637]=4433,[781]=4851,[95816]=270888}) do
+    local packed=real.LevelGuideItemStarts[quest]
+    assert(packed[1]==item and #packed[2]==0,"exact quest-starting item without invented pickup coordinates")
+end
+print("PASS exact Forever starter areas, including chest, dungeon, corrected starter items and real Riverglades tracking")
 do
     local initialSide,initialLocale=UnitFactionGroup,GetLocale
     local prior=AT.LevelGuideItemStarts
