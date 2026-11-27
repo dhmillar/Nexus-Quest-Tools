@@ -631,9 +631,8 @@ function AT.InitTarget()
         local finish,slot=command:match("^j([0-8]):(%d+)$")
         if finish and AT.FinishBossSearch then AT.FinishBossSearch(tonumber(finish),tonumber(slot)); return end
         local nativeIcon,nativePlan,nativeSlot=command:match("^n([0-8]):(%d+):(%d+)$")
-        if nativeIcon and AT.ReserveBossMark then
-            AT.ReserveBossMark(tonumber(nativeIcon),tonumber(nativePlan),true)
-            if AT.AdvanceBossSearch then AT.AdvanceBossSearch(tonumber(nativeSlot)) end
+        if nativeIcon and AT.FinishKrolNativeProbe then
+            AT.FinishKrolNativeProbe(tonumber(nativeIcon),tonumber(nativePlan),tonumber(nativeSlot))
             return
         end
         if AT.ReserveBossMark then

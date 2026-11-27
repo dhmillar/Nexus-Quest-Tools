@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.238
+
+- Krol'dok targeting can reacquire the last living boss when a probe for another boss misses. Smart Target reserves room for recovery in the same press; the short action-bar macro retries on the following press if needed, without resetting its search order or repeating a ping.
+
 ## 1.5.237
 
 - Krol'dok boss searches move on from the last marked boss to look for others, even when only the previous boss is readable. A confirmed removal re-arms that boss's marker and ping; confirmed defeats free reserved markers.

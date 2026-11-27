@@ -799,7 +799,7 @@ for _,smart in ipairs({false,true}) do
     if smart then
         native(first,names,false)
     else
-        for i=1,7 do
+        for i=1,14 do
             assert(AT.RefreshBossActionBar())
             assert(#body<=255)
             native(body,names,false)
@@ -810,7 +810,7 @@ for _,smart in ipairs({false,true}) do
     assert(units.target==a and actual[a]==8 and pings[1]==a and #pings==1 and not actual[g])
     a.mark=8
     names[z.name]=z
-    for i=1,7 do
+    for i=1,14 do
         assert(AT.RefreshBossActionBar())
         native(smart and press() or body,names,false)
         if actual[z] then break end
@@ -840,7 +840,7 @@ for _,smart in ipairs({false,true}) do
     assert(units.target==toof and actual[toof]==8 and pings[1]==toof)
     toof.mark=8
     ui[1].scripts.OnEvent(ui[1],"RAID_TARGET_UPDATE")
-    for i=1,7 do
+    for i=1,14 do
         assert(AT.RefreshBossActionBar())
         native(smart and press() or body,names,false)
         if actual[ashka] then break end
@@ -881,3 +881,45 @@ do
     UnitName,UnitGUID=oldName,oldGUID
 end
 print("PASS confirmed Grox defeat retires the hidden reservation and frees Skull for Ashka")
+
+
+-- Regression: one valid boss, six missable/dead names. Every search
+-- must recover that boss (or arm recovery on the short action-bar path).
+for _,smart in ipairs({false,true}) do
+    units={};kind="none";ui[1].scripts.OnEvent(ui[1],"PLAYER_ENTERING_WORLD")
+    kind="party";current=3039;ui[1].scripts.OnEvent(ui[1],"PLAYER_ENTERING_WORLD")
+    local toof=mob(264773,10001,"Bossman Toof")
+    local corpse=mob(258966,10002,"Slavecrusher Grox");corpse.dead=true
+    local lookup={[toof.name]=toof,[corpse.name]=corpse}
+    local oldName,oldGUID=UnitName,UnitGUID
+    UnitName=function()return secret end
+    UnitGUID=function()return secret end
+    units.nameplate1=toof;actual={};pings={}
+    for i=1,14 do
+        assert(AT.RefreshBossActionBar())
+        native(smart and press() or body,lookup,false)
+        if actual[toof] then break end
+    end
+    assert(units.target==toof and pings[1]==toof and actual[toof]==8)
+    toof.mark=8
+    for i=1,6 do
+        units.target=nil
+        assert(AT.RefreshBossActionBar())
+        native(smart and press() or body,lookup,false)
+        if not units.target and not smart then
+            assert(AT.RefreshBossActionBar())
+            native(body,lookup,false)
+        end
+        assert(units.target==toof and #pings==1 and actual[toof]==8 and not actual[corpse],
+            "repeated searches must reacquire Toof without additional pings or corpse selection")
+    end
+    local a=mob(259281,10003,"War Handler Ashka");lookup[a.name]=a
+    for i=1,14 do
+        assert(AT.RefreshBossActionBar())
+        native(smart and press() or body,lookup,false)
+        if actual[a] then break end
+    end
+    assert(units.target==a and pings[2]==a and actual[a]==7 and actual[toof]==8)
+    UnitName,UnitGUID=oldName,oldGUID
+end
+print("PASS solo living Toof is reacquired after repeated misses on both macro paths, then a newly available Ashka gets X")

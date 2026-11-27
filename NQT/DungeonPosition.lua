@@ -1770,7 +1770,7 @@ do
     local stockBatch=1
     local fallbackCount=0
     local visibleBossPlates={}
-    local krolCycle={}
+    local krolCycle,krolRecover={},nil
     local tokens={"target","mouseover","focus","targettarget","player","pet"}
     for i=1,5 do tokens[#tokens+1]="boss"..i end
     for i=1,4 do
@@ -2189,7 +2189,7 @@ do
     end
 
     local krolAlive="[@target,harm,nodead]"
-    local function krolNativeSearch(fallback,free,smart,maxBytes,retries,skipPrevious)
+    local function krolNativeSearch(fallback,free,smart,maxBytes,retries)
         if #fallback==0 then return end
         local limit=smart and 900 or (maxBytes or 200)
         local start=stockBatch<=#fallback and stockBatch or 1
@@ -2204,7 +2204,14 @@ do
             elseif lastPress and lastPress.name==key then previous=slot
             else slots[#slots+1]=slot end
         end
-        if previous and not skipPrevious and (smart or #slots==0) then slots[#slots+1]=previous end
+        local recovery
+        if previous then
+            local label=fallback[previous]
+            recovery="\n/targetexact "..label.."\n/atmob n0:"..planFor(label:lower())..":0"..clearDead
+        end
+        if recovery and (not smart and krolRecover or #slots==0) then
+            if #body+#recovery<=limit then return body..recovery end
+        end
         for _,slot in ipairs(slots) do
             local label=fallback[slot]
             local key=label:lower()
@@ -2219,12 +2226,17 @@ do
                 ..("\n/atmob n"..(index or 0)..":"..planFor(key)..":"..slot)
                 ..clearDead
             local tail=count>0 and stop or ""
-            if #body+#tail+#step>limit then break end
+            local reserve=smart and recovery and #stop+#recovery or 0
+            if #body+#tail+#step+reserve>limit then break end
             body=body..tail..step
             count=count+1
             if not smart then break end
         end
-        if count==0 then return end
+        if count==0 then
+            if recovery and #body+#recovery<=limit then return body..recovery end
+            return
+        end
+        if recovery and #body+#stop+#recovery<=limit then body=body..stop..recovery end
         lastBossMarkNote=("Prepared a native living-target search of %d boss names."):format(count)
         return body
     end
@@ -2235,7 +2247,7 @@ do
         if id~=lastInstance then
             reservations,lastInstance,stockBatch,lastAttempt,lastPress={},id,1,nil,nil
             plans,planIDs,lastTargetLabel={},{},nil
-            krolCycle={}
+            krolCycle,krolRecover={},nil
         end
         if (kind=="raid" or safe(IsInRaid)==true) and safe(UnitIsGroupLeader,"player")~=true
             and safe(UnitIsGroupAssistant,"player")~=true then
@@ -2265,7 +2277,7 @@ do
             -- results here. Use only its positive hostile/living test.
             local repeated=pick and not pick.index and lastPress and lastPress.name==pick.label:lower()
             if not pick or repeated or (not pick.index and next(retries)) then
-                local search=krolNativeSearch(fallback,free,smart,maxBytes,retries,repeated and not smart)
+                local search=krolNativeSearch(fallback,free,smart,maxBytes,retries)
                 if search then return true,search end
                 if not pick then
                     return true,"/stopmacro [combat]"..clearDead,"No living Krol'dok boss could be verified."
@@ -2458,10 +2470,21 @@ do
         AT.ReserveBossMark(0,plan)
     end
 
+    function AT.FinishKrolNativeProbe(index,plan,slot)
+        local _,id=context()
+        if id~=3039 or safe(InCombatLockdown)==true then return end
+        local live=safe(SecureCmdOptionParse,krolAlive.." yes")=="yes"
+        AT.ReserveBossMark(index,plan,true)
+        -- A miss in the short action-bar macro earns a recovery press.
+        -- Recovery never resets the search cursor to the previous boss.
+        krolRecover=slot>0 and not live and lastPress~=nil or nil
+        AT.AdvanceBossSearch(slot)
+    end
+
     function AT.AdvanceBossSearch(slot)
         local _,id=context()
         if not id or fallbackCount<1 then return end
-        stockBatch=(slot or (stockBatch<=fallbackCount and stockBatch or 1))%fallbackCount+1
+        if slot~=0 then stockBatch=(slot or (stockBatch<=fallbackCount and stockBatch or 1))%fallbackCount+1 end
         if C_Timer and C_Timer.After and AT.RefreshBossActionBar then C_Timer.After(0,AT.RefreshBossActionBar) end
     end
 
@@ -2523,7 +2546,7 @@ do
                 if id~=lastInstance or (kind~="party" and kind~="raid") then
                     reservations,lastInstance,stockBatch,lastAttempt,lastPress={},nil,1,nil,nil
                     plans,planIDs,lastTargetLabel={},{},nil
-                    krolCycle={}
+                    krolCycle,krolRecover={},nil
                 end
             end
             if event=="NAME_PLATE_UNIT_ADDED" or event=="NAME_PLATE_UNIT_REMOVED" then
