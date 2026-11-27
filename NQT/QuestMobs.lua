@@ -139,10 +139,23 @@ function AT.GetQuestDropMobNames(item)
     itemNames[item]=#names>0 and names or false
     return itemNames[item] or nil
 end
-function AT.GetQuestMobDisplayID(name,exactName)
+function AT.GetQuestMobDisplayID(name,exactName,qid)
     if not english() or (not exactName and AT.IsPartialTarget and AT.IsPartialTarget()) then return end
     local key=normalize(name)
     if not key then return end
+    local catalog=AT.ForeverLevelGuideQuests
+    local q=pos(qid) and catalog and catalog[qid]
+    local display,npc
+    for _,objective in ipairs(q and q[10] or {}) do
+        if objective[1]==1 then
+            local row=mob(objective[2])
+            if row and normalize(row[1])==key and pos(row[5]) then
+                if display and display~=row[5] then return end
+                display,npc=row[5],objective[2]
+            end
+        end
+    end
+    if display then return display,npc end
     indexed(key)
     return displaysByKey[key] or nil
 end

@@ -530,6 +530,17 @@ do
     hits[1].scripts.OnEnter(hits[1])
     assert(tip.shown and tip.owner==hits[1] and tip.mob.text=="Second Named Mob" and tip.portrait.texture=="display:42")
     assert(tip.instruction.text=="Click to set Auto Macro")
+    local oldLive,oldName,oldCan,oldPlayer=SetPortraitTexture,UnitName,UnitCanAttack,UnitIsPlayer
+    local targetName="Second Named Mob"
+    UnitName=function(u) if u=="target" then return targetName end end
+    UnitCanAttack=function(_,u) return u=="target" end
+    UnitIsPlayer=function() return false end
+    SetPortraitTexture=function(texture,unit) assert(unit=="target");texture:SetTexture("live:"..targetName) end
+    AT.RefreshRankQuestMobPortraits()
+    assert(icons[1].image.texture=="live:Second Named Mob" and tip.portrait.texture=="live:Second Named Mob")
+    targetName="Unrelated mob";AT.RefreshRankQuestMobPortraits()
+    assert(icons[1].image.texture=="live:Second Named Mob" and not tostring(icons[2].image.texture):find("Unrelated",1,true))
+    SetPortraitTexture,UnitName,UnitCanAttack,UnitIsPlayer=oldLive,oldName,oldCan,oldPlayer
     hits[1].scripts.OnClick(hits[1],"LeftButton")
     assert(chosen=="Second Named Mob" and not tip.shown and opened==beforeOpen)
     hits[2].scripts.OnEnter(hits[2])

@@ -20,6 +20,13 @@ assert(not AT.GetQuestKillMobName(95789,{type="item",npcID=259987},"Saltseer Man
 local kit=AT.GetQuestMobProfile("Saltseer Manhunter")
 assert(kit and kit.name=="Saltseer Manhunter" and kit.drops[1]=="Voodoo-Infused Artifact")
 assert(not AT.GetQuestMobProfile("Saltseer"))
+assert(loadfile("NQT/LevelGuideData.lua"))("NQT",AT)
+assert(AT.GetQuestMobDisplayID("Seeking Remnant",true,92457)==130224)
+assert(AT.GetQuestMobDisplayID("Saturated Remnant",true,92457)==130223)
+assert(AT.GetQuestMobDisplayID("Mana Echo",true,92457)==14272)
+assert(AT.GetQuestMobDisplayID("Redridge Brute",true,94532)==609)
+assert(AT.GetQuestMobDisplayID("Redridge Brute",true,94678)==609)
+assert(not AT.GetQuestMobDisplayID("Redridge Brute",true),"do not pick a same-name model without quest context")
 local prior=AT.ObservedQuestDrops
 AT.ObservedQuestDrops={items={[99999]={{259987,1,2,3,1,1}}}}
 assert(not AT.GetQuestDropMobNames(99999),"object IDs must not become NPC names")

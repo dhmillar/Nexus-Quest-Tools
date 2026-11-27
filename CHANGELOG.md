@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.177 - 2026-11-27
+
+- **Rank Quest portraits:** Added missing display IDs for 1,736 bundled mob records, including Seeking Remnant, Saturated Remnant, and Mana Echo. Kill objectives use exact quest creature IDs when identical names have different portraits, including the Riverglades Redridge Brute.
+- Quest icons and hover previews can use the same live portrait as the macro when the matching mob is targeted. This updates only portraits, not the whole quest list. Unknown drop sources still do not get guessed portraits.
+
 ## 1.5.176 - 2026-11-27
 
 - **Nearby turn-in tracking:** Uses WoW's same-continent quest distance when a ready quest has no turn-in pin and the map does not show an unfinished objective. Distance-only tracking never supplies guessed GPS coordinates.

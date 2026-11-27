@@ -1389,6 +1389,45 @@ local function objectiveDropSuffix(qid,item)
 end
 
 local objectiveMobTip
+local function liveMobPortrait(owner,texture)
+    if not owner.mobName or not SetPortraitTexture or call(UnitName,"target")~=owner.mobName
+        or call(UnitCanAttack,"player","target")~=true or call(UnitIsPlayer,"target")~=false then return false end
+    if owner.npcID then
+        local guid=call(UnitGUID,"target")
+        local npc=is(guid,"string") and tonumber(guid:match("^Creature%-%d+%-%d+%-%d+%-%d+%-(%d+)%-"))
+        if npc and npc~=owner.npcID then return false end
+    end
+    local ok,result=pcall(SetPortraitTexture,texture,"target",true)
+    return ok and result~=false
+end
+local function bundledMobPortrait(owner,texture)
+    texture:SetTexture(132094)
+    if id(owner.displayID) and SetPortraitTextureFromCreatureDisplayID then
+        local ok,result=pcall(SetPortraitTextureFromCreatureDisplayID,texture,owner.displayID)
+        if not ok or result==false then texture:SetTexture(132094) end
+    end
+end
+local function paintMobIcon(icon,tryLive)
+    if not icon.mobName or icon.overflow then return end
+    local key=icon.questId..":"..icon.mobName
+    local fixed=key..":"..tostring(icon.displayID)
+    if (tryLive or icon.renderKey~=fixed and icon.renderKey~="live:"..key)
+        and liveMobPortrait(icon,icon.image) then icon.renderKey="live:"..key;return end
+    if icon.renderKey=="live:"..key then return end
+    if icon.renderKey~=fixed then bundledMobPortrait(icon,icon.image);icon.renderKey=fixed end
+end
+function AT.RefreshRankQuestMobPortraits()
+    if not hud or not hud.rows or not hud:IsShown() or AT.db.questHUDCollapsed then return end
+    for _,row in ipairs(hud.rows) do
+        if row.qid and row:IsShown() then
+            for _,icon in ipairs(row.objectiveMobIcons) do
+                if icon.questId==row.qid and icon:IsShown() then paintMobIcon(icon,true) end
+            end
+        end
+    end
+    local tip=objectiveMobTip
+    if tip and tip.owner and tip:IsShown() then liveMobPortrait(tip.owner,tip.portrait) end
+end
 local function hideObjectiveMobTip(self)
     if objectiveMobTip and objectiveMobTip.owner==self then
         objectiveMobTip.owner=nil
@@ -1436,11 +1475,7 @@ local function showObjectiveMobTip(owner)
     tip.mob:SetWidth(labelWidth)
     local labelHeight=call(tip.mob.GetStringHeight,tip.mob)
     tip:SetSize(77+labelWidth,math.max(66,35+(is(labelHeight,"number") and labelHeight or 14)))
-    tip.portrait:SetTexture(132094)
-    if id(owner.displayID) and SetPortraitTextureFromCreatureDisplayID then
-        local ok,result=pcall(SetPortraitTextureFromCreatureDisplayID,tip.portrait,owner.displayID)
-        if not ok or result==false then tip.portrait:SetTexture(132094) end
-    end
+    if not liveMobPortrait(owner,tip.portrait) then bundledMobPortrait(owner,tip.portrait) end
     tip:Show()
 end
 local function chooseQuestMob(name)
@@ -1463,11 +1498,12 @@ local function wireObjectiveMobHover(button,b)
     button:SetScript("OnHide",hideObjectiveMobTip)
 end
 local function setObjectiveMob(button,qid,name,overflow)
-    local display=name and call(AT.GetQuestMobDisplayID,name,true) or nil
+    local display,npc
+    if name then display,npc=call(AT.GetQuestMobDisplayID,name,true,qid) end
     if button.questId~=qid or button.mobName~=name or button.displayID~=display then
         hideObjectiveMobTip(button)
     end
-    button.questId,button.mobName,button.overflow,button.displayID=qid,name,overflow,display
+    button.questId,button.mobName,button.overflow,button.displayID,button.npcID=qid,name,overflow,display,npc
 end
 local function resetObjectiveMobButtons(buttons,first)
     for i=first or 1,#buttons do
@@ -1544,16 +1580,7 @@ local function renderObjectives(b,row,width,theme,hasItem,hasDetail)
             icon:SetWidth(#overflow>=10 and 22 or 18)
         else
             icon:SetWidth(inlineMobSize)
-            local display=icon.displayID
-            local key=id(display) and display or "generic"
-            if icon.renderKey~=key then
-                icon.image:SetTexture(132094)
-                if id(display) and SetPortraitTextureFromCreatureDisplayID then
-                    local ok,result=pcall(SetPortraitTextureFromCreatureDisplayID,icon.image,display)
-                    if not ok or result==false then icon.image:SetTexture(132094) end
-                end
-                icon.renderKey=key
-            end
+            paintMobIcon(icon,false)
         end
         icon:Show()
     end
@@ -2970,10 +2997,14 @@ function AT.InitQuestHUD()
     hud:SetScript("OnSizeChanged",pushRefresh)
     local watcher=CreateFrame("Frame")
     for _,event in ipairs({"PLAYER_ENTERING_WORLD","QUEST_ACCEPTED","QUEST_REMOVED","QUEST_COMPLETE","QUEST_TURNED_IN","QUEST_LOG_UPDATE",
-        "QUEST_WATCH_UPDATE","BAG_UPDATE_DELAYED","GET_ITEM_INFO_RECEIVED","GROUP_ROSTER_UPDATE","QUEST_DATA_LOAD_RESULT","PLAYER_REGEN_DISABLED","PLAYER_REGEN_ENABLED","PLAYER_LEVEL_UP","PLAYER_MAP_CHANGED","ZONE_CHANGED","ZONE_CHANGED_INDOORS","ZONE_CHANGED_NEW_AREA","SUPER_TRACKING_CHANGED","GLOBAL_MOUSE_DOWN","CHAT_MSG_SYSTEM","UI_ERROR_MESSAGE","UNIT_QUEST_LOG_CHANGED"}) do
+        "QUEST_WATCH_UPDATE","BAG_UPDATE_DELAYED","GET_ITEM_INFO_RECEIVED","GROUP_ROSTER_UPDATE","QUEST_DATA_LOAD_RESULT","PLAYER_REGEN_DISABLED","PLAYER_REGEN_ENABLED","PLAYER_LEVEL_UP","PLAYER_MAP_CHANGED","ZONE_CHANGED","ZONE_CHANGED_INDOORS","ZONE_CHANGED_NEW_AREA","SUPER_TRACKING_CHANGED","GLOBAL_MOUSE_DOWN","CHAT_MSG_SYSTEM","UI_ERROR_MESSAGE","UNIT_QUEST_LOG_CHANGED","PLAYER_TARGET_CHANGED","UNIT_PORTRAIT_UPDATE"}) do
         pcall(watcher.RegisterEvent,watcher,event)
     end
     watcher:SetScript("OnEvent",function(_,event,first,second)
+        if event=="PLAYER_TARGET_CHANGED" or event=="UNIT_PORTRAIT_UPDATE" then
+            if event=="PLAYER_TARGET_CHANGED" or (ordinary(first) and first=="target") then AT.RefreshRankQuestMobPortraits() end
+            return
+        end
         if event=="GLOBAL_MOUSE_DOWN" then releaseOnOutsideClick();return end
         if event=="CHAT_MSG_SYSTEM" or event=="UI_ERROR_MESSAGE" then
             Share.feedback(event=="CHAT_MSG_SYSTEM" and first or second);return
