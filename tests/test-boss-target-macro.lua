@@ -688,3 +688,43 @@ do
     assert(press():find("Twilight Commander Zarmok",1,true),"a fresh run does not carry deaths from the last run")
 end
 print("PASS confirmed Krol'dok deaths survive nameplate loss; a wipe does not count and living proof or instance exit resets the record")
+
+-- Reproduce the screenshot: the currently loaded Journal has a red kill
+-- indicator for Zarmok, but Blizzard masks the target's Lua name/death status.
+do
+    units={};kind="none";ui[1].scripts.OnEvent(ui[1],"PLAYER_ENTERING_WORLD")
+    kind="party";current=3039;ui[1].scripts.OnEvent(ui[1],"PLAYER_ENTERING_WORLD")
+    local run={closed=false}
+    local reportedMap=3039
+    local old=_G.ForeverDungeonJournal_NS
+    _G.ForeverDungeonJournal_NS={
+        RunLog={InsideMap=function()return reportedMap end,Current=function()return run end},
+        RunLogKilledThisVisit=function(r,name) return r==run and name=="Twilight Commander Zarmok" end
+    }
+    local corpse=mob(258972,9501,"Twilight Commander Zarmok")
+    units.target=corpse
+    -- Deliberately put stale living metadata on the client's target.
+    assert(AT.RefreshBossActionBar())
+    assert(not body:find(corpse.name,1,true) and not press():find(corpse.name,1,true),"do not exact-target a boss the current run already records as defeated")
+    reportedMap=2970
+    assert(press():find(corpse.name,1,true),"a different map is not current-run evidence")
+    _G.ForeverDungeonJournal_NS=old
+    units={}
+    ui[1].scripts.OnEvent(ui[1],"PARTY_KILL","Player-1","Creature-0-0-0-0-258966-000000")
+    assert(not press():find("Slavecrusher Grox",1,true),"public kill signal works without Dungeon Journal")
+    ui[1].scripts.OnEvent(ui[1],"BOSS_KILL",1,"Twilight Commander Zarmok")
+    assert(not press():find(corpse.name,1,true),"public BOSS_KILL works independently")
+end
+print("PASS current Krol'dok run excludes the Journal-confirmed corpse and accepts readable native kill events")
+
+do
+    units={};kind="none";ui[1].scripts.OnEvent(ui[1],"PLAYER_ENTERING_WORLD")
+    kind="party";current=3039;ui[1].scripts.OnEvent(ui[1],"PLAYER_ENTERING_WORLD")
+    ui[1].scripts.OnEvent(ui[1],"ENCOUNTER_END",3451,"Overseer Mugg",1,5,0)
+    assert(press():find("Overlord Mugg",1,true),"wipe must not tag the exact boss as dead")
+    ui[1].scripts.OnEvent(ui[1],"ENCOUNTER_END",3451,"Overseer Mugg",1,5,1)
+    ui[1].scripts.OnEvent(ui[1],"ENCOUNTER_END",3453,"Handler Ashka",1,5,1)
+    local b=press()
+    assert(not b:find("Overlord Mugg",1,true) and not b:find("War Handler Ashka",1,true),"encounter names do not need to match the physical boss name")
+end
+print("PASS exact instance-bound Krol'dok encounter IDs match Mugg and Ashka even when event display names differ")

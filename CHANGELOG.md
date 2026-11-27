@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.231
+
+- Boss targeting recognizes readable native death reports and optionally checks Forever Dungeon Journal's active run for defeated bosses such as Twilight Commander Zarmok. It does not read prior runs or require Dungeon Journal.
+
 ## 1.5.230
 
 - Confirmed boss deaths stay out of the fallback roster after the nameplate disappears. Encounter failure is not a death, and a fresh run or verified living unit clears the corresponding record.

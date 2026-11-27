@@ -1786,6 +1786,7 @@ do
         return ids,names,fallback
     end
     local defeatedByName,deathInstance={},nil
+    local krolEncounterNPC={[3449]=258964,[3450]=258966,[3451]=258968,[3452]=258972,[3453]=259281}
     local function enterDeathScope(id)
         if deathInstance~=id then defeatedByName,deathInstance={},id end
     end
@@ -1794,9 +1795,18 @@ do
         if not dungeon then return end
         enterDeathScope(id)
         local label
-        if event=="ENCOUNTER_END" then
-            if not ordinary(arg5) or arg5~=1 or not usable(arg2,"string") then return end
-            label=arg2
+        if event=="UNIT_DIED" or event=="PARTY_KILL" then
+            local guid=event=="UNIT_DIED" and arg1 or arg2
+            if not usable(guid,"string") then return end
+            local npc=tonumber(guid:match("^Creature%-%d+%-%d+%-%d+%-%d+%-(%d+)%-"))
+            for _,entry in ipairs(factRoster(id)) do if npc==entry[1] then label=entry[2];break end end
+        elseif event=="ENCOUNTER_END" or event=="BOSS_KILL" then
+            if event=="ENCOUNTER_END" and (not ordinary(arg5) or (arg5~=1 and arg5~=true)) then return end
+            local npc=id==3039 and mapID(arg1) and krolEncounterNPC[arg1]
+            if npc then
+                for _,entry in ipairs(factRoster(id)) do if npc==entry[1] then label=entry[2];break end end
+            end
+            if not label and usable(arg2,"string") then label=arg2 end
         else
             if not usable(arg1,"string") or (arg1~="target" and not allowedToken(arg1)
                 and not arg1:match("^boss%d$")) or safe(UnitExists,arg1)~=true then return end
@@ -1835,7 +1845,20 @@ do
         local ids,names=bossIDs(dungeon,id)
         if (npc and ids[npc]) or names[label:lower()] then recordBossSighting(id,label) end
     end
-    local function scan(name,id,preview,ids,names)
+    local function journalDefeated(id,fallback)
+        local result={}
+        local journal=_G.ForeverDungeonJournal_NS
+        local log=usable(journal,"table") and journal.RunLog
+        if not usable(log,"table") or safe(log.InsideMap)~=id then return result end
+        local run=safe(log.Current)
+        if not usable(run,"table") or not ordinary(run.closed) or run.closed then return result end
+        for _,label in ipairs(fallback) do
+            if safe(journal.RunLogKilledThisVisit,run,label)==true then result[label:lower()]=true end
+        end
+        return result
+    end
+
+    local function scan(name,id,preview,ids,names,confirmed)
         local seen,seenByName,occupied,candidates,units={},{},{},{},{}
         local byToken={}
         for _,unit in ipairs(tokens) do units[#units+1]=unit end
@@ -1907,7 +1930,8 @@ do
                 end
                 local key=guid or label
                 local attack=safe(UnitCanAttack,"player",unit)
-                if reachable and boss and key and not candidateGUIDs[key] and (not knownDead or dead~=true)
+                if reachable and boss and key and not confirmed[nameKey or ""]
+                    and not confirmed[rosterName[npc] or ""] and not candidateGUIDs[key] and (not knownDead or dead~=true)
                     and ordinary(attack) and attack==true then
                     if label and label~="" then
                         local distance,checked=safe(UnitDistanceSquared,unit)
@@ -2079,14 +2103,15 @@ do
             return true,nil,"You need raid marking permission."
         end
         local ids,names,fallback=bossIDs(name,id)
-        local pick,free,unreadable,deadNames,livingNames=scan(name,id,preview,ids,names)
+        local confirmed=journalDefeated(id,fallback)
+        local pick,free,unreadable,deadNames,livingNames=scan(name,id,preview,ids,names,confirmed)
         enterDeathScope(id)
         for key in pairs(deadNames) do if not livingNames[key] then defeatedByName[key]=true end end
         for key in pairs(livingNames) do defeatedByName[key]=nil end
         local kept={}
         for _,label in ipairs(fallback) do
             local key=label:lower()
-            if not defeatedByName[key] then kept[#kept+1]=label end
+            if not defeatedByName[key] and not confirmed[key] then kept[#kept+1]=label end
         end
         fallback,fallbackCount=kept,#kept
         if stockBatch>fallbackCount then stockBatch=1 end
@@ -2287,13 +2312,14 @@ do
         local watcher=CreateFrame("Frame")
         for _,event in ipairs({"PLAYER_ENTERING_WORLD","PLAYER_REGEN_ENABLED","NAME_PLATE_UNIT_ADDED",
             "NAME_PLATE_UNIT_REMOVED","PLAYER_TARGET_CHANGED","UPDATE_MOUSEOVER_UNIT",
-            "RAID_TARGET_UPDATE","INSTANCE_ENCOUNTER_ENGAGE_UNIT","GROUP_ROSTER_UPDATE","UNIT_FLAGS","UNIT_HEALTH","ENCOUNTER_END","UI_ERROR_MESSAGE"}) do
+            "RAID_TARGET_UPDATE","INSTANCE_ENCOUNTER_ENGAGE_UNIT","GROUP_ROSTER_UPDATE","UNIT_FLAGS","UNIT_HEALTH","ENCOUNTER_END","BOSS_KILL","PARTY_KILL","UNIT_DIED","UI_ERROR_MESSAGE"}) do
             pcall(watcher.RegisterEvent,watcher,event)
         end
         local queued
         watcher:SetScript("OnEvent",function(_,event,arg1,arg2,arg3,arg4,arg5)
             local errorText=arg2
-            if event=="UNIT_HEALTH" or event=="UNIT_FLAGS" or event=="ENCOUNTER_END" then
+            if event=="UNIT_HEALTH" or event=="UNIT_FLAGS" or event=="ENCOUNTER_END"
+                or event=="BOSS_KILL" or event=="PARTY_KILL" or event=="UNIT_DIED" then
                 observeBossDeath(event,arg1,arg2,arg5)
             end
             if event=="UI_ERROR_MESSAGE" then
