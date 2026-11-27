@@ -61,7 +61,7 @@ assert(AT.ToggleQuestHUDManualFocus(5529) and not AT.GetQuestTurnInPoint(5529),"
 local area,recipient,clickable=AT.GetReadyQuestTurnInArea(7463)
 assert(area=="Dire Maul, the Athenaeum" and recipient=="Lorekeeper Lydros" and clickable and not AT.GetReadyQuestTurnInPoint(7463))
 assert(not AT.ForeverVerifiedEndpointReferences[95454],"keep conflicting completion recipient unresolved")
-for _,id in ipairs({2747,8893,5214,5251,98423}) do
+for _,id in ipairs({2747,8893,5214,5251,98423,94886,94888,94889,96015,95957,95975,95059,5212,5213,5582}) do
     local ref=assert(AT.ForeverVerifiedEndpointReferences[id])[1]
     faction=ref[6]==2 and "Horde" or "Alliance"
     local m,sx,sy,recipient,canTarget,estimated=AT.GetReadyQuestTurnInPoint(id)

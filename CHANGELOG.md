@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.187 - 2026-11-27
+
+- **Riverglades:** Added five pickup locations and seven fallback hand-ins, covering Sergeant Riftan's chain, Drink Up!, Her World, and Frazzlespark's Crate. Drink Up! starts with Innkeeper Zizplink, not the Frothing Mug he gives you.
+- **Eastern Plaguelands:** Added Betina Bigglezink as the giver of The Active Agent and as the fallback turn-in for The Flesh Does Not Lie, The Active Agent, and Healthy Dragon Scale. Fallback locations do not replace live game pins.
+
 ## 1.5.186 - 2026-11-27
 
 - **Dungeon quest pickups:** Level Guide and Share Verify now identify the vault in the Reliquary of Kings for The Treaty of Understanding, and the underwater Moonshrine Ruins for both Baron Aquanis quest variants. Room directions don't create guessed map pins.

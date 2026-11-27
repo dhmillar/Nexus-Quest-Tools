@@ -8,6 +8,13 @@ local _,AT=...
 -- https://www.wowhead.com/forever/quest=96084/somethings-in-the-water
 -- https://foreverquestlog.com/quests/96084/
 AT.LevelGuideQuestGivers={
+ -- Observed Forever offers: https://github.com/JIVESCORP/eg-link-output-wowf/blob/c1bf99bc2835bbe1b2dad82fb99f994c0cfffe33/data/wowf/1.60.1.71139/npcs.json
+ [94888]={{2548,0.3066,0.4902,1,258023,"Sergeant Riftan"}},
+ [94889]={{2548,0.3066,0.4902,1,258023,"Sergeant Riftan"}},
+ [96015]={{2548,0.3066,0.4902,1,258023,"Sergeant Riftan"}},
+ [95957]={{2548,0.7877,0.5411,1,255894,"Innkeeper Zizplink"}},
+ [95975]={{2548,0.788,0.5427,1,263120,"Gray Dawnbright"}},
+ [5213]={{1423,0.7159,0.4996,0,11035,"Betina Bigglezink"}},
  -- Profession-sign follow-ups: exact giver IDs cross-checked against ATT 5.4.16. Positions from a firsthand walk-through or EG Link observations.
  [95818]={{1455,.524,.425,1,10276,"Rotgath Stonebeard"}}, -- https://guided.news/en/guides/wow-forever-profession-sign-ironforge-quest-route-materials/
  [95820]={{1413,.4991,.2935,2,256388,"Jornah"}}, -- https://www.wowhead.com/forever/quest=95820/karolek ; EG Link 70938
@@ -3077,7 +3084,6 @@ AT.LevelGuideItemStarts={
  [94997]={268035,{}},
  [94998]={268036,{}},
  [94999]={267244,{}},
- [95059]={276066,{}},
  [95062]={276066,{}},
  [95066]={274981,{}},
  [95111]={268192,{}},
@@ -3130,7 +3136,6 @@ AT.LevelGuideItemStarts={
  [95885]={210713,{}},
  [95925]={271770,{}},
  [95955]={271639,{}},
- [95957]={271822,{}},
  [95983]={271777,{}},
  [95986]={271779,{}},
  [95988]={276101,{}},

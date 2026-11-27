@@ -6,6 +6,19 @@
 -- Observed interactions: Efficient Games (https://efficient.games), CC BY 4.0.
 local _,AT=...
 AT.ForeverVerifiedEndpointReferences={
+ -- Forever NPC positions: https://github.com/JIVESCORP/eg-link-output-wowf/blob/c1bf99bc2835bbe1b2dad82fb99f994c0cfffe33/data/wowf/1.60.1.71139/npcs.json
+ -- All hand-ins observed directly except 96015 and 95975, whose recipients are independently verified:
+ -- https://foreverquestlog.com/quests/96015/ ; https://foreverquestlog.com/quests/95975/
+ [94886]={{2548,0.3066,0.4902,1,258023,1,"Sergeant Riftan"}},
+ [94888]={{2548,0.3066,0.4902,1,258023,1,"Sergeant Riftan"}},
+ [94889]={{2548,0.3066,0.4902,1,258023,1,"Sergeant Riftan"}},
+ [96015]={{2548,0.3066,0.4902,1,258023,1,"Sergeant Riftan"}},
+ [95957]={{2548,0.788,0.5427,1,263120,1,"Gray Dawnbright"}},
+ [95975]={{2548,0.6383,0.8233,1,263089,1,"Tessa Dawnbright"}},
+ [95059]={{2548,0.6658,0.81,1,257558,1,"Demar Brant"}},
+ [5212]={{1423,0.7159,0.4996,1,11035,0,"Betina Bigglezink"}},
+ [5213]={{1423,0.7159,0.4996,1,11035,0,"Betina Bigglezink"}},
+ [5582]={{1423,0.7159,0.4996,1,11035,0,"Betina Bigglezink"}},
  [98423]={{1455,.3944,.5601,1,2784,1,"King Magni Bronzebeard"}}, -- https://www.wowhead.com/forever/quest=98423/the-treaty-of-understanding ; EG Link 70862 (NPC observed on 96393)
  [95817]={{1455,.524,.425,1,10276,1,"Rotgath Stonebeard"}}, -- https://www.wowhead.com/forever/quest=95817/rotgath-stonebeard ; https://guided.news/en/guides/wow-forever-profession-sign-ironforge-quest-route-materials/
  [95818]={{1455,.524,.425,1,10276,1,"Rotgath Stonebeard"}}, -- https://www.wowhead.com/forever/quest=95818/a-quick-craft ; same walkthrough

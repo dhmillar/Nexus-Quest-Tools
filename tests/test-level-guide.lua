@@ -624,6 +624,12 @@ do
     local initialSide,initialLocale=UnitFactionGroup,GetLocale
     GetLocale=function() return "enUS" end
     UnitFactionGroup=function() return "Alliance" end
+    assert(not real.LevelGuideItemStarts[95957] and not real.LevelGuideItemStarts[95059], "provided items are not starters")
+    assert(real.LevelGuideQuestGivers[94886][1][5]==257558,"first Riftan quest still starts with Demar")
+    for q,npc in pairs({[94888]="Sergeant Riftan",[94889]="Sergeant Riftan",[96015]="Sergeant Riftan",[95957]="Innkeeper Zizplink",[95975]="Gray Dawnbright"}) do
+        assert(real.GetShareQuestStart(q,2548):find(npc,1,true))
+    end
+    assert(real.GetShareQuestStart(5213,1423):find("Betina Bigglezink",1,true))
     assert(real.GetShareQuestStart(98423,3065):find("Reliquary of Kings",1,true))
     assert(real.GetShareQuestStart(909,nil):find("Moonshrine Ruins",1,true))
     assert(real.LevelGuideItemStarts[98423][2][1][1]==0 and real.LevelGuideItemStarts[98423][2][1][5]==2)
@@ -633,6 +639,8 @@ do
     assert(not real.GetShareQuestStart(95819,1413):find("Gishah",1,true))
     assert(real.GetShareQuestStart(178,1433):find("Near Stonewatch Keep",1,true))
     UnitFactionGroup=function() return "Horde" end
+    assert(not (real.GetShareQuestStart(94888,2548) or ""):find("Sergeant Riftan",1,true))
+    assert(not (real.GetShareQuestStart(95957,2548) or ""):find("Innkeeper Zizplink",1,true))
     assert(real.GetShareQuestStart(6922,nil):find("Moonshrine Ruins",1,true))
     assert(not real.GetShareQuestStart(98423,3065):find("Reliquary of Kings",1,true))
     assert(real.GetShareQuestStart(781,1412):find("Brambleblade Ravine",1,true))
