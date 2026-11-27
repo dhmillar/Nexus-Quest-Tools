@@ -109,7 +109,7 @@ local function probability(q,item,size)
     if best then return best,mob end
     local pack=AT.ObservedQuestDrops
     for _,r in ipairs(pack and pack.items and pack.items[item] or {}) do
-        -- An individually inspected creature kill, not a grouped loot window.
+        -- Source/item opened-loot-window ratio, used as a planning proxy only.
         if r[6]==0 and positive(r[2]) and positive(r[3]) and r[3]>=5 and r[2]<=r[3] then
             local p=r[2]/r[3]
             if not best or p>best then best,mob=p,r[1] end
@@ -369,8 +369,22 @@ local function chooseItemStart(q,p)
         local rank=positive(map) and validPoint(a[2],a[3]) and ((map==p.artMap or map==p.map or positive(p.map) and outdoor(map)==p.map) and 3 or 2) or 1
         if not bestRank or rank>bestRank then best,bestRank=a,rank end
     end
-    return {item=r[1],map=best and best[1],x=best and best[2],y=best and best[3],radius=best and best[4],
-        sourceKind=best and best[5],source=best and best[6],sourceName=best and best[7],pickup=true}
+    local areas={}
+    if best and positive(best[1]) and validPoint(best[2],best[3]) then
+        areas[1]={x=best[2],y=best[3],radius=best[4]}
+        for _,a in ipairs(r[2]) do
+            if #areas>=6 then break end
+            if a~=best and a[1]==best[1] and validPoint(a[2],a[3]) then
+                local duplicate=false
+                for _,b in ipairs(areas) do
+                    if abs(a[2]-b.x)+abs(a[3]-b.y)<.025 then duplicate=true;break end
+                end
+                if not duplicate then areas[#areas+1]={x=a[2],y=a[3],radius=a[4]} end
+            end
+        end
+    end
+    return {item=r[1],map=best and best[1],x=best and best[2],y=best and best[3],radius=best and best[4],areas=areas,
+        sourceKind=best and best[5],source=best and best[6],sourceName=best and best[7],sourceArea=best and best[8],pickup=true}
 end
 local function chooseGiver(q,p,side,fallback,database,categories)
     local known
@@ -396,17 +410,7 @@ local function chooseGiver(q,p,side,fallback,database,categories)
         consider(AT.LevelGuideMoreOffers and AT.LevelGuideMoreOffers[q])
         if not known then known,ambiguous=prior,wasAmbiguous end
     end
-    if not known or ambiguous then
-        local endpointRows={}
-        for _,r in ipairs(AT.ForeverVerifiedEndpointReferences and AT.ForeverVerifiedEndpointReferences[q] or {}) do
-            if r[6]==0 then endpointRows[#endpointRows+1]={r[1],r[2],r[3],r[4],r[5],r[7]} end
-        end
-        if #endpointRows>0 then
-            local prior,wasAmbiguous=known,ambiguous
-            known,ambiguous=nil,false;consider(endpointRows)
-            if not known then known,ambiguous=prior,wasAmbiguous end
-        end
-    end
+    -- ForeverVerifiedEndpointReferences describes turn-ins, never quest starts.
     if known and not ambiguous and validName(known.name) then return known end
     local alternate=p.kind=="dungeon" and dungeonGiverFromProvider(q,side,database,categories) or nil
     if alternate and validPoint(alternate.x,alternate.y) then return alternate end
@@ -562,6 +566,33 @@ function AT.BuildLevelGuide(playerLevel,size)
         end
         return false
     end
+    -- When the catalog has no assignable zone, an independently recorded start can place
+    -- the quest in the browser. Never infer dungeon membership from a loot location.
+    local function recordedStartZone(q)
+        local best,ambiguous,named
+        local function record(map,x,y)
+            if not positive(map) or not validPoint(x,y) then return end
+            local z=zones[outdoor(map) or map]
+            if not z then return end
+            if best and best~=z then ambiguous=true else best=z end
+        end
+        local function offers(rows,sideField,xField,yField)
+            for _,r in ipairs(rows or {}) do
+                if r[sideField]==0 or r[sideField]==side then
+                    if positive(r[1]) and validPoint(r[xField],r[yField]) then
+                        named=true;record(r[1],r[xField],r[yField])
+                    end
+                end
+            end
+        end
+        offers(AT.LevelGuideQuestGivers and AT.LevelGuideQuestGivers[q],4,2,3)
+        offers(AT.LevelGuideMoreOffers and AT.LevelGuideMoreOffers[q],4,2,3)
+        if not named then
+            local item=AT.LevelGuideItemStarts and AT.LevelGuideItemStarts[q]
+            for _,r in ipairs(item and item[2] or {}) do record(r[1],r[2],r[3]) end
+        end
+        if not ambiguous then return best end
+    end
     local tags=Enum and Enum.QuestTag
     for q in pairs(candidates) do
         local d,h=data[q],held[q]
@@ -607,6 +638,7 @@ function AT.BuildLevelGuide(playerLevel,size)
                 end
             end
             p=p or choose(liveStart) or area and categories[area] or choose(known[q]) or h and zones[h.destination]
+                or recordedStartZone(q)
             if p and (positive(qLevel) or h or liveStart) then
                 if not p.rangeKnown and positive(qLevel) then
                     p.lo=min(p.lo or qLevel,qLevel);p.hi=max(p.hi or qLevel,qLevel)
@@ -1001,18 +1033,24 @@ local function drawGuideMap(frame)
     if destination then
         local x,y=x0+destination.x*imgW,y0+destination.y*imgH
         if destination.pickup then
-            local radius=positive(destination.radius) and min(.48,destination.radius) or .035
-            local rx,ry=max(15,radius*imgW),max(15,radius*imgH)
-            for j=1,54 do
-                local phase=j*math.pi/27
-                local px,py=x+math.cos(phase)*rx,y+math.sin(phase)*ry
-                if px>=4 and px<=fw-4 and py>=4 and py<=fh-4 then
-                    local dot=frame.areaRing[j]
-                    if not dot then
-                        dot=frame:CreateTexture(nil,"OVERLAY",nil,4)
-                        dot:SetColorTexture(1,.77,.22,.99);dot:SetSize(5,5);frame.areaRing[j]=dot
+            local areas=destination.areas
+            if not areas or #areas==0 then areas={{x=destination.x,y=destination.y,radius=destination.radius}} end
+            for i,area in ipairs(areas) do
+                local ax,ay=x0+area.x*imgW,y0+area.y*imgH
+                local radius=positive(area.radius) and min(.48,area.radius) or .035
+                local rx,ry=max(15,radius*imgW),max(15,radius*imgH)
+                for j=1,54 do
+                    local phase=j*math.pi/27
+                    local px,py=ax+math.cos(phase)*rx,ay+math.sin(phase)*ry
+                    if px>=4 and px<=fw-4 and py>=4 and py<=fh-4 then
+                        local slot=(i-1)*54+j
+                        local dot=frame.areaRing[slot]
+                        if not dot then
+                            dot=frame:CreateTexture(nil,"OVERLAY",nil,4)
+                            dot:SetColorTexture(1,.77,.22,.99);dot:SetSize(5,5);frame.areaRing[slot]=dot
+                        end
+                        dot:ClearAllPoints();dot:SetPoint("CENTER",frame,"TOPLEFT",px,-py);dot:Show()
                     end
-                    dot:ClearAllPoints();dot:SetPoint("CENTER",frame,"TOPLEFT",px,-py);dot:Show()
                 end
             end
         end
@@ -1296,6 +1334,16 @@ function AT.GetLevelGuideObjectiveRows(qid)
                 npc=kind==1 and id or nil,item=kind==2 and id or nil,mob=kind==1 and name or nil},catalog)
         end
     end
+    -- The client does not always supply objective details for quests not in the log.
+    -- Include the server's named interaction rows without treating them as kills
+    -- or items, and never blend zero-progress fallback rows into live objectives.
+    local details=english and AT.LevelGuideInteractionDetails and AT.LevelGuideInteractionDetails[qid]
+    for _,entry in ipairs(details or {}) do
+        local label,amount=entry[1],entry[2]
+        if validName(label) and positive(amount) then
+            lines[#lines+1]=objectiveIcon({text=("%s: 0/%d"):format(label,amount),kind="other"},catalog)
+        end
+    end
     local summary=english and AT.LevelGuideObjectiveSummaries and AT.LevelGuideObjectiveSummaries[qid]
     if validName(summary) then lines[#lines+1]={text=summary,kind="description"} end
     return lines,false
@@ -1362,6 +1410,7 @@ startDescription=function(g)
             requestedItems[g.item]=true;safe(C_Item and C_Item.RequestLoadItemDataByID,g.item)
         end
         local what=validName(item) and item or ("item #"..g.item)
+        if not mapName and validName(g.sourceArea) and (not GetLocale or GetLocale()=="enUS" or GetLocale()=="enGB") then mapName=g.sourceArea end
         if validName(g.sourceName) then
             return (g.sourceKind==2 and "Loot " or "Drop: ")..what.." from "..g.sourceName..(mapName and ("  |  "..mapName) or "")
         end

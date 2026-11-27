@@ -106,6 +106,59 @@ AT.ForeverVerifiedEndpointReferences={
  [94440]={{1420,.2195,.4457,1,257655,2,"Deathguard Billmuth"}}, -- wiki quest rev 6967132; interaction build 1.60.1.70959
  [96408]={{1426,.6486,.5845,1,264936,1,"Earthseer Farsen"}}, -- wiki quest rev 6964448; observed interaction
  [98576]={{1411,.4252,.69,1,5884,2,"Mai'ah"}}, -- wiki quest rev 6908630; observed interaction
+ -- Observed quest-reward windows with stable normalized positions, from Efficient Games (CC BY 4.0).
+ -- https://github.com/JIVESCORP/eg-link-output-wowf/blob/main/DATASETS.md#npcs
+ [702]={{1417,0.7268,0.3404,1,2792,2,"Gor'mul"}}, -- Forever takes 1.60.1.71091
+ [2621]={{1435,0.4789,0.5503,1,7623,2,"Dispatch Commander Ruag"}}, -- Forever takes 1.60.1.71091
+ [2622]={{1435,0.4499,0.5714,1,7643,2,"Bengor"}}, -- Forever takes 1.60.1.71091
+ [2767]={{1434,0.2835,0.7626,1,7406,0,"Oglethorpe Obnoticus"}}, -- Forever takes 1.60.1.71091
+ [2784]={{1435,0.3425,0.6599,1,7572,0,"Fallen Hero of the Horde"}}, -- Forever takes 1.60.1.71091
+ [4300]={{1454,0.5557,0.3418,1,8659,2,"Jes'rimon"}}, -- Forever takes 1.60.1.71091
+ [5405]={{1420,0.8313,0.685,1,10839,0,"Argent Officer Garush"}}, -- Forever takes 1.60.1.71139
+ [7441]={{1444,0.7696,0.3738,1,14355,0,"Azj'Tordin"}}, -- Forever takes 1.60.1.71139
+ [83934]={{1434,0.2848,0.7586,1,227853,0,"Pix Xizzix"}}, -- Forever takes 1.60.1.71139
+ [84402]={{1458,0.7348,0.3267,1,7825,2,"Oran Snakewrithe"}}, -- Forever takes 1.60.1.71139
+ [93971]={{2548,.594,.4573,1,256418,2,"Krom'rosh"}}, -- exact Forever quest recipient observed by AHledger, position from EG interactions
+ [93568]={{2652,0.4732,0.6567,1,255385,0,"Liranne"}}, -- Forever takes 1.60.1.71091, 1.60.1.71139
+ [94613]={{2548,0.5487,0.7312,1,258317,1,"Benjy Wheeler"}}, -- Forever takes 1.60.1.71139
+ [94614]={{2548,0.5487,0.7312,1,258317,1,"Benjy Wheeler"}}, -- Forever takes 1.60.1.71139
+ [94615]={{2548,0.5487,0.7312,1,258317,1,"Benjy Wheeler"}}, -- Forever takes 1.60.1.71139
+ [94678]={{2548,0.3956,0.7471,1,259353,1,"Cedric Dalton"}}, -- Forever takes 1.60.1.71139
+ [94842]={{2548,0.4113,0.6294,1,256438,1,"Halligan Turner"}}, -- Forever takes 1.60.1.71139
+ [94843]={{2548,0.4113,0.6294,1,256438,1,"Halligan Turner"}}, -- Forever takes 1.60.1.71139
+ [94857]={{2548,0.4136,0.6448,1,258963,1,"Hurley"}}, -- Forever takes 1.60.1.71139
+ [94861]={{2548,0.4113,0.6294,1,256438,1,"Halligan Turner"}}, -- Forever takes 1.60.1.71139
+ [94877]={{2548,0.6658,0.81,1,257558,1,"Demar Brant"}}, -- Forever takes 1.60.1.71139
+ [94879]={{2548,0.6672,0.8108,1,257591,1,"Ashe Amberhall"}}, -- Forever takes 1.60.1.71139
+ [94885]={{2548,0.6658,0.81,1,257558,1,"Demar Brant"}}, -- Forever takes 1.60.1.71139
+ [94923]={{2548,0.4339,0.8268,1,259049,1,"Robbie Holmsby"}}, -- Forever takes 1.60.1.71139
+ [94924]={{2548,0.5945,0.6394,1,259352,1,"Watcher Cornelius"}}, -- Forever takes 1.60.1.71139
+ [94925]={{2548,0.5945,0.6394,1,259352,1,"Watcher Cornelius"}}, -- Forever takes 1.60.1.71139
+ [94931]={{2548,0.4113,0.6294,1,256438,1,"Halligan Turner"}}, -- Forever takes 1.60.1.71139
+ [94999]={{2548,0.3641,0.758,1,259051,1,"Watcher Fredericks"}}, -- Forever takes 1.60.1.71139
+ [95064]={{2548,0.5945,0.6394,1,259352,1,"Watcher Cornelius"}}, -- Forever takes 1.60.1.71139
+ [95066]={{2548,0.6658,0.81,1,257558,1,"Demar Brant"}}, -- Forever takes 1.60.1.71139
+ [95147]={{2548,0.3956,0.7471,1,259353,1,"Cedric Dalton"}}, -- Forever takes 1.60.1.71139
+ [95148]={{2548,0.6658,0.81,1,257558,1,"Demar Brant"}}, -- Forever takes 1.60.1.71139
+ [95156]={{2548,0.6612,0.7958,1,260080,1,"Ember Bladewhisper"}}, -- Forever takes 1.60.1.71139
+ [95329]={{2548,0.5945,0.6394,1,259352,1,"Watcher Cornelius"}}, -- Forever takes 1.60.1.71139
+ [95330]={{2548,0.4113,0.6294,1,256438,1,"Halligan Turner"}}, -- Forever takes 1.60.1.71139
+ [95426]={{2548,0.5945,0.6394,1,259352,1,"Watcher Cornelius"}}, -- Forever takes 1.60.1.71139
+ [95561]={{2548,0.6383,0.8233,1,263089,1,"Tessa Dawnbright"}}, -- Forever takes 1.60.1.71139
+ [95913]={{2548,0.6383,0.8233,1,263089,1,"Tessa Dawnbright"}}, -- Forever takes 1.60.1.71139
+ [95961]={{2548,0.7883,0.5413,1,263120,1,"Gray Dawnbright"}}, -- Forever takes 1.60.1.71139
+ [95983]={{2548,0.5945,0.6394,1,259352,1,"Watcher Cornelius"}}, -- Forever takes 1.60.1.71139
+ [95986]={{2548,0.5945,0.6394,1,259352,1,"Watcher Cornelius"}}, -- Forever takes 1.60.1.71139
+ [95988]={{2548,0.7877,0.5411,1,255894,0,"Innkeeper Zizplink"}}, -- Forever takes 1.60.1.71139
+ [96088]={{1434,0.2848,0.7586,1,227853,0,"Pix Xizzix"}}, -- Forever takes 1.60.1.71139
+ -- Exact quest-recipient identities, observed at a stable spot in Forever.
+ [2623]={{1435,.3425,.6599,1,7572,2,"Fallen Hero of the Horde"}}, -- wiki quest rev 6207148; interaction build 1.60.1.71091
+ [2743]={{1435,.3425,.6599,1,7572,0,"Fallen Hero of the Horde"}}, -- wiki quest rev 5619898; interaction build 1.60.1.71091
+ [2783]={{1435,.3425,.6599,1,7572,1,"Fallen Hero of the Horde"}}, -- wiki quest rev 5620187; interaction build 1.60.1.71091
+ [3626]={{1435,.3425,.6599,1,7572,0,"Fallen Hero of the Horde"}}, -- wiki quest rev 5620074; interaction build 1.60.1.71091
+ [5531]={{1423,.7158,.4989,1,11035,0,"Betina Bigglezink"}}, -- wiki quest rev 6296864; interaction build 1.60.1.71139
+ [6029]={{1420,.8313,.685,1,10839,2,"Argent Officer Garush"}}, -- wiki quest rev 6351370; interaction build 1.60.1.71139
+ [8417]={{1435,.3425,.6599,1,7572,0,"Fallen Hero of the Horde"}}, -- wiki quest rev 5995133; interaction build 1.60.1.71091
 }
 
 -- Area-only turn-in references: no coordinates are inferred for instance floors,

@@ -159,3 +159,11 @@ for _,v in ipairs(jaw) do
     if AT.ObservedQuestDrops.dates[v[5]]=="2026-11-26 09:00 UTC" then dated=true end
 end
 assert(dated)
+
+assert(AT.ForeverQuestFacts[9204][1]==55 and AT.ForeverQuestFacts[9204][2]==60)
+local eel=AT.ForeverQuestFacts[9204][3]
+assert(eel[1]==13422 and eel[2]==40 and AT.GetForeverObjectiveQuests(13422)[9204])
+assert(AT.ForeverQuestItemOrigins[22622][9204]==2 and AT.ForeverProtectedQuestItems[22622])
+local cast=AT.ForeverObservedQuestUses[94843][1]
+assert(cast[1]==266161 and cast[2]==1277808)
+print("PASS build 71139 quest facts and successful item cast evidence")

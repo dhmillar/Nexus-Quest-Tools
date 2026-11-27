@@ -342,6 +342,10 @@ do
         local sample=assert(packed.ForeverQuestDropSamples[99130][286215])
         assert(sample[1][1]==113 and sample[1][2]==4248)
         local previous=AT.ForeverQuestDropSamples
+        local previousWindow=AT.ForeverSoloQuestWindowSamples
+        local windowSample=assert(packed.ForeverSoloQuestWindowSamples[83][1019])
+        assert(windowSample[1][1]==474 and windowSample[1][2]==13 and windowSample[1][3]==21)
+        AT.ForeverSoloQuestWindowSamples={[12]={[286215]=windowSample}}
         AT.ForeverQuestDropSamples={[12]={[286215]=sample}}
         local priorObjectives=C_QuestLog.GetQuestObjectives
         C_QuestLog.GetQuestObjectives=function(q)
@@ -354,6 +358,11 @@ do
             "never borrow a sample from another quest that uses the same item")
         local priorGroup=IsInGroup
         local priorGroupPack=AT.ForeverGroupedQuestDropSamples
+        local intermediate=assert(packed.ForeverGroupedQuestDropSamples[654])
+        assert(intermediate[9437][1][1]==5419 and intermediate[9437][1][2]==17 and intermediate[9437][1][3]==20)
+        assert(intermediate[9439][1][1]==5426 and intermediate[9442][1][1]==5423)
+        assert(not intermediate[9438] and not intermediate[9440] and not intermediate[9441],
+            "do not transfer raw Tanaris sample odds to a different processed item ID")
         local groupedSample=assert(packed.ForeverGroupedQuestDropSamples[447][3254])
         AT.ForeverGroupedQuestDropSamples={[12]={[286215]=groupedSample}}
         IsInGroup=function() return true end
@@ -367,6 +376,17 @@ do
         assert(find("Acquired in Stranglethorn").objectives[1].text=="Fixture item: 0/1")
         IsInGroup=priorGroup
         AT.ForeverGroupedQuestDropSamples=priorGroupPack
+        AT.db.rankQuestDropRates=true
+        AT.ForeverQuestDropSamples=nil
+        IsInGroup=function() return false end
+        AT.RefreshQuestHUD()
+        assert(find("Acquired in Stranglethorn").objectives[1].text=="Fixture item: 0/1 (62%)")
+        assert(find("A flight to Duskwood").objectives[1].text=="Fixture item: 0/1")
+        IsInGroup=function() return true end
+        AT.RefreshQuestHUD()
+        assert(find("Acquired in Stranglethorn").objectives[1].text=="Fixture item: 0/1","solo window sample is not group odds")
+        IsInGroup=priorGroup
+        AT.ForeverSoloQuestWindowSamples=previousWindow
         AT.ForeverQuestDropSamples=previous
         C_QuestLog.GetQuestObjectives=priorObjectives
     end

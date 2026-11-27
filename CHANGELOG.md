@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.5.153 - 2026-11-26
+
+- Level Guide: map pickup areas for 31 additional item-start quests since 1.5.149, including Field Marshal's Log, Furlbrow's Deed and The Admiral's Orders. Separate patrol areas stay separate; approximate circles do not become exact GPS points.
+- Corrected starter items that were confused with objectives. The Admiral's Orders starts from the Aged Envelope in Benedict's Chest, not the orders you deliver.
+- Added 219 numbered conversation and game-object objectives across 102 quests. In-game progress still takes precedence.
+- Rank Quest: added 50 turn-in references, including Krom'rosh for Farholde Scouting Report. Native waypoints remain authoritative.
+- Updated quest facts, item associations and measured drop rates without mixing solo loot windows, group loot windows and individual kills. Unknown locations and rates are not guessed.
+
+
 ## 1.5.149 - 2026-11-26
 
 ### Level Guide

@@ -1103,16 +1103,22 @@ local function objectiveDropSuffix(db,qid,objective,label)
     if grouped then pack=AT.ForeverGroupedQuestDropSamples end
     local samples=pack and pack[qid]
     local rows=samples and samples[item]
+    local openedWindows=grouped
+    if not rows and not grouped then
+        local solo=AT.ForeverSoloQuestWindowSamples and AT.ForeverSoloQuestWindowSamples[qid]
+        rows=solo and solo[item]
+        openedWindows=rows~=nil
+    end
     if rows then
         local low,high
         for _,row in ipairs(rows) do
-            local rate=grouped and row[2]/row[3]*100 or row[2]/100
+            local rate=openedWindows and row[2]/row[3]*100 or row[2]/100
             low=not low and rate or math.min(low,rate)
             high=not high and rate or math.max(high,rate)
         end
         if low then
             local a,b=fmtDrop(low),fmtDrop(high)
-            return " ("..(a==b and a or a.."\226\128\147"..b)..")",rows,grouped and "eg-group" or "eg"
+            return " ("..(a==b and a or a.."\226\128\147"..b)..")",rows,grouped and "eg-group" or (openedWindows and "eg-solo-window" or "eg")
         end
     end
     local lo,hi=questieDropRange(db,item)
@@ -1381,7 +1387,7 @@ local function renderObjectives(b,row,width,theme,hasItem,hasDetail)
             if is(label,"string") and label~="" then
                 local kill=call(AT.GetQuestKillMobName,row.id,o,label)
                 local item=AT.GetQuestDropMobNames and objectiveDropItem(db,row.id,o,label)
-                if AT.db.rankQuestDropRates~=false and (db or AT.ObservedQuestDrops or AT.ForeverQuestDropSamples or AT.ForeverGroupedQuestDropSamples) then
+                if AT.db.rankQuestDropRates~=false and (db or AT.ObservedQuestDrops or AT.ForeverQuestDropSamples or AT.ForeverGroupedQuestDropSamples or AT.ForeverSoloQuestWindowSamples) then
                     label=label..objectiveDropSuffix(db,row.id,o,label)
                 end
                 local done=field(o,"finished")==true

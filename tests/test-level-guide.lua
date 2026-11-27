@@ -310,7 +310,7 @@ assert(qid==109 and giverMap==1436)
 g.quests[1].waypoint.scripts.OnClick()
 assert(not activeWaypoint)
 -- Item route without a fake exact waypoint. Current and browsing modes use the same start data.
-AT.LevelGuideItemStarts={[109]={30001,{{1436,.4,.55,.08,1,501,"Crate Raider"}}}}
+AT.LevelGuideItemStarts={[109]={30001,{{1436,.4,.55,.08,1,501,"Crate Raider"},{1436,.62,.60,.05,1,501,"Crate Raider"},{1433,.55,.50,.04,1,501,"Crate Raider"}}}}
 local original=AT.LevelGuideQuestGivers[109];AT.LevelGuideQuestGivers[109]=nil
 g.scripts.OnEvent(g,"QUEST_LOG_UPDATE")
 local q=g.quests[1]
@@ -318,6 +318,7 @@ assert(q.record.giver.pickup and q.waypoint.shown and q.detail.text:find("Crate 
 q.scripts.OnClick(q,"LeftButton")
 local areaOnSelection=false;for _,circle in pairs(g.art.areaRing) do if circle.shown then areaOnSelection=true end end
 assert(areaOnSelection and g.art.destination.pickup and not AT.GetLevelGuideRoutePoint(),"selecting an item-start quest highlights its area without Track")
+assert(#g.art.destination.areas==2 and g.art.areaRing[55].shown,"show separate pickups on the selected map, not the other map")
 q.waypoint.scripts.OnClick()
 assert(g.art.destination.pickup and g.art.pin.shown and not activeWaypoint and not AT.GetLevelGuideRoutePoint())
 local dots=0;for _,d in pairs(g.art.areaRing) do if d.shown then dots=dots+1 end end
@@ -330,6 +331,22 @@ assert(not g.quests[1].waypoint.shown and g.quests[1].detail.text:find("Starts w
 assert(not g.art.pin.shown)
 AT.LevelGuideQuestGivers[109]=original
 AT.LevelGuideItemStarts=nil
+local rawNoArea=AT.ForeverLevelGuideQuests[118]
+AT.ForeverLevelGuideQuests[118]=levelRecord(20,0,"Unclassified item quest",{{2,30002,1}})
+AT.LevelGuideItemStarts={[118]={30002,{{1436,.4,.55,.08,2,601,"Loot barrel"}}}}
+local function found(id,name)
+    for _,v in ipairs(place(AT.BuildLevelGuide(),name).quests) do if v.id==id then return v end end
+end
+assert(found(118,"Westfall").giver.pickup,"an item quest missing zone metadata must remain discoverable in its one observed start zone")
+AT.LevelGuideItemStarts[118][2][2]={1433,.4,.55,.08,2,602,"Alternate loot barrel"}
+assert(not found(118,"Westfall"),"cannot put an uncategorized quest into an arbitrary zone on a multi-zone item")
+AT.ForeverLevelGuideQuests[118]=levelRecord(20,40,"Neutral turn-in is not its start",{{2,30002,1}})
+AT.LevelGuideItemStarts=nil
+AT.ForeverVerifiedEndpointReferences={[118]={{1436,.45,.55,1,602,0,"Only Accepts Turn-in"}}}
+local turnIn=found(118,"Westfall")
+assert(turnIn and not turnIn.giver,"neutral turn-ins are not Alliance quest starts")
+AT.ForeverVerifiedEndpointReferences=nil
+AT.ForeverLevelGuideQuests[118]=rawNoArea
 g.search:SetText("Drowned City")
 assert(g.heroName.text=="The Drowned City")
 g.high:SetText("18");assert(g.heroName.text=="No matching areas")
@@ -422,6 +439,24 @@ assert(loadfile("NQT/LevelGuideData.lua"))("NQT",real)
 assert(loadfile("NQT/LevelGuideGivers.lua"))("NQT",real)
 assert(real.LevelGuideItemStarts[2][1]==16305 and real.LevelGuideItemStarts[2][2][1][7]=="Sharptalon")
 assert(real.LevelGuideItemStarts[2][2][1][1]==1440 and next(real.LevelGuideNPCServices))
+for id,expect in pairs({[819]={4926,1413,3238},[2978]={9370,1444,143980},[4722]={12289,1439,176189},[4728]={12242,1439,175207},[4730]={12242,1439,175207},[4732]={12289,1439,176189},[4733]={12242,1439,175207}}) do
+    local item=real.LevelGuideItemStarts[id];local first=item[2][1]
+    assert(item[1]==expect[1] and first[1]==expect[2] and first[5]==2 and first[6]==expect[3]
+        and first[2]>0 and first[2]<1 and first[3]>0 and first[3]<1 and first[4]>0)
+end
+assert(#real.LevelGuideItemStarts[819][2]==3,"do not average separated keg spawn areas into a fictitious center")
+assert(real.LevelGuideItemStarts[551][2][1][6]==1765 and not real.LevelGuideItemStarts[554],
+    "a recovery item is not a second quest starter")
+for _,pair in ipairs({{94973,267137},{94980,267138}}) do
+    local r=real.LevelGuideItemStarts[pair[1]]
+    assert(r[1]==pair[2] and r[2][1][6]==259256 and r[2][1][1]==0)
+end
+for id,expected in pairs({[95385]={217161,1434,1564,4},[95534]={213421,1416,2319,1},[95884]={271343,1421,1973,2}}) do
+    local r=real.LevelGuideItemStarts[id]
+    assert(r[1]==expected[1] and r[2][1][1]==expected[2] and r[2][1][6]==expected[3] and #r[2]==expected[4])
+end
+assert(real.LevelGuideItemStarts[97288][2][1][1]==0,"a dungeon boss source without a map observation must not acquire a guessed floor")
+assert(real.LevelGuideQuestGivers[97290][1][5]==271613,"part three must retain its directly recorded quest giver")
 assert(loadfile("NQT/DungeonCatalog.lua"))("NQT",real)
 local count=0
 for id,r in pairs(real.ForeverLevelGuideQuests) do
@@ -499,6 +534,38 @@ for _ in pairs(real.LevelGuideZoneRanges) do imported=imported+1 end
 assert(imported==42 and real.LevelGuideZoneRanges[2548][1]==35 and real.LevelGuideZoneRanges[2548][2]==45)
 local river=place(real.BuildLevelGuide(36,1),"Riverglades")
 assert(river.rangeKnown and river.lo==35 and river.hi==45)
+local previousFaction,previousRace=UnitFactionGroup,UnitRace
+UnitFactionGroup=function() return "Horde" end
+UnitRace=function() return "Orc","Orc",2 end
+local hordeRiver=place(real.BuildLevelGuide(45,1),"Riverglades")
+local report
+for _,q in ipairs(hordeRiver.quests) do if q.id==93971 then report=q end end
+assert(report and report.giver.pickup and report.giver.map==2548 and report.giver.source==257079)
+assert(#report.giver.areas==2 and report.giver.areas[1].x==0.57 and report.giver.areas[2].y==0.75)
+assert(real.TrackLevelGuideGiver(report) and not real.GetLevelGuideRoutePoint(),
+    "patrol areas must not become precise GPS destinations")
+assert(real.TrackLevelGuideGiver(report))
+UnitFactionGroup,UnitRace=previousFaction,previousRace
+local interaction,liveInteraction=real.GetLevelGuideObjectiveRows(553)
+assert(not liveInteraction)
+local flames={}
+for _,r in ipairs(interaction) do
+ if r.kind=="other" then flames[r.text]=true end
+end
+assert(flames["Flame of Azel charged: 0/1"] and flames["Flame of Veraz charged: 0/1"] and flames["Flame of Uzel charged: 0/1"])
+local oldLocale=GetLocale
+GetLocale=function()return "deDE" end
+local translated=real.GetLevelGuideObjectiveText(553) or ""
+assert(not translated:find("Flame of Azel charged",1,true))
+GetLocale=oldLocale
+local oldObjectives=C_QuestLog.GetQuestObjectives
+C_QuestLog.GetQuestObjectives=function(q)
+ if q==553 then return {{type="object",text="Flame of Azel charged: 1/1",finished=true}} end
+ return oldObjectives(q)
+end
+local activeQuest,liveQuest=real.GetLevelGuideObjectiveRows(553)
+assert(liveQuest and #activeQuest==1 and activeQuest[1].done and activeQuest[1].text=="Flame of Azel charged: 1/1")
+C_QuestLog.GetQuestObjectives=oldObjectives
 local full=real.GetLevelGuideObjectiveText(387)
 assert(full:find("0/10",1,true) and full:find("0/8",1,true) and #full>40)
 print("PASS OpenMap independent zone ranges; bundled unheld counts and authentic live objective lines")
@@ -537,3 +604,18 @@ local nextQuest=rv.quests[2].record.id
 rv.questSurface.scripts.OnMouseWheel(rv.questSurface,-1)
 assert(rv.quests[1].record.id==nextQuest,"Quest wheel should move one row")
 print("PASS independent one-row scroll in both full-height guide lists")
+
+-- Cross-lane check: each exact starter has a map area, including sourced dungeon floor data.
+for id, expected in pairs({[123]={1307,1429,478},[136]={1357,1436,515},[184]={1972,1429,474},[361]={2839,1420,1523},[594]={4098,1434,2560},[830]={4881,1411,3239},[4881]={12564,1441,10617},[78823]={211269,1418,2893},[87494]={280459,1449,9162},[91741]={247834,1429,6},[93568]={259461,2652,255207},[93574]={259893,2652,253394},[93644]={260347,2652,11559},[94885]={266427,2548,256798},[95328]={268812,1420,260396},[95384]={213127,1434,780},[96294]={273658,1412,264082},[97236]={277190,1438,1994},[97281]={277661,1411,3118},[98424]={281031,1412,3051}}) do
+    local row=assert(real.LevelGuideItemStarts[id])
+    local spot=row[2][1]
+    assert(row[1]==expected[1] and spot[1]==expected[2] and spot[6]==expected[3] and spot[4]>0 and spot[7]~="")
+end
+assert(real.LevelGuideItemStarts[830][1]==4881 and real.LevelGuideItemStarts[830][2][1][5]==2)
+assert(real.LevelGuideItemStarts[86613][1]==278398 and #real.LevelGuideItemStarts[86613][2]==0)
+local rg=place(real.BuildLevelGuide(40,1),"Riverglades")
+local log
+for _,row in ipairs(rg.quests) do if row.id==94885 then log=row end end
+assert(log and log.giver.pickup and log.giver.sourceName=="Twilight Neophyte")
+assert(real.TrackLevelGuideGiver(log) and not real.GetLevelGuideRoutePoint())
+print("PASS exact Forever starter areas, including chest, dungeon, replaced quest items and real Riverglades tracking")

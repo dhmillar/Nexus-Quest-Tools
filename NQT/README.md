@@ -1,4 +1,4 @@
-# Nexus Quest Tools 1.5.39-preview
+# Nexus Quest Tools 1.5.153
 For World of Warcraft: Forever 1.60.1 (interface 16001). Uses the Blizzard quest tracker and a native character-specific action-bar macro. Optional compatibility with Questie.
 
 ## Install or update
