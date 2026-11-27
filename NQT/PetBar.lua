@@ -82,13 +82,22 @@ end
 local function restoreAllArt()
     for frame in pairs(masked) do restoreArt(frame) end
 end
-local function maskArt(frame,plate,token)
-    if not frame or frame==plate or safe(frame.IsForbidden,frame)~=false then return end
+local function restorePetLabels()
+    for frame,state in pairs(masked) do if state.petLabel then restoreArt(frame) end end
+end
+local function maskArt(frame,plate,token,petLabel)
+    if not frame or frame==plate then return end
+    local guard=frame
+    if petLabel then
+        if frame.IsForbidden and safe(frame.IsForbidden,frame)~=false then return end
+        guard=safe(frame.GetParent,frame)
+    end
+    if not guard or safe(guard.IsForbidden,guard)~=false then return end
     if masked[frame] and masked[frame].token~=token then restoreArt(frame) end
     local alpha=safe(frame.GetAlpha,frame)
     if finite(alpha) and alpha~=0 then
         safe(frame.SetAlpha,frame,0)
-        if safe(frame.GetAlpha,frame)==0 then masked[frame]={token=token,alpha=alpha} end
+        if safe(frame.GetAlpha,frame)==0 then masked[frame]={token=token,alpha=alpha,petLabel=petLabel} end
     end
 end
 local function hideStockArt(plate,token)
@@ -103,11 +112,12 @@ local function hideStockArt(plate,token)
             or safe(UnitIsFriend,"player",token)~=true then return end
     end
     maskArt(frame,plate,token)
-    -- Plater draws the name and owner subtitle in its own child, not UnitFrame.
-    if own then
-        local alternate=plate.unitFramePlater
-        if not alternate and plate.ActorNameSpecial and plate.ActorTitleSpecial then alternate=plate.unitFrame end
-        if alternate~=frame then maskArt(alternate,plate,token) end
+    -- Keep Plater's frame alpha under Plater's control. Its recurring plate
+    -- updates rewrite that alpha, but leave the individual labels' opacity alone.
+    if own and (plate.unitFramePlater or (plate.ActorNameSpecial and plate.ActorTitleSpecial)) then
+        maskArt(plate.ActorNameSpecial,plate,token,true)
+        maskArt(plate.ActorTitleSpecial,plate,token,true)
+        maskArt(plate.unitName,plate,token,true)
     end
 end
 local function filterExistingPlates()
@@ -139,6 +149,7 @@ local function petPlate()
     end
 end
 local function detach()
+    restorePetLabels()
     if not bar then return end
     bar:Hide()
     if anchoredPlate then
@@ -201,21 +212,16 @@ local function bindToPlate(plate,token)
     local followsCoordinates=screenAnchor(plate)
     if not followsCoordinates and not pcall(bar.SetPoint,bar,"BOTTOM",plate,"TOP",0,2) then return false end
     followElapsed=0
-    local artElapsed=0
     events:SetScript("OnUpdate",function(_,dt)
         followElapsed=followElapsed+dt
-        artElapsed=artElapsed+dt
         if followElapsed<.04 then return end
         followElapsed=0
         local currentToken=usable(plate) and plateToken(plate)
         if not usable(plate) or (currentToken and not ownsUnit(currentToken)) then
             bar:Hide()
+            restorePetLabels()
         elseif not followsCoordinates or screenAnchor(plate) then bar:Show()
         else bar:Hide() end
-        if artElapsed>=.2 then
-            artElapsed=0
-            if bar:IsShown() then hideStockArt(plate,currentToken or anchoredToken or "pet") end
-        end
     end)
     anchoredPlate,anchoredToken=plate,token
     return true

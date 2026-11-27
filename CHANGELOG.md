@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.200 - 2026-11-27
+
+- Fixes pet name and owner subtitle flicker by suppressing only those text regions. Plater retains control of its frame opacity and visibility.
+
 ## 1.5.199 - 2026-11-27
 
 - Hides the duplicate name and owner subtitle drawn by Plater for your active pet while Pet Bar is visible. Other Plater units and settings are unchanged.
