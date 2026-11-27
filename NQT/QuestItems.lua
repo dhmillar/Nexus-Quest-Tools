@@ -49,7 +49,7 @@ local function tooltip(button)
     GameTooltip:SetOwner(button,"ANCHOR_LEFT")
     if binding.kind=="macro" then
         GameTooltip:SetText(binding.name)
-        GameTooltip:AddLine("Click to target, mark with a diamond, and ping",.54,.95,.73)
+        GameTooltip:AddLine(binding.vendorItem and "Vendor (NPC) · Click to target, mark, and ping" or "Click to target, mark with a diamond, and ping",.54,.95,.73)
         GameTooltip:Show()
         return
     end
@@ -69,11 +69,14 @@ local function matchingRect(b)
     end
     if l>=vl-.01 and l+w<=vl+vw+.01 and y>=vy-.01 and y+h<=vy+vh+.01 then return l,y,w,h end
 end
-local function npcMacro(name)
+local function npcMacro(name,vendor)
     if not readable(name,"string") or #name==0 or #name>80 or name:match("^%s") or name:match("%s$")
         or name:find("[%c%[%];/|]") then return end
     -- Clear first so an unsuccessful lookup cannot mark the previous target.
     -- Let WoW enforce its own targeting, distance, and marker permissions.
+    if vendor then
+        return "/cleartarget\n/targetexact "..name.."\n/tm [@target,help,nodead] !3\n/ping [@target,help,nodead] 4\n/targetlasttarget [noexists][harm]"
+    end
     return "/cleartarget".."\n/targetexact "..name.."\n/tm [@target,exists,nodead] !3\n/ping [@target,exists,nodead] 4\n/targetlasttarget [noexists]"
 end
 AT.GetRankQuestNPCMacro=npcMacro
@@ -81,6 +84,13 @@ AT.GetRankQuestNPCMacro=npcMacro
 local function validate(b)
     if not b or not b.row or b.row.partyOnly or b.row.qid~=b.qid then return false end
     if b.kind=="macro" then
+        if b.vendorItem then
+            if not C_QuestLog or call(C_QuestLog.IsOnQuest,b.qid)~=true
+                or call(C_QuestLog.ReadyForTurnIn,b.qid)==true or b.tile.questId~=b.qid
+                or b.tile.vendorItem~=b.vendorItem or b.tile.npcID~=b.npcID or b.tile.mobName~=b.name then return false end
+            local name,npc=call(AT.GetQuestObjectiveVendor,b.qid,b.vendorItem)
+            return npc==b.npcID and npcMacro(name,true)==b.token
+        end
         if b.row.turnInLabel~=b.tile or b.row.turnInName~=b.name
             or not C_QuestLog or call(C_QuestLog.IsOnQuest,b.qid)~=true then return false end
         local _,_,_,name,npcOnly=call(AT.GetReadyQuestTurnInPoint,b.qid)
@@ -174,6 +184,20 @@ function AT.SetRankQuestItemTargets(rows,scroll,callback)
                     if token then targets[#targets+1]={row=row,tile=tile,token=token,link=tile.link,qid=row.qid,index=tile.rankQuestIndex} end
                 end
             end
+        end
+        if not row.partyOnly and row.qid then
+            local function vendorTargets(buttons)
+                for _,tile in ipairs(buttons or {}) do
+                    if tile.questId==row.qid and tile.vendorItem then
+                        local token=npcMacro(tile.mobName,true)
+                        if token then
+                            targets[#targets+1]={row=row,tile=tile,token=token,kind="macro",
+                                name=tile.mobName,qid=row.qid,vendorItem=tile.vendorItem,npcID=tile.npcID}
+                        end
+                    end
+                end
+            end
+            vendorTargets(row.objectiveMobHits)
         end
         if not row.partyOnly and row.qid and row.turnInLabel then
             local token=npcMacro(row.turnInName)

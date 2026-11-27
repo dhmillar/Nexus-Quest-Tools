@@ -24,6 +24,27 @@ local function mob(id)
     local data=AT.QuestMobData
     return data and data.creatures[id]
 end
+-- Exact Forever quest/item/merchant relationships. Not a general item-vendor
+-- table: a vendor who merely resells an item is not necessarily a quest source.
+local questVendors={
+    [288]={[2594]={1464,"Innkeeper Helbrek",1}},
+    [8928]={[21939]={16015,"Vi'el",0}},
+    [95988]={
+        [271657]={260487,"Gritta Chumwater",0},
+        [271653]={260565,"Kor'gar",0},
+        [271654]={260560,"Krikshank",0},
+    },
+}
+function AT.GetQuestObjectiveVendor(qid,item)
+    local locale=GetLocale and GetLocale()
+    if locale~="enUS" and locale~="enGB" or not pos(qid) or not pos(item) then return end
+    local vendors=questVendors[qid]
+    local v=vendors and vendors[item]
+    if not v then return end
+    if v[3]~=0 and (not UnitFactionGroup or UnitFactionGroup("player")~=(v[3]==1 and "Alliance" or "Horde")) then return end
+    local npc=mob(v[1])
+    return v[2],v[1],npc and npc[5]
+end
 local function killSubject(label)
     for _,verb in ipairs({"kill","slay","defeat","destroy"}) do
         local raw=label:match("^"..verb.." +(.+)$")

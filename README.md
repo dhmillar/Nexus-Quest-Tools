@@ -63,6 +63,10 @@ Set the version in `NQT/NQT.toc`, run `tools/New-Release.ps1`, and attach the re
 Data from Everloot (https://everloot.app), CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/).
 EverlootDrops.lua is the separately licensed adapted data. It holds only NPC/object IDs, item IDs, and observed counts; no game-file layer or install pseudonyms. Snapshots: https://everloot.app/database/download (November 14, 2026) and https://everloot.app/docs/api/rollups-drops (data as of November 26, 2026). Keep the credit and share this adapted data on the same license. Filters: public observations from at least three installs for NPC and object sources. For each item and source type, smaller samples fill gaps only when no source has at least 20 eligible windows. Newer observations replace older ones for the same source unless the older sample is the only one with at least 20 windows. Rates are rounded up for display; a range indicates that different sources have different rates. Counts were not pooled. An absent rate is unknown, not zero. Observed rates per eligible loot window are estimates, not game constants. The addon rounds known drop rates for display.
 
+## Rank Quest vendor objectives
+
+Verified merchant objectives show a portrait and (NPC). Click either the portrait or its line to target, diamond-mark and ping the merchant out of combat when the client permits. This does not change the saved Auto Macro target or purchase anything. Current sources were cross-checked from [Forever Quest Log](https://foreverquestlog.com/quests/95988/) and [Wowhead Forever](https://www.wowhead.com/forever/npc=1464/innkeeper-helbrek).
+
 ## Standalone map pins versus Questie Forever defaults
 
 In Rank Quest settings, Show standalone map pins is on by default and is independent of other addons. Where Forever reports them, NQT shows available starts, active quest/waypoint pins, ready turn-ins, flight masters, and service POIs. It avoids drawing over detected stock quest pins. The standalone pins appear on the world map, not the minimap. The world map shows cursor coordinates while supported.

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.190 - 2026-11-27
+
+- Rank Quest shows a merchant portrait and an (NPC) label for verified buy objectives. Click the portrait or objective line to target, diamond-mark and ping the merchant within client range, out of combat and subject to group permissions. The saved Auto Macro target is unchanged.
+- Added verified sources for Flagon of Dwarven Honeymead, Fel Elemental Rod, and the three purchased ingredients in Goes Down Smooth. Crawler Spittle remains a creature drop.
+
 ## 1.5.189 - 2026-11-27
 
 - Added nine Riverglades quest pickups and eleven fallback turn-ins, including Eye of Mugg and Tome of Twilight. Corrected five supplied items that were misidentified as quest starters.

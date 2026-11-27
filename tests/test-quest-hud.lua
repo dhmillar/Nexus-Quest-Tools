@@ -563,6 +563,24 @@ do
     icons[1].scripts.OnClick(icons[1],"LeftButton")
     assert(chosen=="Second Named Mob" and opened==beforeOpen)
     assert(icons[3].mobName=="Test Raptor" and icons[3]:GetWidth()==18 and view.objectives[2].anchor[2]-(icons[3].anchor[4]+18)>=7);icons[3].scripts.OnClick(icons[3]);assert(chosen=="Test Raptor" and opened==beforeOpen);assert(not icons[4],"rescue and unknown objectives must have no icon")
+    do
+        local oldObjectives,oldVendor=C_QuestLog.GetQuestObjectives,AT.GetQuestObjectiveVendor
+        AT.GetQuestObjectiveVendor=function(q,item) if q==12 and item==9001 then return "Known Vendor",77,123 end end
+        C_QuestLog.GetQuestObjectives=function(q)
+            if q==12 then return {{type="item",itemID=9001,text="Quest item: 0/5"}} end
+            return oldObjectives(q)
+        end
+        AT.RefreshQuestHUD()
+        assert(view.objectives[1].text=="(NPC)  Quest item: 0/5")
+        assert(icons[1].vendorItem==9001 and icons[1].mobName=="Known Vendor" and icons[1].displayID==123)
+        assert(hits[1].vendorItem==9001 and hits[1].anchor[4]==icons[1].anchor[4])
+        assert(hits[1].w>view.objectives[1].w,"vendor hit covers the portrait, NPC tag and whole objective")
+        chosen=nil;icons[1].scripts.OnClick(icons[1]);hits[1].scripts.OnClick(hits[1],"LeftButton")
+        assert(not chosen,"vendor fallback never saves into Auto Macro")
+        C_QuestLog.GetQuestObjectives,AT.GetQuestObjectiveVendor=oldObjectives,oldVendor
+        AT.RefreshQuestHUD()
+        assert(not icons[1].vendorItem and not hits[1].vendorItem,"recycled mob row does not keep vendor data")
+    end
     local beforeMenu,dropMobNames=MenuUtil,AT.GetQuestDropMobNames
     local menu={}
     MenuUtil={CreateContextMenu=function(owner,f)
