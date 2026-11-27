@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.206
+
+- Paladins can right-click the Smart Buff reminder and pick a named character's blessing directly, without opening Settings. Left-click still casts the suggested buff out of combat.
+
 ## 1.5.205 - 2026-11-27
 
 - Rebuilt settings as a larger, MapWise-inspired window with a gold-edged category rail, bigger controls, and separate sections for Smart Buff, Hunter tools, and Pet health.

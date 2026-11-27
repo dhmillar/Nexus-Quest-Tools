@@ -147,6 +147,18 @@ local function choiceLabel(key)
     local def=catalog[key]
     return def and spellName(def.r[1]) or choiceLabels[key] or "Class default"
 end
+local function selectBlessing(owner,title,set,resetLabel)
+    if type(MenuUtil)~="table" or type(MenuUtil.CreateContextMenu)~="function" then return false end
+    MenuUtil.CreateContextMenu(owner,function(_,root)
+        root:CreateTitle(title)
+        root:CreateButton(resetLabel or "Reset to class default",function() set(nil) end)
+        for _,key in ipairs(choices) do
+            local value=key
+            root:CreateButton(choiceLabel(value),function() set(value) end)
+        end
+    end)
+    return true
+end
 local function eligible(unit)
     if unit=="player" then return call(UnitIsDeadOrGhost,unit)~=true end
     return call(UnitExists,unit)==true and call(UnitIsConnected,unit)~=false
@@ -247,10 +259,11 @@ local function makePlan(class)
             or spell.totem and call(GetTotemInfo,spell.totem)==true or not inRange(spell,unit) then return end
         if snapshots[unit]==nil then snapshots[unit]=auraSnapshot(unit) or false end
         if hasAura(snapshots[unit],spell)==false then
-            local name=currentName(unit)
+            local name,realm=currentName(unit)
+            local identity=nameKey(name,realm)
             local castUnit=(spell.mode=="unit" and unit or "player")
             list[#list+1]={id=spell.id,name=spell.name,icon=spell.icon,unit=castUnit,
-                who=spell.mode=="group" and "Nearby party" or name or "You"}
+                identity=identity,who=spell.mode=="group" and "Nearby party" or name or "You"}
             return true
         end
     end
@@ -401,18 +414,24 @@ local function createReminderClicker()
         local entry=self.bound
         if button=="RightButton" and entry and AT.IsSmartBuffPaladin() and not InCombatLockdown() then
             local name,realm=currentName(entry.unit)
-            local _,shown=nameKey(name,realm)
-            if shown then
-                local ok,why=AT.OpenSmartBuffSetup(shown)
-                if not ok and why and AT.Say then AT.Say(why) end
+            local identity,shown=nameKey(name,realm)
+            -- Do not assign to a different character if the raid slot changed.
+            if not identity or identity~=entry.identity or not eligible(entry.unit) then
+                AT.RefreshSmartBuff()
+                return
             end
+            selectBlessing(self,"Blessing for "..shown,function(key)
+                if not AT.SetSmartBuffAssignment(nil,shown,key) and AT.Say then
+                    AT.Say("Could not save the blessing for "..shown..".")
+                end
+            end)
         end
     end)
     b:SetScript("OnEnter",function(self)
         if not GameTooltip then return end
         GameTooltip:SetOwner(self,"ANCHOR_TOP")
         GameTooltip:SetText("Click to cast")
-        if AT.IsSmartBuffPaladin() then GameTooltip:AddLine("Right-click to edit this character's blessing.") end
+        if AT.IsSmartBuffPaladin() then GameTooltip:AddLine("Right-click to assign this character's blessing.") end
         GameTooltip:Show()
     end)
     b:SetScript("OnLeave",function(self)
@@ -503,16 +522,6 @@ function AT.OpenSmartBuffSetup(prefill)
             local b=CreateFrame("Button",nil,setup,"UIPanelButtonTemplate");b:SetSize(width,22)
             b:SetPoint("TOPLEFT",x,y);b:SetText(label);b:SetScript("OnClick",fn);return b
         end
-        local function selectBlessing(owner,title,set)
-            MenuUtil.CreateContextMenu(owner,function(_,root)
-                root:CreateTitle(title)
-                root:CreateButton("Reset to default",function()set(nil) end)
-                for _,key in ipairs(choices) do
-                    local value=key
-                    root:CreateButton(choiceLabel(value),function()set(value) end)
-                end
-            end)
-        end
         line("Paladin blessing assignments",17,-15,"GameFontNormalLarge")
         line("Class defaults",17,-43,"GameFontNormal")
         for i,code in ipairs(classes) do
@@ -522,7 +531,7 @@ function AT.OpenSmartBuffSetup(prefill)
             line(label,22,y-4)
             local function refresh(b) b:SetText(choiceLabel(AT.GetSmartBuffAssignment(class))) end
             local b=btn("",215,145,y,function(self)
-                selectBlessing(self,label,function(key) AT.SetSmartBuffAssignment(class,nil,key);refresh(self) end)
+                selectBlessing(self,label,function(key) AT.SetSmartBuffAssignment(class,nil,key);refresh(self) end,"Reset to default")
             end)
             b:HookScript("OnShow",function(self) refresh(self) end);refresh(b)
         end

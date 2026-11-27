@@ -147,5 +147,30 @@ do
     AT.ResetSmartBuffAppearance()
     assert(f.scale==1 and f.width==257 and f.text.visible and not AT.char.smartBuffPosition)
     auras.player={1459};AT.RefreshSmartBuff();assert(not f.visible and not click.visible and not click.attrs.spell1)
+    local menu,opened
+    MenuUtil={CreateContextMenu=function(owner,build)
+        opened=owner
+        menu={buttons={},CreateTitle=function(self,t)self.title=t end,
+            CreateButton=function(self,label,click)self.buttons[label]=click end}
+        build(owner,menu)
+    end}
+    class="PALADIN";knowns={[19740]=true,[19742]=true,[20217]=true}
+    auras.player={20217}
+    members.party1={class="MAGE",name="Arden Vale"};auras.party1={}
+    AT.RefreshSmartBuff()
+    assert(click.visible and click.attrs.unit1=="party1")
+    locked=true;click.scripts.PostClick(click,"RightButton");assert(not opened)
+    locked=false;click.scripts.PostClick(click,"LeftButton");assert(not opened)
+    click.scripts.PostClick(click,"RightButton")
+    assert(opened==click and menu.title=="Blessing for Arden Vale")
+    menu.buttons["Blessing of Wisdom"]()
+    assert(AT.GetSmartBuffAssignment(nil,"Arden-Vale")=="wisdom")
+    assert(click.attrs.type1=="spell" and click.attrs.spell1=="Blessing of Wisdom")
+    click.scripts.PostClick(click,"RightButton");menu.buttons["Reset to class default"]()
+    assert(not AT.GetSmartBuffAssignment(nil,"Arden Vale"))
+    opened=nil;members.party1.name="Arden Wren"
+    click.scripts.PostClick(click,"RightButton");assert(not opened,"stale slot must not open for the wrong player")
+    click.scripts.PostClick(click,"RightButton");assert(menu.title=="Blessing for Arden Wren")
+    print("PASS direct reminder menu, full names, reset, left-click cast, lockdown and recycled slots")
     print("PASS movable reminder scale, icon-only edit mode, reset and hide when covered")
 end
