@@ -1934,6 +1934,9 @@ AT.LevelGuideQuestGivers={
 -- Efficient Games (https://efficient.games), CC BY 4.0: https://creativecommons.org/licenses/by/4.0/
 -- 1339ce5600bbc2b12e8f1081e584f548f62fa57f; exact quest start item joined to observed same-item loot by source ID and location.
 -- Quest => {startItemID, {{map,x,y,radius,source kind (1 NPC/2 object),source ID,name}}}
+-- Additional Forever pickup references: Wowhead object 2656, Wowhead/EG object 3076
+-- (Brambleblade coordinates from the Forever UrGameTips walkthrough); Forever Quest Log item 270888 vendor table.
+-- Pickup kind 3 is vendor; optional field 9 gates an individual pickup spot by faction.
 AT.LevelGuideItemStarts={
  [2]={16305,{{1440,0.7549,0.6746,0.0461,1,12676,"Sharptalon"}}},
  [8]={7628,{}},
@@ -2096,7 +2099,7 @@ AT.LevelGuideItemStarts={
  [623]={4028,{}},
  [632]={4429,{}},
  [635]={4614,{{1418,0.5081,0.6876,0.0556,1,2893,"Stonevault Bonesnapper"},{1424,0.4419,0.2963,0.0557,1,2248,"Cave Yeti"}}},
- [637]={4433,{}}, -- Forever 71139 client StartQuestID; https://www.wowhead.com/forever/item=4433
+ [637]={4433,{{1417,.4431,.9290,.024,2,2656,"Waterlogged Letter","Thandol Span"}}}, -- Forever 71139 client StartQuestID; https://www.wowhead.com/forever/item=4433
  [641]={4453,{}},
  [645]={4467,{}},
  [646]={4468,{}},
@@ -2130,7 +2133,7 @@ AT.LevelGuideItemStarts={
  [770]={4854,{{1412,0.3993,0.2318,0.036,1,3056,"Ghost Howl"}}},
  [772]={4823,{}},
  [777]={4846,{}},
- [781]={4851,{}}, -- Forever 71139 client StartQuestID; https://www.wowhead.com/forever/item=4851
+ [781]={4851,{{1412,.598,.822,.035,2,3076,"Dirt-stained Map","Brambleblade Ravine"}}}, -- Forever 71139 client StartQuestID; https://www.wowhead.com/forever/item=4851
  [793]={4640,{{1418,0.5837,0.6702,0.0363,1,2944,"Boss Tho'grun"}}},
  [819]={4926,{{1413,0.5568,0.273,0.036,2,3238,"Chen's Empty Keg"},{1413,0.4383,0.1221,0.036,2,3238,"Chen's Empty Keg"},{1413,0.4496,0.6223,0.036,2,3238,"Chen's Empty Keg"}}},
  [824]={16408,{{1440,0.4752,0.699,0.036,1,12759,"Tideress"}}},
@@ -3114,7 +3117,7 @@ AT.LevelGuideItemStarts={
  [95803]={270436,{}},
  [95805]={277199,{}},
  [95809]={270901,{}},
- [95816]={270888,{}}, -- Forever 71139 client StartQuestID; https://www.wowhead.com/forever/item=270888
+ [95816]={270888,{{1433,.085,.728,.025,3,256389,"Tamelyn Aldridge","Three Corners",1}}}, -- Forever 71139 client StartQuestID; https://www.wowhead.com/forever/item=270888
  [95819]={270896,{}},
  -- Beren's Peril cave entrance represents the pickup area, not a corpse waypoint.
  [95884]={271343,{{1421,0.605,0.725,0.043,1,1973,"Ravenclaw Guardian / Ravenclaw Drudger"},{1421,0.605,0.725,0.043,1,1974,"Ravenclaw Drudger"}}},

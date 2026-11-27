@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.180 - 2026-11-27
+
+- **Level Guide pickup maps:** Added highlighted pickup areas for Sully Balloo’s Letter (Waterlogged Letter, Thandol Span), Attack on Camp Narache (Dirt-stained Map, Brambleblade Ravine), and Sign Me Up! (Alliance vendor Tamelyn Aldridge, Three Corners). Vendor pickups are labeled as purchases, not monster drops. Pickup references do not set native GPS waypoints.
+
 ## 1.5.179 - 2026-11-27
 
 - **Drop rates:** 24 quest-item and monster party samples across 16 quests. The percentages show only observed party loot and do not claim solo odds.

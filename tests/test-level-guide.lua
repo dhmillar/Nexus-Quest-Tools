@@ -615,11 +615,21 @@ assert(log and log.giver.pickup and log.giver.sourceName=="Twilight Neophyte")
 assert(real.TrackLevelGuideGiver(log) and not real.GetLevelGuideRoutePoint())
 for quest,item in pairs({[178]=1962,[637]=4433,[781]=4851,[95816]=270888}) do
     local packed=real.LevelGuideItemStarts[quest]
-    assert(packed[1]==item and #packed[2]==0,"exact quest-starting item without invented pickup coordinates")
+    assert(packed[1]==item,"exact quest-starting item")
+    if quest==178 then assert(#packed[2]==0,"no fabricated Redridge spawn")
+    else assert(#packed[2]==1 and packed[2][1][4]>0,"real pickup area") end
 end
 print("PASS exact Forever starter areas, including chest, dungeon, corrected starter items and real Riverglades tracking")
 do
     local initialSide,initialLocale=UnitFactionGroup,GetLocale
+    GetLocale=function() return "enUS" end
+    UnitFactionGroup=function() return "Alliance" end
+    assert(real.GetShareQuestStart(637,1417):find("Waterlogged Letter",1,true))
+    assert(real.GetShareQuestStart(95816,1433):find("Tamelyn Aldridge",1,true))
+    UnitFactionGroup=function() return "Horde" end
+    assert(real.GetShareQuestStart(781,1412):find("Brambleblade Ravine",1,true))
+    assert(not real.GetShareQuestStart(95816,1433):find("Tamelyn Aldridge",1,true))
+    UnitFactionGroup,GetLocale=initialSide,initialLocale
     local prior=AT.LevelGuideItemStarts
     AT.LevelGuideItemStarts={[717001]={4881,{{1436,.4,.5,.035,2,3239,"Benedict's Chest","Guard tower"}}}}
     UnitFactionGroup=function() return "Alliance" end

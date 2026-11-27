@@ -299,21 +299,22 @@ local function journalQuestStart(q,side)
     end
     if validName(name) then return {map=map,x=x,y=y,name=name,npc=field(ids,name)} end
 end
-local function chooseItemStart(q,p)
+local function chooseItemStart(q,p,side)
     local r=AT.LevelGuideItemStarts and AT.LevelGuideItemStarts[q]
     if not r then return end
     local best,bestRank
+    local function visible(a) return not a[9] or a[9]==0 or a[9]==side end
     for _,a in ipairs(r[2]) do
         local map=a[1]
         local rank=positive(map) and validPoint(a[2],a[3]) and ((map==p.artMap or map==p.map or positive(p.map) and outdoor(map)==p.map) and 3 or 2) or 1
-        if not bestRank or rank>bestRank then best,bestRank=a,rank end
+        if visible(a) and (not bestRank or rank>bestRank) then best,bestRank=a,rank end
     end
     local areas={}
     if best and positive(best[1]) and validPoint(best[2],best[3]) then
         areas[1]={x=best[2],y=best[3],radius=best[4]}
         for _,a in ipairs(r[2]) do
             if #areas>=6 then break end
-            if a~=best and a[1]==best[1] and validPoint(a[2],a[3]) then
+            if a~=best and visible(a) and a[1]==best[1] and validPoint(a[2],a[3]) then
                 local duplicate=false
                 for _,b in ipairs(areas) do
                     if abs(a[2]-b.x)+abs(a[3]-b.y)<.025 then duplicate=true;break end
@@ -351,7 +352,7 @@ local function chooseGiver(q,p,side,fallback)
     end
     -- ForeverVerifiedEndpointReferences describes turn-ins, never quest starts.
     if known and not ambiguous then return known end
-    local pickup=chooseItemStart(q,p)
+    local pickup=chooseItemStart(q,p,side)
     if pickup and positive(pickup.map) and validPoint(pickup.x,pickup.y) then return pickup end
     local journal=p.kind=="dungeon" and journalQuestStart(q,side) or nil
     if journal then return journal end
@@ -1302,7 +1303,7 @@ startDescription=function(g)
         local what=validName(item) and item or ("item #"..g.item)
         if not mapName and validName(g.sourceArea) and (not GetLocale or GetLocale()=="enUS" or GetLocale()=="enGB") then mapName=g.sourceArea end
         if validName(g.sourceName) then
-            return (g.sourceKind==2 and "Loot " or "Drop: ")..what.." from "..g.sourceName..(mapName and ("  |  "..mapName) or "")
+            return (g.sourceKind==3 and "Buy " or g.sourceKind==2 and "Loot " or "Drop: ")..what.." from "..g.sourceName..(mapName and ("  |  "..mapName) or "")
         end
         return g.source and ("Drop: "..what)..(mapName and ("  |  "..mapName) or "") or ("Starts with "..what)
     end
@@ -2005,7 +2006,7 @@ local function buildWindow()
             GameTooltip:SetOwner(self,"ANCHOR_RIGHT")
             GameTooltip:SetText(g.pickup and "Track pickup area" or "Track quest start")
             GameTooltip:AddLine(startDescription(g),.88,.88,.88,true)
-            GameTooltip:AddLine(g.pickup and "Highlights the recorded drop area." or "Sets a waypoint to the quest start.",.85,.85,.85,true)
+            GameTooltip:AddLine(g.pickup and "Highlights the pickup area." or "Sets a waypoint to the quest start.",.85,.85,.85,true)
             GameTooltip:Show()
         end)
         row.waypoint:SetScript("OnLeave",function(self)
