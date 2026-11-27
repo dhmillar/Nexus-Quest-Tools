@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.191 - 2026-11-27
+
+- Fixed vendor objective clicks that selected a neutral merchant but skipped the diamond and Assist ping. The same click now requests both for a living, non-hostile target. It still leaves Auto Macro unchanged.
+
 ## 1.5.190 - 2026-11-27
 
 - Rank Quest shows a merchant portrait and an (NPC) label for verified buy objectives. Click the portrait or objective line to target, diamond-mark and ping the merchant within client range, out of combat and subject to group permissions. The saved Auto Macro target is unchanged.

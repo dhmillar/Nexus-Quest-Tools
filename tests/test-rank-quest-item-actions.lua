@@ -64,7 +64,43 @@ do
     local macro=button:GetAttribute("macrotext1")
     assert(button.shown and button:GetAttribute("type1")=="macro")
     assert(macro:find("/targetexact Gritta Chumwater",1,true))
-    assert(macro:find("/tm [@target,help,nodead] !3",1,true) and macro:find("/ping [@target,help,nodead] 4",1,true))
+    -- Run the emitted macro through a model of the secure conditions;
+    -- importantly, neutral NPCs have neither help nor harm.
+    local function execute(targetAfterLookup)
+        local prior,target={harm=true},nil
+        target=prior
+        local marks,pings=0,0
+        local function matches(opts)
+            for key in opts:gmatch("[^,]+") do
+                if key=="exists" and not target or key=="noexists" and target
+                    or key=="noharm" and target and target.harm or key=="harm" and not (target and target.harm)
+                    or key=="help" and not (target and target.help) or key=="nodead" and target and target.dead then return false end
+            end
+            return true
+        end
+        for line in macro:gmatch("[^\n]+") do
+            if line=="/cleartarget" then target=nil
+            elseif line:find("^/targetexact ") then target=targetAfterLookup
+            elseif line:find("^/tm ") and matches(assert(line:match("%[(.-)%]"))) then
+                assert(line:match(" !3$") and target==targetAfterLookup)
+                marks=marks+1
+            elseif line:find("^/ping ") and matches(assert(line:match("%[(.-)%]"))) then
+                assert(line:match(" Assist$") and target==targetAfterLookup)
+                pings=pings+1
+            elseif line:find("^/targetlasttarget ") and (not target or target.harm) then target=prior end
+        end
+        return marks,pings,target==prior
+    end
+    for _,unit in ipairs({{}, {help=true}}) do
+        local marks,pings,restored=execute(unit)
+        assert(marks==1 and pings==1 and not restored,"neutral and friendly target must mark and ping on the same press")
+    end
+    local marks,pings,restored=execute(nil)
+    assert(marks==0 and pings==0 and restored,"out of range: no action on old target")
+    marks,pings,restored=execute({harm=true})
+    assert(marks==0 and pings==0 and restored,"hostile match: no action")
+    marks,pings=execute({dead=true})
+    assert(marks==0 and pings==0,"dead vendor: no action")
     assert(macro:find("/targetlasttarget [noexists][harm]",1,true))
     tile.vendorItem=271654
     button.scripts.PreClick(button)

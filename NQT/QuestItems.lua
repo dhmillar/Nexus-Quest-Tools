@@ -75,7 +75,10 @@ local function npcMacro(name,vendor)
     -- Clear first so an unsuccessful lookup cannot mark the previous target.
     -- Let WoW enforce its own targeting, distance, and marker permissions.
     if vendor then
-        return "/cleartarget\n/targetexact "..name.."\n/tm [@target,help,nodead] !3\n/ping [@target,help,nodead] 4\n/targetlasttarget [noexists][harm]"
+        -- Neutral merchants may be neither assistable nor attackable. Test
+        -- that the new target exists, is alive, and is not hostile.
+        local condition="[@target,exists,noharm,nodead]"
+        return "/cleartarget\n/targetexact "..name.."\n/tm "..condition.." !3\n/ping "..condition.." Assist\n/targetlasttarget [noexists][harm]"
     end
     return "/cleartarget".."\n/targetexact "..name.."\n/tm [@target,exists,nodead] !3\n/ping [@target,exists,nodead] 4\n/targetlasttarget [noexists]"
 end
