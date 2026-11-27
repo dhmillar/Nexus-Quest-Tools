@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.210
+
+- Rank Quest compares ready turn-ins using actual hand-in locations on a common yard scale when available. Known NPC endpoints participate in ranking; old objective distance cannot outrank a measured hand-in.
+
 ## 1.5.209
 
 - With Focus Close Completed Quests enabled, ready turn-ins beyond 100 yards now compete by distance with unfinished quests instead of being ignored. Turn-ins within 100 yards still have priority.

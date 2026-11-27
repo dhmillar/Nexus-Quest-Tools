@@ -415,18 +415,25 @@ end
 local function turnInDistance(id,ctx,poi,parent,blocked,lookup)
     local function pointDistance(map,x,y,knownContext)
         if not xyValid(x,y) then return end
-        local px,py
-        if knownContext then px,py=mapPlayer(knownContext) end
-        if px then
-            local dx,dy=(px-x)*knownContext.w,(py-y)*knownContext.h
-            return dx*dx+dy*dy,{map,x,y}
+        -- Use the same yard coordinate system for both local and cross-zone
+        -- endpoints when available; indoor and legacy clients still get local geometry.
+        if not blocked then
+            local world,wx,wy=worldPosition(map,x,y)
+            local playerWorld,playerX,playerY=getPlayerWorld(ctx)
+            if playerWorld==nil and parent then playerWorld,playerX,playerY=getPlayerWorld(parent) end
+            if world~=nil and playerWorld~=nil then
+                if world~=playerWorld then return math.huge end
+                local dx,dy=wx-playerX,wy-playerY
+                return dx*dx+dy*dy,{map,x,y}
+            end
         end
-        if blocked then return end
-        local world,wx,wy=worldPosition(map,x,y)
-        local playerWorld,playerX,playerY=getPlayerWorld(ctx)
-        if world==nil or world~=playerWorld then return end
-        local dx,dy=wx-playerX,wy-playerY
-        return dx*dx+dy*dy,{map,x,y}
+        if knownContext then
+            local px,py=mapPlayer(knownContext)
+            if px then
+                local dx,dy=(px-x)*knownContext.w,(py-y)*knownContext.h
+                return dx*dx+dy*dy,{map,x,y}
+            end
+        end
     end
     local function nativePoint(c,p)
         if c and turnInPin(p) then
@@ -453,6 +460,7 @@ local function turnInDistance(id,ctx,poi,parent,blocked,lookup)
         -- A cross-checked endpoint can inform ranking without masquerading
         -- as a native GPS destination. Ignore ambiguous or wrong-faction rows.
         map,x,y=observedTurnIn(id,nil,nil,nil,"verified",true)
+        if not map then map,x,y=observedTurnIn(id,nil,nil,nil,true,true) end
         if map then
             d=pointDistance(map,x,y,map==ctx.id and ctx or parent and map==parent.id and parent or nil)
             if d then return d,{} end
@@ -464,7 +472,7 @@ local function turnInDistance(id,ctx,poi,parent,blocked,lookup)
     local parentPOI=parent and parent.points and parent.points[id]
     if not blocked and field(poi,"inProgress")~=true and field(parentPOI,"inProgress")~=true then
         local native,localWorld=call(Q.GetDistanceSqToQuest,id)
-        if finite(native) and native>0 and localWorld==true then return native,{} end
+        if finite(native) and native>0 and localWorld==true then return native,{},true end
     end
 end
 
@@ -700,24 +708,35 @@ local function run()
             best,bestDist,bestTurnIn=id,d,point
         end
     end
+    local estimatedTurnIns,measuredTurnIn={},false
+    local function considerTurnIn(id,d,point)
+        if d<=radius2 then
+            if not priorityTurnIn then best,bestDist,bestTurnIn=nil,nil,nil end
+            priorityTurnIn=true
+        end
+        if not priorityTurnIn or d<=radius2 then consider(id,d,point) end
+    end
     for id in pairs(ids) do
         if not AT.IsQuestExcluded(id) then
             local d,turnIn
             if completed(id) then
                 if preferReady and activeQuest(id,ids) then
-                    d,turnIn=turnInDistance(id,ctx,poiByID[id],parent,blocked,lookup)
+                    local estimated
+                    d,turnIn,estimated=turnInDistance(id,ctx,poiByID[id],parent,blocked,lookup)
                     if finite(d) and d>=0 then
-                        if d<=radius2 then
-                            if not priorityTurnIn then best,bestDist,bestTurnIn=nil,nil,nil end
-                            priorityTurnIn=true
-                        end
-                        if not priorityTurnIn or d<=radius2 then consider(id,d,turnIn) end
+                        if estimated then estimatedTurnIns[#estimatedTurnIns+1]={id,d,turnIn}
+                        else measuredTurnIn=true;considerTurnIn(id,d,turnIn) end
                     end
                 end
             else
                 inProgress[#inProgress+1]=id
             end
         end
+    end
+    -- A bare client distance can still refer to an old objective.
+    -- Never let one outrank a measured hand-in NPC.
+    if not measuredTurnIn then
+        for _,candidate in ipairs(estimatedTurnIns) do considerTurnIn(unpack(candidate)) end
     end
     if not priorityTurnIn then
         for _,id in ipairs(inProgress) do

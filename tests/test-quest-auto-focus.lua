@@ -170,6 +170,49 @@ C_QuestLog.GetNextWaypoint=nil;pois[3]=nil
 measured[14]=100
 C_QuestLog.GetNumQuestLogEntries=baseLog
 C_QuestLog.GetInfo=function(i)return {questID=ids[i]} end
+do
+    local savedRefs=AT.ForeverQuestNPCReferences
+    local savedWorld=C_Map.GetWorldPosFromMapPos
+    local savedMap=C_Map.GetPlayerMapPosition
+    ready[13]=true;ids[#ids+1]=13
+    local playerX=.5
+    C_Map.GetPlayerMapPosition=function(m)
+        if m==1 then return CreateVector2D(playerX,.5) end
+    end
+    C_Map.GetWorldPosFromMapPos=function(m,pos)
+        local x,y=pos:GetXY()
+        return m==4 and 2 or 1,CreateVector2D((m==3 and 1200 or 0)+1400*x,1400*y)
+    end
+    -- A nearby stale objective distance must not beat the actual hand-in.
+    measured[11],cont[11]=10,true
+    pois[1]={{questID=13,x=.5+400/1400,y=.5,inProgress=false}}
+    inside[14]=nil;measured[14]=2500
+    expect(13)
+    -- The closer hand-in exists only as a bundled, displayable NPC point.
+    AT.ForeverQuestNPCReferences={[11]={{1,.55,.5,1,123,0,"Closer finisher"}}}
+    expect(11)
+    assert(select(2,AT.GetFocusedQuestRoutePoint())==nil,"reference is not a GPS waypoint")
+    playerX=.72;expect(13)
+    -- Compare local and remote map pins on a single yard scale; 420 beats 380
+    -- only in the old, mismatched comparison (300 versus 380).
+    playerX=.5;pois[1][1].x=.8
+    pois[3]={{questID=11,x=.02,y=.5,inProgress=false}}
+    C_QuestLog.GetNextWaypoint=function(q) if q==11 then return 3,.02,.5 end end
+    C_Map.GetWorldPosFromMapPos=function(m,pos)
+        local x,y=pos:GetXY()
+        return m==4 and 2 or 1,CreateVector2D((m==3 and 1052 or 0)+1400*x,1400*y)
+    end
+    expect(11)
+    -- A genuine foreign-world pin must not fall back to the old 10-yard number.
+    pois[4]=pois[3];pois[3]=nil
+    C_QuestLog.GetNextWaypoint=function(q) if q==11 then return 4,.02,.5 end end
+    expect(13)
+    C_QuestLog.GetNextWaypoint=nil
+    AT.ForeverQuestNPCReferences=savedRefs;C_Map.GetWorldPosFromMapPos=savedWorld
+    C_Map.GetPlayerMapPosition=savedMap;pois[1],pois[4]=nil,nil
+    table.remove(ids);measured[11]=nil;measured[14]=100;inside[14]=true
+    print("PASS nearest of multiple ready turn-ins, display-only endpoints, movement, common yard scale, and stale/foreign evidence")
+end
 print("PASS ready quest without native pin, hidden rows, stock watch required, broad blob ranking, distance-only GPS safety and omitted POI flags")
 
 do
