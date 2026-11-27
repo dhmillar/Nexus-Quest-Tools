@@ -187,6 +187,25 @@ do
         assert(next:find("[nocombat,@player] !Aspect of the Hawk",1,true))
         assert(not next:find("Cheetah",1,true) and not next:find("Pack",1,true))
     end
+    -- An unrelated unreadable aura must not pin a verifiably active Hawk.
+    local readByIndex=C_UnitAuras.GetAuraDataByIndex
+    C_UnitAuras.GetAuraDataByIndex=function(u,i)
+        if u=="player" then return {} end
+        return readByIndex(u,i)
+    end
+    local activeAspect=13165
+    function C_UnitAuras.GetPlayerAuraBySpellID(id)
+        if id==activeAspect then return {spellId=id,name=spells[id]} end
+    end
+    function IsIndoors() error("Hunter aspects should not consult indoor state") end
+    AT.RefreshSmartBuff()
+    assert(edits[#edits][1]:find("[nocombat,@player] !Aspect of the Cheetah",1,true))
+    activeAspect=5118
+    AT.RefreshSmartBuff()
+    assert(edits[#edits][1]:find("[nocombat,@player] !Aspect of the Hawk",1,true))
+    C_UnitAuras.GetAuraDataByIndex=readByIndex
+    C_UnitAuras.GetPlayerAuraBySpellID=nil
+    IsIndoors=nil
     auras.player={13165};knowns[13159]=nil;AT.RefreshSmartBuff()
     assert(not edits[#edits][1]:find("Pack",1,true) and edits[#edits][1]:find("Cheetah",1,true))
     local count=#edits
@@ -254,7 +273,9 @@ do
     native[121].icon=135987 -- The icon saved by 1.5.214, not a question mark.
     local hunter="#showtooltip\n/cast [combat,@player] !Aspect of the Hawk; [nocombat,@player] !Aspect of the Cheetah"
     native[121].body=header..hunter
-    assert(nqt.SyncSmartBuffAction(hunter,false) and native[121].icon==136076 and native[121].body==header..hunter)
+    assert(nqt.SyncSmartBuffAction(hunter,false) and native[121].icon==134400 and native[121].body==header..hunter)
+    native[121].icon=136076 -- Migration from the fixed Hawk icon shipped in 1.5.215.
+    assert(nqt.SyncSmartBuffAction(hunter,false) and native[121].icon==134400)
     local unchanged=writes
     assert(nqt.SyncSmartBuffAction(hunter,false) and writes==unchanged)
     assert(nqt.SyncSmartBuffAction(idle,false) and native[121].icon==136076)
@@ -267,6 +288,6 @@ do
     native[121].icon=135987
     unchanged=writes
     assert(nqt.SyncSmartBuffAction(idle,false) and writes==unchanged,"preserve a correct class icon")
-    print("PASS Hunter Hawk icon, in-place legacy migration and class-specific buff icons")
+    print("PASS Hunter dynamic cast icon, idle Hawk, in-place legacy migration and class-specific buff icons")
     print("PASS Smart Buff native action-bar icon migration, no-action state, custom icon and combat guard")
 end

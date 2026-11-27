@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.216
+
+- Hunter Smart Buff shows the next aspect through WoW's native macro display, with Hawk only as the idle fallback. A direct player aura lookup preserves the travel toggle when an unrelated buff makes the full list unreadable. No indoor check or protected edits in combat.
+
 ## 1.5.215
 
 - Smart Buff uses the class's own buff icon, including Aspect of the Hawk for Hunters. Replaces the previous generic buff icon on existing macros without changing casting.

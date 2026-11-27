@@ -444,6 +444,24 @@ local function createReminderClicker()
 end
 local idleMacro="# No buff to cast"
 
+local function hunterTravelActive(hawk,cheetah,pack)
+    -- A targeted lookup can still confirm an aspect if a separate buff
+    -- makes the full aura list unreadable. It never invents an aura result.
+    local find=C_UnitAuras and C_UnitAuras.GetPlayerAuraBySpellID
+    if find then
+        for _,id in ipairs({5118,13159}) do
+            local aura=call(find,id)
+            if type(aura)=="table" then return true end
+        end
+        if hawk and type(call(find,hawk.id))=="table" then return false end
+    end
+    local snapshot=auraSnapshot("player")
+    if not snapshot then return nil end
+    return (cheetah and hasAura(snapshot,cheetah)==true)
+        or (pack and hasAura(snapshot,pack)==true)
+        or snapshot.ids[5118]==true or snapshot.ids[13159]==true
+        or snapshot.names[spellName(5118) or ""]==true or snapshot.names[spellName(13159) or ""]==true
+end
 local function hunterMacro()
     local hawk,monkey,cheetah,pack=spellFor("hawk"),spellFor("monkey"),spellFor("cheetah"),spellFor("pack")
     local clauses={}
@@ -452,12 +470,10 @@ local function hunterMacro()
     end
     add("combat,mod:shift",monkey)
     add("combat",hawk)
-    local snapshot=auraSnapshot("player")
-    local travel=snapshot and (snapshot.ids[5118] or snapshot.ids[13159]
-        or snapshot.names[spellName(5118) or ""] or snapshot.names[spellName(13159) or ""])
+    local travel=hunterTravelActive(hawk,cheetah,pack)
     if travel then
         add("nocombat",hawk)
-    elseif snapshot then
+    elseif travel==false then
         add("nocombat,group",pack)
         add("nocombat",cheetah or hawk)
     else

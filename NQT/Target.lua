@@ -244,7 +244,12 @@ local function findNativeMacro(header, labels)
     end
 end
 
-local function syncNative(header, labels, asset, command, create, replaceLegacyIcon)
+local function isAutomaticMacroIcon(texture)
+    return not private(texture) and (texture == 134400 or (type(texture) == "string"
+        and texture:lower():find("inv_misc_questionmark", 1, true) ~= nil))
+end
+
+local function syncNative(header, labels, asset, command, create, replaceLegacyIcon, alternateIcon)
     if not (GetMacroInfo and CreateMacro and EditMacro) then return false, "WoW's macro editor is unavailable." end
     local id, name, previous, texture = findNativeMacro(header, labels)
     if not id and not create then return true end
@@ -252,14 +257,15 @@ local function syncNative(header, labels, asset, command, create, replaceLegacyI
     local body = header .. "\n" .. command
     -- Keep a real icon when Smart Buff intentionally has no spell to cast.
     -- Migrate the old question mark or generic buff icon, not a custom icon.
+    local automatic = asset == 134400
     local replaceIcon = id and replaceLegacyIcon and not private(texture) and texture ~= asset and
-        (texture == nil or texture == 134400 or texture == 135987 or (type(texture) == "string" and
-            texture:lower():find("inv_misc_questionmark", 1, true) ~= nil))
+        (texture == nil or texture == 135987 or (alternateIcon and texture == alternateIcon)
+            or (not automatic and isAutomaticMacroIcon(texture)))
     if previous ~= body or replaceIcon then
         if id then pcall(EditMacro, id, name, replaceIcon and asset or nil, body)
         else pcall(CreateMacro, name, asset, body, true) end
         local updatedID, _, actual, updatedTexture = findNativeMacro(header, labels)
-        if not updatedID or actual ~= body or (replaceIcon and (private(updatedTexture) or updatedTexture == texture or updatedTexture == 134400 or updatedTexture == nil)) then
+        if not updatedID or actual ~= body or (replaceIcon and (private(updatedTexture) or (updatedTexture ~= asset and not (automatic and isAutomaticMacroIcon(updatedTexture))))) then
             return false, "WoW did not save the macro. Close /macro and check for a free character macro slot."
         end
         id = updatedID
@@ -267,11 +273,11 @@ local function syncNative(header, labels, asset, command, create, replaceLegacyI
     return true, nil, id, name
 end
 
-local function pickupNative(header, labels, asset, command, migrateQuestionIcon)
+local function pickupNative(header, labels, asset, command, migrateQuestionIcon, alternateIcon)
     if InCombatLockdown() then return false, "Leave combat before setting up this macro." end
     if not PickupMacro then return false, "WoW's macro editor is unavailable." end
     if GetCursorInfo and GetCursorInfo() then return false, "Clear your cursor before picking up the macro." end
-    local ready, why, id, name = syncNative(header, labels, asset, command, true, migrateQuestionIcon)
+    local ready, why, id, name = syncNative(header, labels, asset, command, true, migrateQuestionIcon, alternateIcon)
     if not ready then return false, why end
     local ok = pcall(PickupMacro, id)
     if not ok or (GetCursorInfo and GetCursorInfo() ~= "macro") then
@@ -291,7 +297,7 @@ local function smartBuffMacroIcon()
     if UnitClass then ok, _, class = pcall(UnitClass, "player") end
     if not ok or private(class) then return legacyBuffIcon end
     local spell = classBuffSpells[class]
-    if class == "HUNTER" then return 136076 end -- Aspect of the Hawk, even before its first rank is learned.
+    if class == "HUNTER" then return 136076, true end -- Hawk is the idle fallback for Hunters.
     local getTexture = C_Spell and C_Spell.GetSpellTexture or GetSpellTexture
     if spell and getTexture then
         local got, texture = pcall(getTexture, spell)
@@ -303,9 +309,11 @@ local function smartBuffMacroIcon()
 end
 function AT.SyncSmartBuffAction(command,pickup)
     if InCombatLockdown and InCombatLockdown() then return false,"Leave combat before setting up Smart Buff." end
-    local buffIcon = smartBuffMacroIcon()
-    if pickup then return pickupNative(buffHeader,buffLabels,buffIcon,command,true) end
-    return syncNative(buffHeader,buffLabels,buffIcon,command,false,true)
+    local fallback, hunter = smartBuffMacroIcon()
+    local dynamic = hunter and command:sub(1,19) == "#showtooltip\n/cast "
+    local buffIcon = dynamic and 134400 or fallback
+    if pickup then return pickupNative(buffHeader,buffLabels,buffIcon,command,true,dynamic and fallback) end
+    return syncNative(buffHeader,buffLabels,buffIcon,command,false,true,dynamic and fallback)
 end
 
 local primaryHeader, primaryLabels = "# AutoTrack:skull:v1", {"AT Skull", "AutoTrack Skull"}
