@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.228
+
+- The overhead Pet Bar only follows a verified pet nameplate in dungeons. The fallback sits at the upper left, away from the player character.
+
 ## 1.5.227
 
 - Boss marks and pings use the living target selected by the exact-name search, without waiting for the hostility flag. Dead-target protection still applies.

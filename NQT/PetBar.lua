@@ -57,6 +57,7 @@ local function syncPetCVar(wanted)
 end
 local function ownsUnit(unit)
     if issecretvalue and issecretvalue(unit) or type(unit)~="string" then return false end
+    if unit=="player" or safe(UnitIsUnit,"player",unit)==true then return false end
     if unit=="pet" or safe(UnitIsUnit,"pet",unit)==true then return true end
     local pet=read(UnitGUID,"pet","string")
     return pet~=nil and pet==read(UnitGUID,unit,"string")
@@ -134,11 +135,14 @@ local function petPlate()
     local plate=safe(C_NamePlate.GetNamePlateForUnit,"pet")
     if usable(plate) then
         local token=plateToken(plate)
-        if not token or ownsUnit(token) then return plate,token or tokenHint end
+        if ownsUnit(token) or outdoor() and not token then return plate,token or tokenHint end
     end
     if ownsUnit(tokenHint) then
         plate=safe(C_NamePlate.GetNamePlateForUnit,tokenHint)
-        if usable(plate) then return plate,tokenHint end
+        if usable(plate) then
+            local token=plateToken(plate)
+            if ownsUnit(token) or outdoor() and not token then return plate,token or tokenHint end
+        end
     end
     local list=safe(C_NamePlate.GetNamePlates)
     for _,candidate in ipairs(type(list)=="table" and list or {}) do
@@ -217,7 +221,7 @@ local function bindToPlate(plate,token)
         if followElapsed<.04 then return end
         followElapsed=0
         local currentToken=usable(plate) and plateToken(plate)
-        if not usable(plate) or (currentToken and not ownsUnit(currentToken)) then
+        if not usable(plate) or (currentToken and not ownsUnit(currentToken)) or (not currentToken and not outdoor()) then
             if not outdoor() then AT.RefreshPetBar()
             else bar:Hide();restorePetLabels() end
         elseif not followsCoordinates or screenAnchor(plate) then bar:Show()
@@ -345,7 +349,7 @@ function AT.RefreshPetBar()
         -- WoW can withhold friendly nameplates in instances. Keep the same
         -- pet-only health display without anchoring to a protected frame.
         detach()
-        bar:SetPoint("CENTER",UIParent,"CENTER",0,-110)
+        bar:SetPoint("TOPLEFT",UIParent,"TOPLEFT",24,-158)
         instanceFallback=true
     end
     if finite(health) and finite(maximum) and maximum>0 then
@@ -372,7 +376,7 @@ end
 local function statusText()
     if not AT.db or AT.db.enabled==false or AT.db.petBarEnabled~=true then return "off in General" end
     if read(UnitExists,"pet","boolean")~=true then return "no active pet" end
-    if instanceFallback then return "visible: fixed dungeon bar; pet nameplate unavailable" end
+    if instanceFallback then return "visible at the upper left; no confirmed overhead pet nameplate" end
     local category=getPetCVar(modernPetCVar) or getPetCVar(legacyPetCVar)
     local plate=petPlate()
     if not plate then

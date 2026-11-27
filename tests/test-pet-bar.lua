@@ -190,7 +190,7 @@ assert(cv.nameplateShowFriendlyPlayerPets=="0" and #writes==beforeDungeonCVars+1
 assert(bar.shown and bar.point[4]==367,"a usable pet plate still gets the overhead bar in a dungeon")
 replacement.forbidden=true
 watcher.onUpdate(watcher,.05)
-assert(bar.shown and bar.point[1]=="CENTER" and bar.point[3]=="CENTER","fall back to a fixed bar if the dungeon hides the pet plate")
+assert(bar.shown and bar.point[1]=="TOPLEFT" and bar.point[3]=="TOPLEFT" and bar.point[4]==24 and bar.point[5]==-158,"fall back to a fixed bar if the dungeon hides the pet plate")
 sample.name="Cinder"
 watcher.onEvent(watcher,"UNIT_NAME_UPDATE","pet")
 health(20)
@@ -200,14 +200,23 @@ watcher.onEvent(watcher,"NAME_PLATE_UNIT_ADDED","nameplate8")
 assert(bar.shown and bar.point[4]==367,"rebind if a usable plate becomes available")
 direct=nil;listed={other}
 watcher.onEvent(watcher,"NAME_PLATE_UNIT_REMOVED","nameplate8")
-assert(bar.shown and bar.point[1]=="CENTER","live removal hands off to the fixed bar")
+assert(bar.shown and bar.point[1]=="TOPLEFT","live removal hands off to the fixed bar")
 sample.present=false
 watcher.onEvent(watcher,"UNIT_PET","player")
 assert(not bar.shown and not bar.point,"hide the dungeon bar when the pet is dismissed")
 sample.present=true
 watcher.onEvent(watcher,"UNIT_PET","player")
-assert(bar.shown and bar.point[1]=="CENTER","the new pet gets the same dashboard fallback")
+assert(bar.shown and bar.point[1]=="TOPLEFT","the new pet gets the same fixed HUD fallback")
 assert(cv.nameplateShowFriendlyPlayerPets=="0" and #writes==beforeDungeonCVars+1,"no CVar enforcement or other plates in a dungeon")
+local ownPlayerPlate=plate("player")
+local unidentifiedPlate=plate(nil)
+direct=ownPlayerPlate;listed={ownPlayerPlate,other}
+AT.RefreshPetBar()
+assert(bar.shown and bar.point[1]=="TOPLEFT","never attach the overhead pet bar to the player plate")
+direct=unidentifiedPlate;listed={unidentifiedPlate,other}
+AT.RefreshPetBar()
+assert(bar.shown and bar.point[1]=="TOPLEFT","a dungeon plate without a confirmed pet token is not used")
+direct=nil;listed={other}
 instance=false; direct=nil; listed={}; timers={}
 watcher.onEvent(watcher,"PLAYER_ENTERING_WORLD")
 assert(not bar.shown and #timers==4,"saved toggle retries without a ready plate")
