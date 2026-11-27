@@ -2591,6 +2591,50 @@ function AT.SyncBlizzardQuestHUD(presentationOnly)
     syncing=false
 end
 
+local partyPollCursor=0
+local function countsChanged(a,b)
+    if a==b then return false end
+    if not a or not b or #a~=#b then return true end
+    for i,o in ipairs(a) do
+        local n=b[i]
+        if o.current~=n.current or o.total~=n.total or o.desc~=n.desc then return true end
+    end
+    return false
+end
+local function partySnapshotChanged(a,b)
+    if a==b then return false end
+    if not a or not b or a.pending~=b.pending then return true end
+    local am,bm=a.members or {},b.members or {}
+    if #am~=#bm then return true end
+    local previous={}
+    for _,m in ipairs(am) do previous[m.guid or m.name or m.unit or false]=m end
+    for _,m in ipairs(bm) do
+        local p=previous[m.guid or m.name or m.unit or false]
+        if not p or p.name~=m.name or p.status~=m.status or p.countsPartial~=m.countsPartial
+            or countsChanged(p.counts,m.counts) or countsChanged(p.lastCounts,m.lastCounts) then return true end
+    end
+    return false
+end
+local function pollPartyChanges()
+    if not AT.GetQuestPartySnapshot or call(AT.IsQuestPartyProgressActive)~=true then return false end
+    local batch={}
+    for qid,row in pairs(model.rows) do
+        -- Already-complete rows need quick reconciliation when a teammate
+        -- finishes. Poll ordinary in-progress rows in small rotating batches.
+        if row.partyPending and (row.complete or row.partyOnly) then
+            if partySnapshotChanged(row.party,call(AT.GetQuestPartySnapshot,qid)) then return true end
+        else batch[#batch+1]=qid end
+    end
+    if #batch==0 then partyPollCursor=0;return false end
+    table.sort(batch)
+    for _=1,math.min(#batch,5) do
+        partyPollCursor=partyPollCursor%#batch+1
+        local qid=batch[partyPollCursor]
+        if partySnapshotChanged(model.rows[qid].party,call(AT.GetQuestPartySnapshot,qid)) then return true end
+    end
+    return false
+end
+
 function AT.RefreshQuestHUD()
     if not hud then return end
     if not AT.db or not AT.db.enabled or not AT.db.questHUDEnabled then
@@ -2609,6 +2653,7 @@ function AT.RefreshQuestHUD()
         hud.zoneMenuScroll:SetVerticalScroll(0)
         hud.scroll:SetVerticalScroll(0)
     end
+    local perf=AT.PerfBegin and AT.PerfBegin()
     model=build(pos,name)
     if hover and tooltipTicker and call(AT.IsQuestPartyProgressActive)~=true then stopQuestHover() end
     refreshHighlights(true)
@@ -2623,6 +2668,7 @@ function AT.RefreshQuestHUD()
         popupOpen,toolbarOpen,shareOpen=false,false,false;stopQuestHover()
     end
     AT.SyncBlizzardQuestHUD()
+    if perf then AT.PerfEnd("Rank Quest redraw",perf) end
 end
 
 function AT.SearchRankQuestItem(qid,itemLabel)
@@ -3077,8 +3123,8 @@ function AT.InitQuestHUD()
             Share.refresh()
             local _,dungeon,insideDungeon=playerDungeon(call(M and M.GetBestMapForUnit,"player"))
             if playerZone()~=currentZone or (insideDungeon and (dungeon or true))~=currentDungeon
-                or next(partyRetained) or call(AT.IsQuestPartyProgressActive)==true then AT.RefreshQuestHUD()
-            elseif refreshHighlights(false) and not AT.db.questHUDCollapsed then arrange() end
+                or pollPartyChanges() then AT.RefreshQuestHUD()
+            elseif not AT.db.questHUDCollapsed and refreshHighlights(false) then arrange() end
         end)
     end
     if C_Timer and C_Timer.After then

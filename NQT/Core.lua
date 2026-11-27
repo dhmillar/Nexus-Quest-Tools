@@ -42,6 +42,40 @@ function AT.Say(message)
     end
 end
 
+-- Opt-in runtime profiling; nothing is saved or transmitted.
+local perf,perfUntil
+local stamp=debugprofilestop
+function AT.PerfBegin()
+    if perf and stamp and GetTime and GetTime()<perfUntil then return stamp() end
+end
+function AT.PerfEnd(label,started)
+    if not started or not perf then return end
+    local ms=stamp()-started
+    if ms<0 then return end
+    local r=perf[label] or {n=0,total=0,peak=0,slow=0}
+    r.n,r.total,r.peak=r.n+1,r.total+ms,math.max(r.peak,ms)
+    if ms>=8 then r.slow=r.slow+1 end
+    perf[label]=r
+end
+function AT.PerfCommand(command)
+    if not stamp or not GetTime then AT.Say("Performance timing is unavailable on this client.");return end
+    if command=="start" then
+        perf,perfUntil={},GetTime()+60
+        AT.Say("Recording local timings for 60 seconds. Play until you notice a stutter, then use /nqt perf stop.")
+    elseif command=="stop" or command=="" then
+        if not perf then AT.Say("Use /nqt perf start to capture a stutter.");return end
+        if command=="stop" then perfUntil=0 end
+        local rows={}
+        for label,r in pairs(perf) do rows[#rows+1]={label=label,data=r} end
+        table.sort(rows,function(a,b)return a.data.peak>b.data.peak end)
+        if #rows==0 then AT.Say("No timed work recorded yet.");return end
+        for _,row in ipairs(rows) do
+            local r=row.data
+            AT.Say(("%s: peak %.1f ms, mean %.2f ms, %d over 8 ms / %d calls"):format(row.label,r.peak,r.total/r.n,r.slow,r.n))
+        end
+    else AT.Say("Use /nqt perf start or /nqt perf stop.") end
+end
+
 local function safeInit(label, fn)
     if not fn then return end
     local ok, err = pcall(fn)

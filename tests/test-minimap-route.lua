@@ -9,7 +9,7 @@ local function region()
 end
 function CreateFrame(_,_,parent)
     local f={parent=parent,shown=true,CreateTexture=region,CreateLine=region,SetAllPoints=nothing,
-        SetSize=nothing,EnableMouse=nothing,SetFrameLevel=nothing,SetScript=nothing,ClearAllPoints=nothing}
+        SetSize=nothing,EnableMouse=nothing,SetFrameLevel=nothing,SetScript=function(self,k,v)self[k]=v end,ClearAllPoints=nothing}
     function f:SetPoint(a,b,c,dx,dy) self.anchor={a,b,c,dx,dy} end
     function f:CreateFontString() local l=region();self.label=l;return l end
     function f:Show() self.shown=true end
@@ -42,4 +42,16 @@ inside=true;t=t+1;AT.RefreshQuestRoute()
 assert(not meter.shown and not bearing.shown and AT.worldStatus=="arrival","arrival still hides guidance")
 inside=false;active=false;t=t+1;AT.RefreshQuestRoute()
 assert(not meter.shown and not bearing.shown and AT.worldStatus=="no_quest")
+local observer=frames[#frames]
+assert(observer.OnUpdate)
+local refreshes=0
+AT.PerfBegin=function()return 1 end
+AT.PerfEnd=function(label) if label=="Quest route" then refreshes=refreshes+1 end end
+for i=1,20 do observer:OnUpdate(.1) end
+assert(refreshes<8 and refreshes>0,"route refresh stays below 4 Hz")
+AT.db.showQuestRoute=false
+observer:OnUpdate(.4)
+refreshes=0
+for i=1,20 do observer:OnUpdate(.1) end
+assert(refreshes==0,"disabled GPS does no periodic refresh work")
 print("PASS minimap quest panel removed; yard count, direction line, arrival and world-map callbacks preserved")

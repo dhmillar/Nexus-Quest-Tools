@@ -1,6 +1,6 @@
 local _, AT = ...
 local frame, lines, caption, elapsed = nil, nil, nil, 0
-local refreshPeriod, enterAreaYards, leaveAreaYards = 0.18, 35, 52
+local refreshPeriod, enterAreaYards, leaveAreaYards = 0.3, 35, 52
 local previewYards, renderLimit, offPathYards = 90, 30, 24
 local currentPath, cursor, projected, arrival
 local scopeQuest, scopeTurnIn, scopeMap, positionLost, routeStatus, statusQuest
@@ -603,6 +603,7 @@ function AT.GetQuestRouteStatus()
     return routeStatus,statusQuest,details
 end
 local function refresh()
+    local perf=AT.PerfBegin and AT.PerfBegin()
     distanceSource,drawFailure=nil,nil
     local ok,err = pcall(draw)
     if not ok then
@@ -622,6 +623,7 @@ local function refresh()
         local mapOK=pcall(AT.RenderWorldQuestRoute, routeStatus, statusQuest, mapRoute)
         if not mapOK and AT.HideWorldQuestRoute then pcall(AT.HideWorldQuestRoute) end
     end
+    if perf then AT.PerfEnd("Quest route",perf) end
 end
 
 function AT.RefreshQuestRoute()
@@ -644,6 +646,10 @@ function AT.InitQuestRoute()
     pcall(makeBearing)
     local observer = CreateFrame("Frame")
     observer:SetScript("OnUpdate", function(_, dt)
+        if not AT.db or AT.db.enabled==false or AT.db.showQuestRoute==false then
+            if routeStatus~="disabled" then refresh() end
+            return
+        end
         elapsed = elapsed + dt
         if elapsed < refreshPeriod then return end
         elapsed = 0

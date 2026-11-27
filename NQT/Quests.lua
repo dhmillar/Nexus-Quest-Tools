@@ -984,7 +984,9 @@ end
 function AT.RefreshQuests()
     if running then return end
     running = true
+    local perf=AT.PerfBegin and AT.PerfBegin()
     local ok, err = pcall(run)
+    if perf then AT.PerfEnd("Quest focus",perf) end
     running = nil
     if not ok and AT.db and AT.db.debug then
         local handler = geterrorhandler and geterrorhandler()

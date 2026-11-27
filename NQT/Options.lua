@@ -416,6 +416,8 @@ function AT.InitOptions()
     end
     SLASH_NEXUSQUESTTOOLSETTINGS1 = "/nqt"
     SlashCmdList.NEXUSQUESTTOOLSETTINGS = function(arg)
+        local command,rest=(arg or ""):lower():match("^%s*(%S*)%s*(.-)%s*$")
+        if command=="perf" and AT.PerfCommand then AT.PerfCommand(rest);return end
         if type(arg)=="string" and arg:match("^%s*minimap%s*$") then
             AT.Say(AT.CheckDungeonMinimapRender and AT.CheckDungeonMinimapRender() or "Dungeon minimap check is not loaded.")
             return

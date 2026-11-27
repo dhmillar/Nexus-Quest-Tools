@@ -1,4 +1,4 @@
-# Nexus Quest Tools 1.5.168
+# Nexus Quest Tools 1.5.169
 For World of Warcraft: Forever 1.60.1 (interface 16001). Uses the Blizzard quest tracker and a native character-specific action-bar macro. Optional compatibility with Questie.
 
 Quest-starting item popup (Rank Quest settings, on by default): when you acquire an item that starts an eligible quest, click its icon above your character to open the standard offer. The icon clears as soon as you accept. Right-click to dismiss without accepting. The addon does not accept quests for you.

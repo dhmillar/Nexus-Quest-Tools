@@ -2271,9 +2271,17 @@ do
     remoteState("P:5010:01:1/6/7,","Kara-A")
     remoteState("D:5010","Kara-C")
     assert(find("Forest hidden quest").partyOnly)
+    local perfDraws=0
+    AT.PerfBegin=function()return 1 end
+    AT.PerfEnd=function(label)if label=="Rank Quest redraw" then perfDraws=perfDraws+1 end end
+    now=now+1.4
+    areaTick()
+    assert(perfDraws==0,"unchanged party must not rebuild the full quest HUD")
     current[1]=7
     now=now+1.4
     areaTick()
+    assert(perfDraws==1,"confirmed party progress change triggers one full redraw")
+    AT.PerfBegin,AT.PerfEnd=nil,nil
     assert(not find("Forest hidden quest"),"native exact completion clears the stale shared row on the regular ticker, no hover")
     liveReport=false
     remoteState("P:5010:01:1/6/7,","Kara-A")

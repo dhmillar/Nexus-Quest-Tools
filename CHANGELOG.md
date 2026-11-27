@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.5.169 - 2026-11-27
+
+- Rank Quest no longer rebuilds the full list on unchanged party snapshots. Background checks are spread across ticks, and party events still refresh live progress.
+- The walking route updates less often and does no periodic work when turned off.
+- Optional stutter diagnostics: run `/nqt perf start`, reproduce the hitch, then run `/nqt perf stop`. Results print locally in chat.
+- Offline regression tests passed. In-game verification of the reported stutter is pending.
+
 ## 1.5.168 - 2026-11-27
 
 - **Performance:** Removed idle bag scans from the quest-starting item popup, stopped rebuilding the full drop-name index during quest updates, and batched routine quest and map refreshes. Offline regressions passed; in-game stutter on affected setups is not yet confirmed resolved.
