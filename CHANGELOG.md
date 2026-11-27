@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.223
+
+- Boss targeting no longer gates the first exact-name search on a selected target. Later candidates use an explicit target check; dead bosses are still cleared and living bosses can be marked and pinged.
+
 ## 1.5.222
 
 - Quest objective portraits keep their fallback when the client hides the selected unit identity or combat flags.

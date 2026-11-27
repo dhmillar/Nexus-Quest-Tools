@@ -87,10 +87,10 @@ units.nameplate2.dist=81
 units.nameplate3=mob(648,103,"Trash")
 units.nameplate3.dist=1
 units.target=units.nameplate1
-assert(press()=="/stopmacro [combat]\n/cleartarget\n/stopmacro [harm]\n/targetexact [noharm] Boss B\n/tm [harm,nodead] ~8\n/atmob k8:1\n/cleartarget [dead]")
+assert(press()=="/stopmacro [combat]\n/cleartarget\n/stopmacro [harm]\n/targetexact Boss B\n/tm [harm,nodead] ~8\n/atmob k8:1\n/cleartarget [dead]")
 units.nameplate2.mark=8
 AT.db.bossMarkPing=true
-assert(press()=="/stopmacro [combat]\n/cleartarget\n/stopmacro [harm]\n/targetexact [noharm] Boss A\n/tm [harm,nodead] ~7\n/atmob k7:2\n/ping [@target,harm,nodead] Attack\n/cleartarget [dead]")
+assert(press()=="/stopmacro [combat]\n/cleartarget\n/stopmacro [harm]\n/targetexact Boss A\n/tm [harm,nodead] ~7\n/atmob k7:2\n/ping [@target,harm,nodead] Attack\n/cleartarget [dead]")
 units.nameplate1.mark=7
 units.nameplate4=mob(645,104,"Boss C")
 assert(press():find("~4",1,true),"third boss gets Triangle")
@@ -132,7 +132,7 @@ function EditMacro(i,n,icon,b)
 end
 assert(loadfile("NQT/Target.lua"))("NQT",AT)
 assert(AT.RefreshBossActionBar())
-assert(body:find("/targetexact [noharm] Hamhock",1,true) and body:find("/ping [@target,harm,nodead] Attack",1,true))
+assert(body:find("/targetexact Hamhock",1,true) and body:find("/ping [@target,harm,nodead] Attack",1,true))
 assert(not body:find("/atmob [btn:2]e;c",1,true),"does not capture the secondary target")
 units.nameplate1.mark=8
 units.nameplate3=mob(1716,789,"Bazil Thredd")
@@ -182,7 +182,7 @@ function SecureCmdOptionParse(s)
 end
 AT.InitTarget()
 local function native(text,lookup,refuse)
-    assert(not text:match("%[%s*exist") and not text:find("[noexists]",1,true),"no existence predicates in boss scan")
+    assert(not text:find("[noharm]",1,true), "noharm is not a reliable empty-target guard")
     for line in text:gmatch("[^\n]+") do
         local target=units.target
         local live=target and not target.dead and not target.friendly
@@ -193,9 +193,11 @@ local function native(text,lookup,refuse)
         elseif line=="/stopmacro [harm]" then
             if target and not target.friendly then return end
         elseif line:find("^/targetexact") then
-            local name=line:match("^/targetexact %[noharm%]%[dead%] (.*)$")
-                or line:match("^/targetexact %[noharm%] (.*)$") or line:match("^/targetexact ([^%[].*)$")
-            if not target or target.friendly or (target.dead and line:find("[dead]",1,true)) then
+            local gated=line:match("^/targetexact %[@target,noexists%]%[dead%] (.*)$") or line:match("^/targetexact %[noexists%]%[dead%] (.*)$")
+            local plain=line:match("^/targetexact ([^%[].*)$")
+            local name=gated or plain
+            assert(name,"unexpected boss target command: "..line)
+            if plain or (gated and (not target or target.dead)) then
                 local hit=lookup[name]
                 if hit then units.target=hit;ui[1].scripts.OnEvent(ui[1],"PLAYER_TARGET_CHANGED") end
             end
@@ -269,7 +271,7 @@ for _,id in ipairs(ids) do
             units.nameplate1=mob(record[1],909,record[2])
             units.nameplate1.npc=record[1]
             assert(AT.RefreshBossActionBar())
-            assert(body:find("/targetexact [noharm] "..record[2],1,true),
+            assert(body:find("/targetexact "..record[2],1,true),
                 "missing boss '"..record[2].."' in instance "..id..": "..body)
             assert(#body<=255)
         end
@@ -296,7 +298,7 @@ for _,useSmart in ipairs({false,true}) do
     for i=1,8 do
         assert(AT.RefreshBossActionBar())
         local text=useSmart and press() or body
-        assert(text:find("/targetexact [noharm] "..bosses[i].name,1,true))
+        assert(text:find("/targetexact "..bosses[i].name,1,true))
         assert(text:find("~"..order[i],1,true) and #text<=255)
         native(text,lookup,false)
         for n=1,i do assert(actual[bosses[n]]==order[n],"keep each previous boss's icon") end
@@ -306,7 +308,7 @@ for _,useSmart in ipairs({false,true}) do
     bosses[1].dead=true
     assert(AT.RefreshBossActionBar())
     local text=useSmart and press() or body
-    assert(text:find("/targetexact [noharm] "..bosses[9].name,1,true))
+    assert(text:find("/targetexact "..bosses[9].name,1,true))
     assert(text:find("~8",1,true),"confirmed death resets priority to Skull")
     native(text,lookup,false)
     assert(actual[bosses[9]]==8 and actual[bosses[1]]==nil and actual[bosses[2]]==7 and actual[bosses[3]]==4)
