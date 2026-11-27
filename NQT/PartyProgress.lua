@@ -476,7 +476,7 @@ end
 -- Visible party announcements are independent of the addon-to-addon sync.
 do
     local Q=C_QuestLog
-    local prior,departed,queue={},{},{}
+    local prior,departed,queue,accepting={},{},{},{}
     local active,scanPending,sendPending
     local function id(v) return number(v) and v>0 and v%1==0 end
     local function partyChat()
@@ -498,7 +498,7 @@ do
         return text:sub(1,cut).."..."
     end
     local function reset()
-        prior,departed,queue={},{},{}
+        prior,departed,queue,accepting={},{},{},{}
         active,scanPending,sendPending=nil,nil,nil
     end
     local function sendNext()
@@ -523,12 +523,13 @@ do
         if not id(mark) or mark>8 then mark=8 end
         queue[#queue+1]=("{rt%d} [%s] %s"):format(mark,clip(quest,85),detail)
     end
-    local function observe(qid,allow,title,accepted)
+    local function observe(qid,allow,title)
         if not id(qid) or departed[qid] or eq(call(Q.IsOnQuest,qid),false) then return end
+        allow=allow and not accepting[qid]
         local state=prior[qid]
         local ready=call(AT.IsQuestReadyForTurnIn or Q.ReadyForTurnIn,qid)
         local complete=eq(ready,true) or eq(ready,1)
-        local newComplete=complete and (state and not state.completed or not state and accepted)
+        local newComplete=complete and state and not state.completed
         if not state then state={rows={}};prior[qid]=state end
         state.title=title or state.title
         if complete then state.completed=true end
@@ -588,7 +589,10 @@ do
     end
     local function onEvent(_,event,a,b)
         if type(partyChat())~="function" then reset();return end
-        if not active or event=="PLAYER_ENTERING_WORLD" then AT.RefreshRankQuestAnnouncements();return end
+        if not active or event=="PLAYER_ENTERING_WORLD" then
+            AT.RefreshRankQuestAnnouncements()
+            if event~="QUEST_ACCEPTED" then return end
+        end
         if event=="GROUP_ROSTER_UPDATE" then
             queue={} -- do not replay pending chat to a changed roster
             scanPending=nil
@@ -598,8 +602,8 @@ do
         if event=="QUEST_TURNED_IN" then
             if id(a) and departed[a]~="turned-in" then
                 local state=prior[a] or {}
-                if not state.completed then announceCompletion(a,state,"Quest complete!") end
-                departed[a],prior[a]="turned-in",nil
+                if not state.completed and not accepting[a] then announceCompletion(a,state,"Quest complete!") end
+                departed[a],prior[a],accepting[a]="turned-in",nil,nil
                 if not sendPending then sendNext() end
             end
             return
@@ -611,8 +615,18 @@ do
             local qid=id(b) and b or a
             if id(qid) then
                 departed[qid],prior[qid]=nil,nil
-                observe(qid,true,nil,true)
-                if not sendPending then sendNext() end
+                -- Ready and objective data can arrive on the log update just
+                -- after acceptance. Establish this quest's baseline silently.
+                local ticket={}
+                accepting[qid]=ticket
+                observe(qid,false)
+                if C_Timer and C_Timer.After then
+                    C_Timer.After(.2,function()
+                        if accepting[qid]~=ticket then return end
+                        observe(qid,false)
+                        accepting[qid]=nil
+                    end)
+                else accepting[qid]=nil end
             end
         elseif event=="QUEST_WATCH_UPDATE" and id(a) and eq(call(Q.IsOnQuest,a),true) then
             observe(a,true)

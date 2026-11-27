@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.208
+
+- Rank Quest no longer announces quests that are already ready to turn in on acceptance. Quests completed after acceptance still announce in party chat.
+
 ## 1.5.207
 
 - Added clickable portraits and objective lines for identifiable quest NPCs in Rank Quest, including Saving Marshal Ryan. Click to target, mark with a diamond, and ping out of combat without changing Auto Macro.
