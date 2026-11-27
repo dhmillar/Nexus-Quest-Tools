@@ -541,7 +541,7 @@ local function warnIfTagged(expected)
         local now = GetTime and GetTime() or 0
         if now - lastTagHint >= 3 then
             lastTagHint = now
-            say("Tagged by another group. Use Tab or click another mob with the same name.")
+            say("Tagged by another group. Use the slot keybind or the Smart Target key out of combat to skip tagged mobs.")
         end
     end)
 end

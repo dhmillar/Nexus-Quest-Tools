@@ -160,6 +160,12 @@ local function closest()
         end
     end
     for i = 1, 40 do scan("nameplate"..i) end
+    -- A second mob can be readable through a companion or party target
+    -- even when the client exposes no nameplate for it.
+    scan("pettarget")
+    if read(IsInRaid)~=true then
+        for i=1,4 do scan("party"..i.."target") end
+    end
     local nearestUpper=math.huge
     for _,item in ipairs(candidates) do nearestUpper=math.min(nearestUpper,item.hi) end
     local best
@@ -184,13 +190,7 @@ local function action(item)
         body = body .. "\n/tm "..conditions.." !"..AT.GetPrimaryMarker()
         if AT.db.pingWithMarker then body = body .. "\n/ping "..conditions.." Attack" end
     end
-    if unit~="target" and read(UnitExists,"target")~=true then
-        -- If the client can't select this readable token directly, still
-        -- let its native exact-name lookup run. The fallback never marks.
-        local search=AT.GetSafeTargetSearchLine and AT.GetSafeTargetSearchLine()
-        local tail=search and "\n"..search.."\n/cleartarget [dead]"
-        if tail and #body+#tail<=246 then body=body..tail end
-    end
+    -- Never fall back to a blind by-name search after choosing an eligible unit.
     return body, item
 end
 
@@ -205,12 +205,13 @@ local function prepare()
         end
     end
     local name, corpse=AT.GetSelectedMobForSmartTarget()
-    if name and not AT.MatchesSavedTarget(name) then
+    local selectedTapped=not corpse and read(UnitExists,"target")==true and read(UnitIsTapDenied,"target")==true
+    if name and not selectedTapped and not AT.MatchesSavedTarget(name) then
         -- Keep the original select-then-press learning, including corpses.
         -- Learning a name doesn't authorize marking the selected mob.
         if AT.SaveSelectedTarget() then
             if corpse then return end
-            return action(candidate("target") or closest())
+            return action(closest())
         end
     end
     local found,blockedMatch=closest()
@@ -219,10 +220,11 @@ local function prepare()
     -- its result cannot be tap-checked before native mark/ping in this press.
     -- Do not displace an existing hostile or mark an unchecked search result.
     local search=AT.GetSafeTargetSearchLine and AT.GetSafeTargetSearchLine()
-    if search and not blockedMatch and read(UnitExists,"target")~=true then
+    if search and not selectedTapped and not blockedMatch and read(UnitExists,"target")~=true then
         local body=OOC.."\n/stopmacro [exists]\n"..search.."\n/cleartarget [dead]"
         if #body<=255 then return body,nil,"search" end
     end
+    if blockedMatch or selectedTapped then return nil,nil,"tagged mob skipped; no readable eligible match" end
 end
 
 local function initialize()

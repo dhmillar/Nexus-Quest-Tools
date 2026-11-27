@@ -148,10 +148,22 @@ local readableTap=UnitIsTapDenied
 function UnitIsTapDenied() error("restricted") end
 assert(press()=="/stopmacro")
 UnitIsTapDenied=readableTap
-units.target={name="Panther",tap=true}
-units.nameplate2={name="Panther",tap=false}
+units={target={name="Panther",tap=true},nameplate2={name="Panther",tap=false},
+    party1target={name="Raptor",tap=false,distance=17}, pettarget={name="Raptor",tap=true,distance=1}}
+pick("party1target")
+assert(AT.char.targetName=="Raptor","a tagged unrelated mob cannot overwrite saved recall")
+units.party1target=nil;units.pettarget={name="Raptor",tap=false,distance=9}
+pick("pettarget")
+units.pettarget=nil
+assert(press()=="/stopmacro","no eligible saved replacement leaves the current selection unchanged")
+assert(AT.GetSmartTargetDiagnostic():find("tagged mob skipped",1,true))
+units={nameplate1=denied,nameplate2=allowed}
+local unselected=press()
+assert(unselected:find("/target [@nameplate2,exists,harm,nodead] nameplate2",1,true))
+assert(not unselected:find("/targetexact",1,true),"failed explicit targeting must not fall back to tagged native lookup")
+units={target={name="Panther",tap=false,distance=100},nameplate2={name="Panther",tap=false,distance=25}}
 pick("nameplate2")
-assert(AT.char.targetName=="Panther","normal press learns a new name before seeking an eligible match")
+assert(AT.char.targetName=="Panther","learning an eligible name still chooses its closest verified match on the same press")
 units.target={name="Troll",tap=false,dead=true}
 assert(press()=="/stopmacro" and AT.char.targetName=="Troll","corpse can teach name but cannot act")
 AT.char.targetName="Rap"; AT.char.targetPartial=true

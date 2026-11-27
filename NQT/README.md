@@ -57,7 +57,7 @@ When the optional Polestar 0.4.2.2+ (0.4.x) navigation engine is already loaded 
 
 ## Optional Smart Target key
 Smart Target has no floating screen button. Use the action-bar macro and its slot keybind, or the optional dedicated keybind below.
-In WoW Options > Keybindings > Nexus Quest Tools, bind Smart Target (out of combat). A plain press still learns a different selected mob, even from a hostile corpse. Repeated presses pick a living, eligible match from the current target, mouseover and visible enemy nameplates, using distance or available range checks. If no match is confirmed eligible, it does nothing. The regular action-bar macro can still recall by name, but WoW name recall cannot filter by tap status, so it no longer automatically marks or pings. Boss Target Marking and the manual marker macros are separate.
+In WoW Options > Keybindings > Nexus Quest Tools, bind Smart Target (out of combat). A plain press can learn a different selected hostile mob, including a corpse, but does not replace the saved name from a living mob tagged by another group. Smart Target skips known tagged mobs and picks a readable living match on the same press, using the current target, mouseover, focus, visible enemy nameplates, pet target, or party targets outside raids. Enable enemy nameplates for wider coverage. If WoW does not expose a usable alternate, Smart Target does not blindly reacquire a known tagged match. The regular action-bar macro can still recall by name, but WoW name recall cannot filter by tap status, so it no longer automatically marks or pings. Boss Target Marking and the manual marker macros are separate.
 
 
 ### Full map route

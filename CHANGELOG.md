@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.171 - 2026-11-27
+
+- **Smart Target:** Skip mobs tagged by another group and select a readable, eligible match on the same out-of-combat keypress. A tagged selection no longer overwrites the saved name.
+- Smart Target now looks at pet and party targets in addition to visible enemy nameplates, focus and mouseover. It no longer falls back to an unfiltered name search after choosing an eligible unit.
+- The raw mouse-click macro and in-combat fallback still use WoW’s native name recall, which has no tap filter. The dungeon boss macro is unchanged.
+
 ## 1.5.170 - 2026-11-27
 
 - **Questie independence:** Removed all live Questie and QuestieDB calls and load declarations, including spawn scans, tracker hooks, map-pin suppression, menu actions, and database lookups.
