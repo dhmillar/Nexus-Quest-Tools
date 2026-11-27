@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.204 - 2026-11-27
+
+- Added Classes settings for Hunter Deadzone, Pet Bar, and Smart Buff. Smart Buff offers a movable reminder and an action-bar macro that casts the next recommended learned buff per press outside combat.
+- Paladin blessing assignments support class defaults and character-name overrides, including a skip option. Other classes use their own spell rules without per-recipient class settings. Rogues get manual weapon-poison reminders.
+
 ## 1.5.203 - 2026-11-27
 
 - Clickable quest items in Rank Quest show the time remaining on cooldown directly on their icons. The countdown clears when the item is ready, and the click behavior is unchanged.

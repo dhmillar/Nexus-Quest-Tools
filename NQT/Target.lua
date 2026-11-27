@@ -275,6 +275,13 @@ local function pickupNative(header, labels, asset, command)
     return true
 end
 
+local buffHeader, buffLabels = "# NQT:smart-buff:v1", {"NQT Smart Buff","NQT Buff"}
+function AT.SyncSmartBuffAction(command,pickup)
+    if InCombatLockdown and InCombatLockdown() then return false,"Leave combat before setting up Smart Buff." end
+    if pickup then return pickupNative(buffHeader,buffLabels,134400,command) end
+    return syncNative(buffHeader,buffLabels,134400,command,false)
+end
+
 local primaryHeader, primaryLabels = "# AutoTrack:skull:v1", {"AT Skull", "AutoTrack Skull"}
 local secondaryHeader, secondaryLabels = "# AutoTrack:cross:v1", {"AT X", "AutoTrack X"}
 local function primaryCommand()

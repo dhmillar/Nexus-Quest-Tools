@@ -1,6 +1,6 @@
 local _, AT = ...
 local panel, minimapButton, checks, status, targetStatus, primaryChoice, markerStatus
-local deadzonePreviewButton, deadzonePreviewHint
+local deadzonePreviewButton, deadzonePreviewHint, buffPreviewButton
 local titleColor = {0.26, 0.88, 0.80}
 
 local function refreshPanel()
@@ -15,6 +15,9 @@ local function refreshPanel()
         local preview = AT.IsHunterDeadzonePreview and AT.IsHunterDeadzonePreview()
         deadzonePreviewButton:SetText(preview and "Done Moving" or "Preview / Move")
         deadzonePreviewHint:SetShown(preview == true)
+    end
+    if buffPreviewButton then
+        buffPreviewButton:SetText(AT.IsSmartBuffPreview and AT.IsSmartBuffPreview() and "Done Moving" or "Preview / Move")
     end
     local id = AT.GetFocusedQuestID and AT.GetFocusedQuestID()
     local title = id and C_QuestLog and C_QuestLog.GetTitleForQuestID and C_QuestLog.GetTitleForQuestID(id)
@@ -44,6 +47,7 @@ local function updateState()
     if AT.RefreshDungeonPosition then AT.RefreshDungeonPosition() end
     if AT.RefreshHunterDeadzone then AT.RefreshHunterDeadzone() end
     if AT.RefreshPetBar then AT.RefreshPetBar() end
+    if AT.RefreshSmartBuff then AT.RefreshSmartBuff() end
     refreshPanel()
     if minimapButton then
         minimapButton.icon:SetDesaturated(not AT.db.enabled)
@@ -164,8 +168,8 @@ local function buildPanel()
     local desc = makeText(panel, "GameFontHighlightSmall", -44, "QUEST FOCUS  /  NAMED TARGET")
     desc:SetTextColor(0.70, 0.79, 0.82)
     checks = {}
-    local names = {"General", "Auto Macro", "Rank Quest", "Dungeons"}
-    local widths = {76, 91, 91, 108}
+    local names = {"General", "Auto Macro", "Rank Quest", "Dungeons", "Classes"}
+    local widths = {67, 83, 80, 82, 66}
     local pages, tabs = {}, {}
     local function showPage(which)
         for i, page in ipairs(pages) do
@@ -184,7 +188,7 @@ local function buildPanel()
         tabs[i] = setupButton(panel, name, widths[i], x, -66, function() showPage(index) end)
         x = x + widths[i] + 4
     end
-    local general, macro, rank, dungeon = unpack(pages)
+    local general, macro, rank, dungeon, classes = unpack(pages)
     local function option(page, key, label, y, hint)
         local check = CreateFrame("CheckButton", nil, page, "UICheckButtonTemplate")
         check:SetPoint("TOPLEFT", 14, y)
@@ -223,22 +227,42 @@ local function buildPanel()
     option(general, "autoFocus", "Automatically focus the closest quest", -30)
     option(general, "hideCompleted", "Untrack ready-to-turn-in quests", -58)
     option(general, "showQuestRoute", "Show minimap walking route", -86)
-    option(general, "hunterDeadzone", "Hunter Deadzone", -114,
+    option(classes, "hunterDeadzone", "Hunter Deadzone", -152,
         "Shows a crossed-out bow when your current enemy is in melee range during Hunter combat and Auto Shot is not in range.")
-    deadzonePreviewButton = setupButton(general, "Preview / Move", 128, 232, -115, function()
+    deadzonePreviewButton = setupButton(classes, "Preview / Move", 128, 232, -153, function()
         if AT.SetHunterDeadzonePreview and AT.IsHunterDeadzonePreview then
             AT.SetHunterDeadzonePreview(not AT.IsHunterDeadzonePreview())
             refreshPanel()
         end
     end)
-    deadzonePreviewHint = makeText(general, "GameFontDisableSmall", -151, "Drag the bow to move it, then click Done Moving.")
+    deadzonePreviewHint = makeText(classes, "GameFontDisableSmall", -188, "Drag the bow to move it, then click Done Moving.")
     deadzonePreviewHint:Hide()
-    general:HookScript("OnHide", function()
+    classes:HookScript("OnHide", function()
         if AT.SetHunterDeadzonePreview then AT.SetHunterDeadzonePreview(false) end
+        if AT.SetSmartBuffPreview then AT.SetSmartBuffPreview(false) end
     end)
-    option(general, "petBarEnabled", "Pet Bar", -174,
+    option(classes, "petBarEnabled", "Pet Bar", -214,
         "Shows only your active pet’s overhead health where supported. Uses the pet category without changing friendly player or NPC settings. Bright green at 50% and above, red below 50%.")
-    status = makeText(general, "GameFontHighlightSmall", -209, "")
+    option(classes, "smartBuffEnabled", "Smart Buff reminders", -2,
+        "Shows missing buffs for your class. Your action-bar button casts one recommended spell per press outside combat.")
+    buffPreviewButton = setupButton(classes,"Preview / Move",128,232,-3,function()
+        if AT.SetSmartBuffPreview then AT.SetSmartBuffPreview(not AT.IsSmartBuffPreview());refreshPanel() end
+    end)
+    setupButton(classes,"Place Smart Buff macro",172,18,-41,function()
+        if not AT.PickupSmartBuffMacro then return end
+        local ok,why=AT.PickupSmartBuffMacro()
+        if ok then panel:Hide();AT.Say("Click an empty action-bar slot for Smart Buff.")
+        elseif why then AT.Say(why) end
+    end)
+    if AT.IsSmartBuffPaladin and AT.IsSmartBuffPaladin() then
+        setupButton(classes,"Blessing assignments",170,201,-41,function()
+            local ok,why=AT.OpenSmartBuffSetup()
+            if not ok and why then AT.Say(why) end
+        end)
+    end
+    makeText(classes,"GameFontHighlightSmall",-79,"The reminder shows the next missing buff.")
+    makeText(classes,"GameFontDisableSmall",-99,"Press the action-bar key once per cast, out of combat.")
+    status = makeText(general, "GameFontHighlightSmall", -125, "")
     status:SetTextColor(0.43, 0.88, 0.81)
 
     option(macro, "quietTarget", "Mute target macro sounds", -2)
