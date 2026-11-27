@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.213
+
+- Auto Focus ranks ready turn-ins and in-progress quests together by distance. Manual focus resumes automatic ranking after completion. Added the Sister Rowland hand-in for Something's in the Water and /nqtturnins to inspect ready destinations.
+
 ## 1.5.212
 
 - Rank Quest item icons that were visible and ready before combat remain clickable during combat. Their layout stays fixed until combat ends. WoW still decides whether the item can be used in combat; NPC targeting is unchanged.

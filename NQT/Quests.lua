@@ -63,7 +63,15 @@ local function completed(id)
     local ready = call(Q.ReadyForTurnIn, id)
     if ready == true or ready == 1 then return true end
     local state = call(Q.IsComplete, id)
-    return state == true or state == 1
+    if state == true or state == 1 then return true end
+    -- Some Forever quests appear Ready in the quest log before the dedicated
+    -- query updates. Trust only a current log row for this exact quest.
+    local index=call(Q.GetLogIndexForQuestID,id)
+    if not validID(index) then return false end
+    local info=call(Q.GetInfo,index)
+    if field(info,"questID")~=id then return false end
+    local logState=field(info,"isComplete")
+    return logState==true or logState==1
 end
 
 AT.IsQuestReadyForTurnIn = completed
@@ -352,9 +360,14 @@ local function nativeDistance(id, ctx, poi)
         if xyValid(x, y) then
             local px, py = mapPlayer(ctx)
             if px then
-                local dx, dy = (px - x) * ctx.w, (py - y) * ctx.h
-                local measured=dx * dx + dy * dy
-                return native and math.min(native,measured) or measured
+                local world, wx, wy=worldPosition(ctx.id,x,y)
+                local playerWorld, playerX, playerY=getPlayerWorld(ctx)
+                if world~=nil and world==playerWorld then
+                    local dx,dy=playerX-wx,playerY-wy
+                    return dx*dx+dy*dy
+                end
+                local dx,dy=(px-x)*ctx.w,(py-y)*ctx.h
+                return dx*dx+dy*dy
             end
         end
         -- A real waypoint on another map is more precise than inferring
@@ -476,10 +489,10 @@ local function turnInDistance(id,ctx,poi,parent,blocked,lookup)
     end
 end
 
-local function measureProximity(id,ctx,poi,parent,blocked,limit)
+local function measureProximity(id,ctx,poi,parent,blocked,limit,forFocus)
     local task=call(GetTaskInfo,id)
     local blob=C_Minimap and call(C_Minimap.IsInsideQuestBlob,id)
-    if task==true or blob==true then return 0,"inside" end
+    if not forFocus and (task==true or blob==true) then return 0,"inside" end
     if not blocked then
         local dist=distance(id,ctx,poi)
         if parent and (not limit or not dist or dist>limit*limit) then
@@ -488,6 +501,7 @@ local function measureProximity(id,ctx,poi,parent,blocked,limit)
         end
         if dist then return dist,limit and dist<=limit*limit and "near" or "outside" end
     end
+    if task==true or blob==true then return 0,"inside" end
     if task==false or blob==false then return nil,"possible_exit" end
 end
 
@@ -687,10 +701,6 @@ local function run()
         if activeQuest(id,ids) then ids[id]=true end
     end
     local best,bestDist,bestTurnIn,currentDistance
-    local priorityTurnIn=false
-    local inProgress={}
-    local preferReady=db.rankQuestFocusCloseCompleted==true
-    local radius2=ENTER_YARDS^2+1e-6
     local mapLists,remaining={},24
     if ctx then mapLists[ctx.id]=ctx.points or false end
     if parent then mapLists[parent.id]=parent.list or false end
@@ -709,39 +719,27 @@ local function run()
         end
     end
     local estimatedTurnIns,measuredTurnIn={},false
-    local function considerTurnIn(id,d,point)
-        if d<=radius2 then
-            if not priorityTurnIn then best,bestDist,bestTurnIn=nil,nil,nil end
-            priorityTurnIn=true
-        end
-        if not priorityTurnIn or d<=radius2 then consider(id,d,point) end
-    end
     for id in pairs(ids) do
         if not AT.IsQuestExcluded(id) then
             local d,turnIn
             if completed(id) then
-                if preferReady and activeQuest(id,ids) then
+                if activeQuest(id,ids) then
                     local estimated
                     d,turnIn,estimated=turnInDistance(id,ctx,poiByID[id],parent,blocked,lookup)
                     if finite(d) and d>=0 then
                         if estimated then estimatedTurnIns[#estimatedTurnIns+1]={id,d,turnIn}
-                        else measuredTurnIn=true;considerTurnIn(id,d,turnIn) end
+                        else measuredTurnIn=true;consider(id,d,turnIn) end
                     end
                 end
             else
-                inProgress[#inProgress+1]=id
+                consider(id,(measureProximity(id,ctx,poiByID[id],parent,blocked,nil,true)))
             end
         end
     end
     -- A bare client distance can still refer to an old objective.
     -- Never let one outrank a measured hand-in NPC.
     if not measuredTurnIn then
-        for _,candidate in ipairs(estimatedTurnIns) do considerTurnIn(unpack(candidate)) end
-    end
-    if not priorityTurnIn then
-        for _,id in ipairs(inProgress) do
-            consider(id,(measureProximity(id,ctx,poiByID[id],parent,blocked)))
-        end
+        for _,candidate in ipairs(estimatedTurnIns) do consider(unpack(candidate)) end
     end
     if best then
         if best==focus or acquire(best,bestTurnIn) then
@@ -769,7 +767,7 @@ function AT.GetQuestNavigationID()
         if validID(id) and not AT.IsQuestExcluded(id) and not completed(id)
             and call(Q.IsOnQuest,id) ~= false then return id,"order" end
     end
-    if AT.db.autoFocus and AT.db.rankQuestFocusCloseCompleted==true and focusTurnIn and completed(focus) and not AT.IsQuestExcluded(focus)
+    if AT.db.autoFocus and focusTurnIn and completed(focus) and not AT.IsQuestExcluded(focus)
         and call(Q.IsOnQuest,focus)~=false then return focus,"nearby-turn-in" end
     -- Explicitly selecting a quest in the stock UI also drives the HUD;
     -- it is not necessary to have Auto Track's nearest-focus mode enabled.
@@ -1100,9 +1098,49 @@ function AT.ForgetRemovedQuest(id)
     schedule()
 end
 
+-- Inspect the same candidates as auto-focus without changing the active watch.
+function AT.ReportRankQuestTurnIns()
+    if not Q or not AT.Say then return end
+    local ctx,pois,parent,blocked=proximityContext()
+    local ids=snapshot()
+    for id in pairs(pois) do if activeQuest(id,ids) then ids[id]=true end end
+    local lists,budget={},24
+    if ctx then lists[ctx.id]=ctx.points or false end
+    if parent then lists[parent.id]=parent.list or false end
+    local function lookup(map)
+        if lists[map]==nil and budget>0 then
+            budget=budget-1;lists[map]=call(Q.GetQuestsOnMap,map) or false
+        end
+        return lists[map]
+    end
+    local rows={}
+    for id in pairs(ids) do
+        if activeQuest(id,ids) and completed(id) then
+            local d,point,estimated=turnInDistance(id,ctx,pois[id],parent,blocked,lookup)
+            rows[#rows+1]={id=id,d=finite(d) and d or math.huge,estimated=estimated,point=point}
+        end
+    end
+    table.sort(rows,function(a,b) if a.d~=b.d then return a.d<b.d end return a.id<b.id end)
+    local chosen,source=AT.GetQuestNavigationID()
+    AT.Say(("Ready quests: %d | map %s | focus %s (%s)"):format(#rows,ctx and ctx.id or "unknown",chosen or "none",source or "none"))
+    for i=1,math.min(10,#rows) do
+        local r=rows[i]
+        local title=call(Q.GetTitleForQuestID,r.id)
+        if not isType(title,"string") then title="Quest" end
+        local detail=r.d==math.huge and "no comparable distance"
+            or ((r.estimated and "~" or "")..math.floor(math.sqrt(r.d)+.5).." yd")
+        if AT.IsQuestExcluded(r.id) then detail=detail.."; excluded" end
+        AT.Say(("%s (#%d): %s"):format(title,r.id,detail))
+    end
+end
+
 function AT.InitQuests()
     if initialized then return end
     initialized = true
+    if type(SlashCmdList)=="table" then
+        SLASH_NQTTURNINS1="/nqtturnins"
+        SlashCmdList.NQTTURNINS=AT.ReportRankQuestTurnIns
+    end
     if type(AT.char) == "table" and validID(AT.char.questFocus) then
         focus = AT.char.questFocus
         ownedWatch = AT.char.questWatchOwned == focus and focus or nil

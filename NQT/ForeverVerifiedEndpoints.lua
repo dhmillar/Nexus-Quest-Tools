@@ -16,6 +16,10 @@ AT.ForeverVerifiedEndpointReferences={
  [95315]={{2548,0.6658,0.81,1,257558,1,"Demar Brant"}},
  [95912]={{2548,0.6612,0.7958,1,260080,1,"Ember Bladewhisper"}},
  [96009]={{2548,0.6331,0.8068,1,260070,1,"Bertrand Ironbrow"}},
+ -- Exact Sister Rowland hand-in for quest 96084, separate from its collection area:
+ -- https://www.wowhead.com/forever/quest=96084/somethings-in-the-water
+ -- https://wow-forever.gg/db/npcs/262031-sister-rowland/
+ [96084]={{2548,.6178,.8318,1,262031,1,"Sister Rowland"}},
  [96081]={{2548,0.6551,0.79,1,263613,1,"Brother Lowley"}},
  [96082]={{2548,0.6551,0.79,1,263613,1,"Brother Lowley"}},
  [84400]={{1458,.7338,.3303,1,7825,2,"Oran Snakewrithe"}}, -- verified Horde hand-in, no inferred Alliance recipient

@@ -17,7 +17,6 @@ local defaults = {
     questHUDEnabled = false,
     smartBuffEnabled = false,
     smartBuffIconOnly = false,
-    rankQuestFocusCloseCompleted = false,
     dungeonPositionEnabled = true,
     dungeonPositionAutoOpen = true,
     dungeonMapMinimap = true,

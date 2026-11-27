@@ -32,7 +32,7 @@ IsInInstance=function() return instance,instance and "party" or "none" end
 assert(loadfile("NQT/Quests.lua"))("NQT",AT)
 local function expect(id)
     AT.RefreshQuests()
-    assert(AT.GetFocusedQuestID()==id,"focus expected "..tostring(id)..", got "..tostring(AT.GetFocusedQuestID()))
+    assert(AT.GetFocusedQuestID()==id,debug.traceback("focus expected "..tostring(id)..", got "..tostring(AT.GetFocusedQuestID()),2))
     assert(selected==(id or 0),"native super tracking follows focus")
 end
 cont[11],cont[12],cont[13],cont[14]=true,true,true,false
@@ -75,15 +75,13 @@ print("PASS closest eligible quest follows movement inside and beyond highlight 
 AT.SetQuestExcluded(14,false);cont[14]=true;measured[14]=250
 ready[11]=true;inside[11]=true
 pois[1]={{questID=11,x=.6,y=.5,isQuestStart=false,inProgress=false}}
-expect(14) -- no automatic completed focus unless explicitly enabled
-AT.db.rankQuestFocusCloseCompleted=true
 expect(11)
 assert(AT.IsQuestTurnInNavigation(11) and select(2,AT.GetQuestNavigationID())=="nearby-turn-in")
 local current,m,x,y=AT.GetFocusedQuestRoutePoint()
 assert(current==11 and m==1 and x==.6 and y==.5)
 assert(watch[11] and not AT.ShouldHideCompletedQuest(11),"the current nearby turn-in watch is temporary")
 assert(AT.SampleQuestAreas({[11]=true},{})[11]=="near","inclusive 100-yard hand-in boundary")
-measured[14]=50;expect(11);assert(watch[11],"nearby turn-ins interrupt even closer progress")
+measured[14]=50;expect(14);assert(not watch[11],"closer progress wins even inside 100 yards")
 measured[14]=250
 pois[1][1].x=.601;expect(11);assert(watch[11])
 assert(AT.SampleQuestAreas({[11]=true},{[11]="near"})[11]=="outside","outside the 100-yard turn-in range")
@@ -94,8 +92,8 @@ measured[14]=250;expect(11)
 pois[1][1].x=.9;measured[14]=1750;expect(11)
 assert(AT.IsQuestTurnInNavigation(11) and select(3,AT.GetFocusedQuestRoutePoint())==.9)
 measured[14]=399;expect(14)
-AT.db.rankQuestFocusCloseCompleted=false;measured[14]=1750;expect(14)
-AT.db.rankQuestFocusCloseCompleted=true;expect(11)
+AT.db.autoFocus=false;expect(nil)
+AT.db.autoFocus=true;measured[14]=1750;expect(11)
 measured[14]=250
 pois[1][1].x=.51;pois[1][1].inProgress=true;expect(14)
 assert(AT.SampleQuestAreas({[11]=true},{[11]="near"})[11]==nil,"stale objective pins and blobs cannot locate turn-in")
@@ -113,7 +111,7 @@ expect(11)
 assert(select(3,AT.GetFocusedQuestRoutePoint())==.55)
 AT.ObservedQuestTurnIns={[11]={{1,.55,.5,1,123,0,"Finisher"},{1,.52,.5,1,124,0,"Alternate"}}}
 expect(14)
-print("PASS 100-yard turn-in priority, default off, GPS, exclusions, manual/queue priority, and completed watch safety")
+print("PASS unified distance ranking, GPS, exclusions, manual/queue priority, and completed watch safety")
 -- A collapsed log and a native distance without a map pin can still switch.
 AT.ObservedQuestTurnIns=nil
 local baseLog=C_QuestLog.GetNumQuestLogEntries
@@ -130,17 +128,17 @@ expect(11)
 assert(watch[11] and not AT.ShouldHideCompletedQuest(11))
 assert(AT.GetFocusedQuestRoutePoint()==11 and select(2,AT.GetFocusedQuestRoutePoint())==nil,
     "native distance alone never becomes GPS coordinates")
-measured[14]=20;expect(11)
-measured[14]=nil;expect(11)
-measured[11]=101;expect(14)
+measured[14]=20;expect(14)
+inside[14]=nil;measured[14]=nil;expect(11)
+measured[11]=101;measured[14]=90;expect(14)
 inside[14]=nil;measured[14]=300;expect(11)
 measured[14]=50;expect(14)
-inside[14]=true;measured[14]=nil
+inside[14]=nil;measured[14]=200
 measured[11]=nil
 pois[1]={{questID=11,x=.54,y=.5,inProgress=false}}
 expect(11)
 assert(select(3,AT.GetFocusedQuestRoutePoint())==.54,"the native ready pin need not repeat isQuestStart=false")
-map=2;waypoints[14]={1,.52,.5};expect(11)
+map=2;waypoints[14]={1,.52,.5};expect(14)
 waypoints[14]=nil;map=1;expect(11)
 -- A hand-in in the neighboring zone is not advertised on the player's map.
 C_QuestLog.GetNextWaypoint=function(q) if q==11 then return 3,.57,.5 end end
@@ -161,10 +159,8 @@ C_QuestLog.GetQuestsOnMap=function(m) if m==3 then count=count+1 end;return oldP
 AT.char.zoneQuestOrigins={[13]=3}
 expect(13);assert(count==1,"shared turn-in map fetched once per focus scan")
 table.remove(ids,2);expect(11)
-AT.db.rankQuestFocusCloseCompleted=false;expect(14)
-assert(AT.ToggleQuestHUDManualFocus(11));expect(11)
-assert(AT.ToggleQuestHUDManualFocus(11));expect(14)
-AT.db.rankQuestFocusCloseCompleted=true
+assert(AT.ToggleQuestHUDManualFocus(14));expect(14)
+assert(AT.ToggleQuestHUDManualFocus(14));expect(11)
 C_QuestLog.GetQuestsOnMap=oldPoints
 C_QuestLog.GetNextWaypoint=nil;pois[3]=nil
 measured[14]=100
@@ -243,4 +239,37 @@ do
     assert(AT.SampleQuestAreas(samples,{})[id]~="near","old samples do not return after zoning out of an instance")
     C_Map.GetPlayerMapPosition=oldPos
     print("PASS Rank Quest preserves area highlights at the edge and up to 100 yards beyond; same-map measurement; instance reset")
+end
+
+do
+    assert(loadfile("NQT/ForeverVerifiedEndpoints.lua"))("NQT",AT)
+    function UnitFactionGroup() return "Alliance" end
+    map=2548;ids={1360,96084,77}
+    visibleReady={}
+    C_QuestLog.GetLogIndexForQuestID=function(q)
+        for i,v in ipairs(ids) do if v==q then return i end end
+    end
+    C_QuestLog.GetInfo=function(i) return {questID=ids[i],isComplete=visibleReady[ids[i]]} end
+    C_Map.GetPlayerMapPosition=function() return CreateVector2D(.6111,.8401) end
+    C_Map.GetWorldPosFromMapPos=function(m,p)
+        local x,y=p:GetXY();return 0,CreateVector2D(x*5500,y*5500)
+    end
+    visibleReady[96084]=1
+    ready[96084]=false
+    measured[1360],cont[1360]=3463,true
+    measured[77],cont[77]=150,true
+    assert(AT.IsQuestReadyForTurnIn(96084))
+    expect(96084)
+    assert(select(2,AT.GetQuestNavigationID())=="nearby-turn-in")
+    measured[77]=20;expect(77)
+    assert(AT.ToggleQuestHUDManualFocus(1360));expect(1360)
+    ready[1360]=true;expect(77)
+    assert(not AT.GetQuestHUDManualFocus(),"completion resumes closest-quest auto mode")
+    measured[77]=150;expect(96084)
+    local lines={}
+    AT.Say=function(line) lines[#lines+1]=line end
+    C_QuestLog.GetTitleForQuestID=function(id) return id==96084 and "Something's in the Water" end
+    AT.ReportRankQuestTurnIns()
+    assert(lines[2]:find("#96084",1,true) and lines[2]:find(" yd",1,true) and selected==96084)
+    print("PASS Farholde screenshot coordinates, exact hand-in fallback, closer unfinished quest, and manual completion reset")
 end
