@@ -1,7 +1,8 @@
 local _, AT = ...
 local OWNER = "AutoTrack.QuestWalking"
 local BATCH_SIZE, SAMPLE_SECONDS, REPLAN_YARDS = 256, 0.70, 80
-local candidateCache, state, currentTargets, roadBackoff, lastPublished, lastGoodTargets
+local candidateCache, state, currentTargets, lastPublished, lastGoodTargets
+local providerBackoff=setmetatable({},{__mode="k"})
 local NO_CANCEL = function() end
 
 local function finite(n)
@@ -18,15 +19,27 @@ local function time()
     return GetTime and GetTime() or 0
 end
 
-local function apiForWalking(from, plain)
-    local road
-    if not plain and AT.GetRoadWalkingAPI then road = AT.GetRoadWalkingAPI(from) end
-    local api = road or (ShortestPathForever and ShortestPathForever.API)
-    if type(api) ~= "table" or api.version ~= 2 or not finite(api.minor) or api.minor < 7
-        or type(api.EstimateWalks) ~= "function" or type(api.WalkPath) ~= "function"
-        or type(api.NavVersion) ~= "function" then return end
-    local ok, nav = pcall(api.NavVersion)
-    if ok and type(nav) == "string" and nav ~= "" then return api, nav, road ~= nil and road ~= false end
+local function apiForWalking(from, quest)
+    local now=time()
+    local lastFailure
+    local function checked(api, road)
+        if type(api) ~= "table" or api.version ~= 2 or not finite(api.minor) or api.minor < 7
+            or type(api.EstimateWalks) ~= "function" or type(api.WalkPath) ~= "function"
+            or type(api.NavVersion) ~= "function" then return end
+        local failure=providerBackoff[api]
+        if failure and failure.quest==quest and failure.map==from.map and now<failure.untilTime then
+            lastFailure=lastFailure or failure.reason
+            return
+        end
+        local ok, nav = pcall(api.NavVersion)
+        if ok and type(nav) == "string" and nav ~= "" then return api, nav, road end
+    end
+    -- Use SPF's public walking solver first. Do not start, stop, or replace
+    -- the player's own journey; NQT owns a separate request and both overlays.
+    local api,nav,road=checked(ShortestPathForever and ShortestPathForever.API,false)
+    if api then return api,nav,road end
+    api,nav,road=checked(AT.GetRoadWalkingAPI and AT.GetRoadWalkingAPI(from),true)
+    return api,nav,road,lastFailure
 end
 
 local function active(quest)
@@ -48,7 +61,7 @@ end
 
 local function valid(job)
     if state ~= job or not active(job.quest) then return false end
-    local api, nav = apiForWalking(job.from, not job.road)
+    local api, nav = apiForWalking(job.from, job.quest)
     if api ~= job.api or nav ~= job.nav then return false end
     if C_Map and C_Map.GetBestMapForUnit then
         local ok, map = pcall(C_Map.GetBestMapForUnit, "player")
@@ -61,7 +74,7 @@ local function fail(job, reason)
     job.cancel = nil
     job.failure = type(reason) == "string" and reason or "unavailable"
     job.retry = time() + ((reason == "loading" or reason == "combat") and 3 or 18)
-    if job.road then roadBackoff = {quest=job.quest, map=job.from.map, untilTime=job.retry,reason=job.failure} end
+    providerBackoff[job.api] = {quest=job.quest,map=job.from.map,untilTime=job.retry,reason=job.failure}
 end
 
 local function request(job, method, target, callback, refused)
@@ -164,12 +177,10 @@ function AT.GetFocusedQuestWalkingPath(quest, from, width, height)
         AT.CancelQuestWalking()
         return nil,nil,"position"
     end
-    local plain = roadBackoff and roadBackoff.quest==quest and roadBackoff.map==from.map
-        and time()<roadBackoff.untilTime
-    local api, nav, road = apiForWalking(from, plain)
+    local api, nav, road, why = apiForWalking(from, quest)
     if not api then
         AT.CancelQuestWalking()
-        return nil,nil,(plain and roadBackoff.reason) or "provider_missing"
+        return nil,nil,why or "provider_missing"
     end
     local cache = currentTargets(quest, from.map)
     if #cache.points == 0 then

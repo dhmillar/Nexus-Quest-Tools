@@ -65,17 +65,17 @@ local function data(quest)
     local w, h = maps.GetMapWorldSize(playerMap)
     if not (frac(px, py) and (px ~= 0 or py ~= 0) and finite(w) and finite(h) and w > 0 and h > 0) then return end
     local rotating = rotateEnabled()
-    if not ordinary(rotating) then return end
+    local minimapProjection=ordinary(rotating)
     local heading = 0
-    if rotating then
+    if minimapProjection and rotating then
         heading = GetPlayerFacing and GetPlayerFacing()
-        if not finite(heading) then return end
+        if not finite(heading) then minimapProjection,heading=false,0 end
     end
     local origin = {map=playerMap, x=px, y=py}
     local path, selected, why
     if AT.GetFocusedQuestWalkingPath then path, selected, why = AT.GetFocusedQuestWalkingPath(quest, origin, w, h) end
     return {quest=quest, origin=origin, w=w, h=h, cosine=math.cos(heading), sine=math.sin(heading),
-        path=path, selected=selected, reason=why}
+        path=path, selected=selected, reason=why, minimapProjection=minimapProjection}
 end
 
 local function place(line, x1, y1, x2, y2)
@@ -270,6 +270,7 @@ local function walk(d, radius, yardRadius)
     if insideObjectiveArea(d,targetX,targetY,remaining) then return 0 end
     if not targetX or not targetY or remaining==math.huge then arrival = nil end
     mapRoute={path=d.path, selected=d.selected, segment=candidate, fraction=fraction, quest=d.quest}
+    if not radius then return end -- World-map snapshot does not need a drawable minimap.
     local used, scale = 0, radius/yardRadius
     for i=candidate,math.min(count-1,candidate+renderLimit-1) do
         local ax, ay = offset(d, i)
@@ -500,7 +501,7 @@ local function drawBearing()
     local rotating=rotateEnabled()
     if not ordinary(rotating) then bearingStatus="rotation setting protected"; return end
     local heading=0
-    if rotating then
+    if minimapProjection and rotating then
         heading=GetPlayerFacing and GetPlayerFacing()
         if not finite(heading) then
             bearingStatus="facing unavailable"
@@ -579,9 +580,8 @@ local function draw()
         end
     end
     local width,height=Minimap:GetWidth(),Minimap:GetHeight()
-    if not finite(width) or not finite(height) then routeStatus="position"; hide(); return end
-    local radius=math.min(width,height)*.43
-    if radius<18 then routeStatus="position"; hide(); return end
+    local radius=d.minimapProjection and finite(width) and finite(height) and math.min(width,height)*.43
+    if not radius or radius<18 then radius=nil end
     -- No route, no geometry. Do not draw a compass bearing through a wall.
     if not d.path then routeStatus=d.reason or "planning"; hide(); return end
     local count=walk(d,radius,viewYards())

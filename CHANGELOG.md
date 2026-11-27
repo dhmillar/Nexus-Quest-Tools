@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.218
+
+- Quest navigation prefers the installed Shortest Path Forever walking solver and shares the result between both maps. The world map draws the full visible route through the destination without stopping after 512 segments, even when minimap rotation cannot be resolved.
+
 ## 1.5.217
 
 - The Hunter Smart Buff action-bar macro still switches aspects when Smart Buff reminders are off. Existing idle buttons recover without re-placement or enabling reminder popups.

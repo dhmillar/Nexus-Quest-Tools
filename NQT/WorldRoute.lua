@@ -2,7 +2,6 @@ local _, AT = ...
 local overlay, canvas, pin, legend, lines
 local projectedPath, projectedMap, points
 local stitch,viewBounds
-local maxSegments = 512
 
 local function clean(v)
     return not issecretvalue or not issecretvalue(v)
@@ -216,7 +215,7 @@ function AT.RenderWorldQuestRoute(status,quest,snapshot)
     end
     legend:ClearAllPoints()
     legend:SetPoint("TOP",canvas,"TOPLEFT",w*(viewBounds[1]+viewBounds[2])/2,-h*viewBounds[3]-15)
-    local used,x,y,text,truncated=0
+    local used,x,y,text=0
     if snapshot and snapshot.quest==quest and (status=="routed" or status=="road") then
         local path=snapshot.path
         if path~=projectedPath or id~=projectedMap then
@@ -233,10 +232,8 @@ function AT.RenderWorldQuestRoute(status,quest,snapshot)
             if p then return p[1],p[2] end
         end
         local first,last=snapshot.segment,#path.waypoints
-        local stop=math.min(last-1,first+maxSegments-1)
-        truncated=stop<last-1
         local a,b=at(first)
-        for i=first,stop do
+        for i=first,last-1 do
             local u,v=at(i+1)
             if a and u then
                 local startX,startY=a,b
@@ -250,7 +247,6 @@ function AT.RenderWorldQuestRoute(status,quest,snapshot)
         end
         if used>0 then
             text=(status=="road" and "ROAD-AWARE WALK" or "WALKING ROUTE")
-            if truncated then text=text .. "  |  NEXT SECTION" end
             if snapshot.selected then
                 local p=snapshot.selected
                 x,y=project(p.map,p.x,p.y,id,false)
