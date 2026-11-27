@@ -18,6 +18,8 @@ local function cleanObjective(label)
     label=label:gsub("^%s*%d+%s*/%s*%d+[%s:]+",""):gsub("[%s:(]*%d+%s*/%s*%d+%)?%s*$","")
     return normalize(label)
 end
+-- Corroborated exact NPC/item sources; a source name does not imply a rate.
+local exactDropSources={[266148]=256952,[266252]=259258}
 local function mob(id)
     local data=AT.QuestMobData
     return data and data.creatures[id]
@@ -132,6 +134,7 @@ function AT.GetQuestDropMobNames(item)
         if e[6]==0 and pos(e[2]) then add(e[1]) end
     end
     for _,npc in ipairs(data and data.dropMobs and data.dropMobs[item] or {}) do add(npc) end
+    if exactDropSources[item] then add(exactDropSources[item]) end
     table.sort(names)
     itemNames[item]=#names>0 and names or false
     return itemNames[item] or nil

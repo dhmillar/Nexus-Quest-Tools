@@ -612,7 +612,14 @@ for id, expected in pairs({[123]={1307,1429,478},[136]={1357,1436,515},[184]={19
     assert(row[1]==expected[1] and spot[1]==expected[2] and spot[6]==expected[3] and spot[4]>0 and spot[7]~="")
 end
 assert(real.LevelGuideItemStarts[830][1]==4881 and real.LevelGuideItemStarts[830][2][1][5]==2)
-assert(real.LevelGuideItemStarts[86613][1]==278398 and #real.LevelGuideItemStarts[86613][2]==0)
+assert(real.LevelGuideItemStarts[86613][1]==278049 and real.LevelGuideItemStarts[86613][2][1][1]==1432)
+local damp=assert(real.LevelGuideItemStarts[6564])
+assert(damp[1]==16790 and damp[2][1][1]==1440 and damp[2][1][6]==4802 and damp[2][1][4]>0)
+for q,i in pairs({[95189]=268579,[95204]=275521}) do
+    local a=assert(real.LevelGuideItemStarts[q])
+    assert(a[1]==i and a[2][1][1]==0 and a[2][1][5]==2 and a[2][1][8]=="Ruins of Lordaeron")
+    assert(not real.TrackLevelGuideGiver({id=q,giver={pickup=true,map=0,x=0,y=0}}),"no invented pin from room text")
+end
 local rg=place(real.BuildLevelGuide(40,1),"Riverglades")
 local log
 for _,row in ipairs(rg.quests) do if row.id==94885 then log=row end end

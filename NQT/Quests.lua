@@ -2,7 +2,7 @@ local _, AT = ...
 local Q, M, S = C_QuestLog, C_Map, C_SuperTrack
 local ENTER_YARDS, EXIT_YARDS, ORDER_LIMIT = 100, 125, 10
 local focus, ownedWatch, ownedSuper, lastNear, focusFromOrder, running, queued, initialized
-local manualHUDQuest, manualWasReady, retiringManual
+local manualHUDQuest, manualWasReady, retiringManual, manualFromMap
 
 local function ordinary(v)
     return not issecretvalue or not issecretvalue(v)
@@ -528,8 +528,8 @@ local function activeQuest(id, ids)
     return validID(index) or ids[id] == true
 end
 
-local function manualEligible(id)
-    if not Q or not AT.db or not AT.db.enabled or not AT.db.questHUDEnabled
+local function manualEligible(id, fromMap)
+    if not Q or not AT.db or not AT.db.enabled or (not fromMap and not AT.db.questHUDEnabled)
         or not validID(id) or AT.IsQuestExcluded(id) then return false end
 
     local native=call(Q.IsOnQuest,id)
@@ -543,16 +543,27 @@ local function manualEligible(id)
     return false
 end
 function AT.GetQuestHUDManualFocus()
-    if manualEligible(manualHUDQuest) and (manualWasReady or not completed(manualHUDQuest)) then
+    if manualEligible(manualHUDQuest,manualFromMap) and (manualWasReady or not completed(manualHUDQuest)) then
         return manualHUDQuest
     end
 end
 function AT.ToggleQuestHUDManualFocus(id)
     if manualHUDQuest==id and validID(id) then
-        retiringManual,manualHUDQuest,manualWasReady=manualHUDQuest,nil,nil
+        retiringManual,manualHUDQuest,manualWasReady,manualFromMap=manualHUDQuest,nil,nil,nil
     elseif manualEligible(id) then
-        manualHUDQuest,manualWasReady=id,completed(id)
+        manualHUDQuest,manualWasReady,manualFromMap=id,completed(id),nil
     else return false end
+    AT.RefreshQuests()
+    if AT.RefreshQuestRoute then AT.RefreshQuestRoute() end
+    return true
+end
+
+-- Record actual map clicks separately from Blizzard's transient map details
+-- selection; closing the map must not cancel explicit navigation.
+function AT.FocusQuestFromWorldMap(id)
+    if not manualEligible(id,true) then return false end
+    if manualHUDQuest==id and manualFromMap and AT.GetQuestHUDManualFocus() then return true end
+    manualHUDQuest,manualWasReady,manualFromMap=id,completed(id),true
     AT.RefreshQuests()
     if AT.RefreshQuestRoute then AT.RefreshQuestRoute() end
     return true
@@ -561,10 +572,11 @@ end
 local function run()
     local db = AT.db
     if not db or not Q or (InCombatLockdown and InCombatLockdown()) then return end
-    if not db.enabled then manualHUDQuest,manualWasReady,retiringManual=nil,nil,nil; release(); return end
-    if AT.GetLevelGuideRoutePoint and call(AT.GetLevelGuideRoutePoint) then return end
+    if not db.enabled then manualHUDQuest,manualWasReady,retiringManual,manualFromMap=nil,nil,nil,nil; release(); return end
+    if AT.GetLevelGuideRoutePoint and call(AT.GetLevelGuideRoutePoint)
+        and not (manualFromMap and AT.GetQuestHUDManualFocus()) then return end
     if manualHUDQuest and not AT.GetQuestHUDManualFocus() then
-        retiringManual,manualHUDQuest,manualWasReady=manualHUDQuest,nil,nil
+        retiringManual,manualHUDQuest,manualWasReady,manualFromMap=manualHUDQuest,nil,nil,nil
     end
     local ids, watchedIDs = snapshot()
     if db.hideCompleted then
@@ -600,7 +612,13 @@ local function run()
     end
     if manualHUDQuest then
         if focus~=manualHUDQuest then acquire(manualHUDQuest,tracker) end
-        if focus==manualHUDQuest and focusFromOrder then focusFromOrder=nil;save() end
+        if focus==manualHUDQuest then
+            if focusFromOrder then focusFromOrder=nil;save() end
+            if S and manualFromMap then
+                if getSuper()~=focus then call(S.SetSuperTrackedQuestID,focus) end
+                if getSuper()==focus and ownedSuper~=focus then ownedSuper=focus;save() end
+            end
+        end
         -- Explicit intent remains the GPS destination even when a full
         -- native watch list or combat temporarily prevents adding a watch.
         return
@@ -648,6 +666,8 @@ end
 -- watch list is full or the UI watch API has not caught up with the queue.
 function AT.GetQuestNavigationID()
     if not Q or not AT.db or not AT.db.enabled then return end
+    local mapManual=manualFromMap and AT.GetQuestHUDManualFocus()
+    if mapManual then return mapManual,"hud" end
     local guideQuest=call(AT.GetLevelGuideRoutePoint)
     if validID(guideQuest) then return guideQuest,"guide" end
     local manual=AT.GetQuestHUDManualFocus()
@@ -972,10 +992,10 @@ function AT.RefreshQuests()
     end
 end
 
-local function schedule()
+local function schedule(delay)
     if queued then return end
     queued = true
-    C_Timer.After(0, function()
+    C_Timer.After(delay or 0, function()
         queued = nil
         AT.RefreshQuests()
     end)
@@ -992,7 +1012,7 @@ function AT.ForgetRemovedQuest(id)
         end
     end
     if id==manualHUDQuest then
-        retiringManual,manualHUDQuest,manualWasReady=manualHUDQuest,nil,nil
+        retiringManual,manualHUDQuest,manualWasReady,manualFromMap=manualHUDQuest,nil,nil,nil
         changed=true
     end
     if changed and AT.RefreshQuestRoute then AT.RefreshQuestRoute() end
@@ -1020,7 +1040,10 @@ function AT.InitQuests()
         if event=="QUEST_TURNED_IN" or event=="QUEST_REMOVED" then AT.ForgetRemovedQuest(id)
         else
             if event=="QUEST_ACCEPTED" then forgetTurnInMap(id) end
-            schedule()
+            -- The native log can emit a burst of updates per combat or loot
+            -- action. Coalesce routine updates into one proximity scan.
+            local routine=event=="QUEST_LOG_UPDATE" or event=="QUEST_WATCH_UPDATE" or event=="QUEST_WATCH_LIST_CHANGED"
+            schedule(routine and .22 or 0)
         end
     end)
     local events = {

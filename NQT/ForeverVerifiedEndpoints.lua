@@ -121,6 +121,8 @@ AT.ForeverVerifiedEndpointReferences={
  [93971]={{2548,.594,.4573,1,256418,2,"Krom'rosh"}}, -- exact Forever quest recipient observed by AHledger, position from EG interactions
  [93568]={{2652,0.4732,0.6567,1,255385,0,"Liranne"}}, -- Forever takes 1.60.1.71091, 1.60.1.71139
  [94613]={{2548,0.5487,0.7312,1,258317,1,"Benjy Wheeler"}}, -- Forever takes 1.60.1.71139
+ -- Live ForeverDB hand-in and independently observed Forever Scout NPC; approximate reference, not native GPS.
+ [94980]={{2548,.644,.820,1,259250,1,"Alphonse Dumas"}},
  [94614]={{2548,0.5487,0.7312,1,258317,1,"Benjy Wheeler"}}, -- Forever takes 1.60.1.71139
  [94615]={{2548,0.5487,0.7312,1,258317,1,"Benjy Wheeler"}}, -- Forever takes 1.60.1.71139
  [94678]={{2548,0.3956,0.7471,1,259353,1,"Cedric Dalton"}}, -- Forever takes 1.60.1.71139

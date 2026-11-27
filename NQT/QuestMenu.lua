@@ -187,6 +187,15 @@ local function redraw(row, data)
     data.last = index
 end
 
+local function plainMapClick(button,id)
+    if button=="LeftButton" and validID(id) and invoke(WorldMapFrame,"IsShown")==true
+        and not (IsModifiedClick and IsModifiedClick())
+        and not (IsControlKeyDown and IsControlKeyDown())
+        and not (IsShiftKeyDown and IsShiftKeyDown())
+        and not (IsAltKeyDown and IsAltKeyDown())
+        and AT.FocusQuestFromWorldMap then AT.FocusQuestFromWorldMap(id) end
+end
+
 local function attachClick(row, data, intercept, strict)
     if data.clickAttached then return end
     if intercept and type(row.GetScript) == "function" and type(row.SetScript) == "function" then
@@ -198,8 +207,11 @@ local function attachClick(row, data, intercept, strict)
             local original = row:GetScript("OnClick")
             if type(original) == "function" then
                 local ok = pcall(row.SetScript, row, "OnClick", function(self, button, ...)
-                    if ctrlLeft(button, data.getID(self)) then return end
-                    return original(self, button, ...)
+                    local id=data.getID(self)
+                    if ctrlLeft(button,id) then return end
+                    local result=original(self,button,...)
+                    if data.mapClick then plainMapClick(button,id) end
+                    return result
                 end)
                 if ok then data.clickAttached = true; return end
             end
@@ -207,7 +219,8 @@ local function attachClick(row, data, intercept, strict)
     end
     if not strict and type(row.HookScript) == "function" then
         data.clickAttached = pcall(row.HookScript, row, "OnClick", function(self, button)
-            ctrlLeft(button, data.getID(self))
+            local id=data.getID(self)
+            if not ctrlLeft(button,id) and data.mapClick then plainMapClick(button,id) end
         end)
     end
 end
@@ -215,7 +228,7 @@ local function observe(row, getID, label, hookClick, intercept, inline, hideOnMa
     if not row then return end
     local data = rows[row]
     if not data then
-        data = {getID=getID, label=label, inline=inline, hideOnMax=hideOnMax}
+        data = {getID=getID, label=label, inline=inline, hideOnMax=hideOnMax, mapClick=getID==nativeLogID}
         rows[row] = data
     end
     if hookClick then attachClick(row, data, intercept) end
@@ -374,10 +387,10 @@ local function layoutSize(list)
 end
 
 local presses = setmetatable({}, {__mode="k"})
-local function installPreciseClick(button, getID)
+local function installPreciseClick(button, getID, mapClick)
     if not button then return end
     local data = presses[button]
-    if not data then data={getID=getID}; presses[button]=data end
+    if not data then data={getID=getID,mapClick=mapClick}; presses[button]=data end
     attachClick(button,data,true,true)
 end
 
@@ -404,7 +417,7 @@ scanMapCircles = function(scrollFrame)
             local id = idForMapPOI(poi)
             if validID(id) then
                 displayed[#displayed+1]={owner=row,poi=poi,id=id,label="Text"}
-                installPreciseClick(poi,idForMapPOI)
+                installPreciseClick(poi,idForMapPOI,true)
             end
         end
         local sizes=layoutSize(displayed)
@@ -451,10 +464,54 @@ local function scanQuestie()
     end
 end
 
+local mapPinHooks=setmetatable({}, {__mode="k"})
+local hookedMapAcquire, hookedNativePOI
+local function worldMapPinID(pin)
+    if invoke(pin,"GetMap")~=WorldMapFrame and readFrame(pin,"owningMap")~=WorldMapFrame then return end
+    return invoke(pin,"GetQuestID") or readFrame(pin,"questID")
+end
+local function scanWorldMapPins()
+    local map=WorldMapFrame
+    if not map or not hooksecurefunc then return end
+    if not hookedNativePOI and type(QuestPOIButton_OnClick)=="function" then
+        hookedNativePOI=pcall(hooksecurefunc,"QuestPOIButton_OnClick",function(pin,key)
+            plainMapClick(key,worldMapPinID(pin))
+        end)
+    end
+    local enum=readFrame(map,"EnumeratePinsByTemplate")
+    if type(enum)~="function" then return end
+    local function bindPins(template)
+        for pin in enum(map,template) do
+            if not mapPinHooks[pin] and type(readFrame(pin,"OnClick"))=="function" then
+                mapPinHooks[pin]=pcall(hooksecurefunc,pin,"OnClick",function(obj,key)
+                    plainMapClick(key,worldMapPinID(obj))
+                end)
+            end
+        end
+    end
+    if not hookedMapAcquire and type(readFrame(map,"AcquirePin"))=="function" then
+        local waiting={}
+        hookedMapAcquire=pcall(hooksecurefunc,map,"AcquirePin",function(_,template)
+            if template~="QuestPinTemplate" and template~="QuestCompletePinTemplate" then return end
+            if not (C_Timer and C_Timer.After) or waiting[template] then return end
+            waiting[template]=true
+            C_Timer.After(0,function()
+                waiting[template]=nil
+                if invoke(map,"IsShown")==true then pcall(bindPins,template) end
+            end)
+        end)
+    end
+    if invoke(map,"IsShown") then
+        bindPins("QuestPinTemplate")
+        bindPins("QuestCompletePinTemplate")
+    end
+end
+
 function AT.RefreshQuestOrderBadges()
     -- Each integration is independent: an optional incompatible tracker
     -- must not interfere with the other surfaces or the quest engine.
     pcall(scanLog)
+    pcall(scanWorldMapPins)
     pcall(scanNativeTracker, QuestObjectiveTracker)
     pcall(scanNativeTracker, CampaignQuestObjectiveTracker)
     pcall(scanQuestie)

@@ -317,8 +317,10 @@ do
     local fresh=assert(AT.ObservedQuestDrops.items[729][1])
     assert(fresh[1]==4154 and fresh[2]==11 and fresh[3]==23 and fresh[4]>=3 and fresh[5]==3)
     AT.ObservedQuestDrops.items[990001]={{88,3,7,3,2,1}}
-    local oldItem=C_Item
-    C_Item={GetItemNameByID=function(x) if x==730 then return "Murloc Eye" end end}
+    local oldItem,oldFacts=C_Item,AT.ForeverQuestFacts
+    AT.ForeverQuestFacts={[12]={0,0,{730,3}}}
+    local itemNameCalls=0
+    C_Item={GetItemNameByID=function(x) itemNameCalls=itemNameCalls+1;if x==730 then return "Murloc Eye" end end}
     C_QuestLog.GetQuestObjectives=function(q)
         if q==12 then return {
             {type="item",itemID=730,text="Eye with id: 0/3"},
@@ -329,6 +331,7 @@ do
         return getObjectives(q)
     end
     AT.RefreshQuestHUD()
+    assert(itemNameCalls<30,"unknown labels must not trigger a catalog-wide native API loop")
     local offline=assert(find("Acquired in Stranglethorn"))
     assert(offline.objectives[1].text:find("(46%)",1,true))
     assert(offline.objectives[2].text:find("(46%)",1,true))
@@ -411,7 +414,71 @@ do
     assert(not find("Acquired in Stranglethorn").objectives[1].text:find("%%%)"))
     GetLocale,LibQuestieDB=locale,provider
     print("PASS optional Forever QuestieDB item resolution without Questie tracker and with a cold cache")
-    C_Item=oldItem
+    do
+        local packed={}
+        assert(loadfile("NQT/ForeverQuestFacts.lua"))("NQT",packed)
+        assert(packed.ForeverQuestItemNames[1019]=="Red Linen Bandana")
+        local facts,names,windows,oldLocale,group=AT.ForeverQuestFacts,AT.ForeverQuestItemNames,AT.ForeverSoloQuestWindowSamples,GetLocale,IsInGroup
+        AT.ForeverQuestFacts={[12]={0,0,{1019,6},{730,6}}}
+        AT.ForeverQuestItemNames=packed.ForeverQuestItemNames
+        AT.ForeverSoloQuestWindowSamples={[12]={[1019]=packed.ForeverSoloQuestWindowSamples[83][1019]}}
+        C_Item={GetItemNameByID=function() return nil end}
+        GetLocale=function()return "enUS" end
+        IsInGroup=function()return false end
+        C_QuestLog.GetQuestObjectives=function(q)
+            if q==12 then return {{type="item",numRequired=6,text="Red Linen Bandana: 0/6"},
+                {type="item",numRequired=6,text="Different Item: 0/6"}} end
+            return getObjectives(q)
+        end
+        AT.RefreshQuestHUD()
+        local row=find("Acquired in Stranglethorn")
+        assert(row.objectives[1].text:find("(62%)",1,true),"actual published sample works with cold cache and two same-count item objectives")
+        assert(not row.objectives[2].text:find("%%"),"never borrow a percentage for a different item")
+        GetLocale=function()return "frFR" end
+        AT.RefreshQuestHUD()
+        assert(not find("Acquired in Stranglethorn").objectives[1].text:find("%%"),"English fallback cannot match another locale")
+        AT.ForeverQuestFacts,AT.ForeverQuestItemNames,AT.ForeverSoloQuestWindowSamples,GetLocale,IsInGroup=facts,names,windows,oldLocale,group
+    end
+    do
+        local packed={}
+        assert(loadfile("NQT/ForeverQuestFacts.lua"))("NQT",packed)
+        local early=packed.ForeverRivergladesEarlyDropSamples
+        assert(early[94680][1][1]==265745 and early[94680][1][3]==6 and early[94680][1][4]==15)
+        assert(not early[95121],"no mixed hotfix data")
+        local prevEarly,comp,solo,group=AT.ForeverRivergladesEarlyDropSamples,AT.ForeverRivergladesDropComparison,AT.ForeverQuestDropSamples,IsInGroup
+        AT.ForeverRivergladesEarlyDropSamples={[12]=early[94680]}
+        AT.ForeverRivergladesDropComparison={[12]=true}
+        AT.ForeverQuestDropSamples={[12]=packed.ForeverQuestDropSamples[93788]}
+        IsInGroup=function()return true end
+        C_QuestLog.GetQuestObjectives=function(q)
+            if q==12 then return {
+                {type="item",itemID=265745,text="Twilight Missive: 0/3"},
+                {type="item",itemID=263972,text="Woodworker's Axe: 0/10"},
+            } end
+            return getObjectives(q)
+        end
+        AT.RefreshQuestHUD()
+        local r=find("Acquired in Stranglethorn")
+        assert(r.objectives[1].text:find("40%, party sample: 15 loots",1,true))
+        assert(r.objectives[2].text:find("solo: 30%",1,true),"party must not mislabel solo rate")
+        IsInGroup=function()return false end
+        AT.RefreshQuestHUD()
+        r=find("Acquired in Stranglethorn")
+        assert(r.objectives[1].text:find("40%, party sample: 15 loots",1,true),"show the comparison as a party sample, not solo odds")
+        assert(r.objectives[2].text:find("(30%)",1,true))
+        local refs=AT.ForeverReportedQuestDropReferences
+        AT.ForeverReportedQuestDropReferences={[12]=packed.ForeverReportedQuestDropReferences[94829]}
+        C_QuestLog.GetQuestObjectives=function(q)
+            if q==12 or q==11 then return {{type="item",itemID=266148,text="Farmers' Mementos: 0/5"}} end
+            return getObjectives(q)
+        end
+        AT.RefreshQuestHUD()
+        assert(find("Acquired in Stranglethorn").objectives[1].text:find("9% reported",1,true))
+        assert(not find("A flight to Duskwood").objectives[1].text:find("reported",1,true))
+        AT.ForeverReportedQuestDropReferences=refs
+        AT.ForeverRivergladesEarlyDropSamples,AT.ForeverRivergladesDropComparison,AT.ForeverQuestDropSamples,IsInGroup=prevEarly,comp,solo,group
+    end
+    C_Item,AT.ForeverQuestFacts=oldItem,oldFacts
     C_QuestLog.GetQuestObjectives=getObjectives
     AT.db.questHUDTheme=1;AT.db.rankQuestDropRates=nil;AT.RefreshQuestHUD()
     local testRow=find("Acquired in Stranglethorn"); for i=#testRow.objectives,3,-1 do testRow.objectives[i]=nil end

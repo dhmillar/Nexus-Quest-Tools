@@ -1,6 +1,6 @@
 local AT={db={enabled=true}}
 local frames, timers, contents, finished, owned={},{},{},{},{}
-local use,accepts,z=0,0,0
+local use,accepts,z,bagReads,questReads=0,0,0,0,0
 local combat=false
 local function object()
     local o={shown=true,scripts={},attrs={}}
@@ -28,8 +28,8 @@ C_QuestLog={IsOnQuest=function(id)return owned[id] end,IsQuestFlaggedCompleted=f
 AcceptQuest=function()accepts=accepts+1 end
 C_Container={
     GetContainerNumSlots=function(bag)return bag==0 and 10 or 0 end,
-    GetContainerItemInfo=function(_,slot)return contents[slot] end,
-    GetContainerItemQuestInfo=function(_,slot)local info=contents[slot];return info and {questID=info.quest,isActive=info.active}end,
+    GetContainerItemInfo=function(_,slot)bagReads=bagReads+1;return contents[slot] end,
+    GetContainerItemQuestInfo=function(_,slot)questReads=questReads+1;local info=contents[slot];return info and {questID=info.quest,isActive=info.active}end,
 }
 local function item(id,quest,icon,qty)
     return {itemID=id,quest=quest,iconFileID=icon,stackCount=qty or 1}
@@ -47,6 +47,9 @@ local function click(key)
 end
 assert(not b.shown)
 event("PLAYER_ENTERING_WORLD",true,false)
+local before=bagReads
+for _=1,80 do event("QUEST_LOG_UPDATE") end
+assert(bagReads==before and questReads==0,"unrelated progress must not scan bags or query starter metadata")
 contents[8],contents[1]=contents[1],nil
 bag();assert(not b.shown,"bag move isn't a new item")
 contents[8].stackCount=2

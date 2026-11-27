@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.5.168 - 2026-11-27
+
+- **Performance:** Removed idle bag scans from the quest-starting item popup, stopped rebuilding the full drop-name index during quest updates, and batched routine quest and map refreshes. Offline regressions passed; in-game stutter on affected setups is not yet confirmed resolved.
+- **World map:** Clicking a quest is a manual focus change. A selected completed quest stays tracked for turn-in after the map closes.
+- **Rank Quest drop rates:** Resolves known item IDs even when the English item cache is empty. Added Riverglades loot observations with solo/party and small-sample labels, and separate Wowhead-reported references for Farmers’ Mementos and Damaged Locket.
+- **Quest data:** Refined Damp Note and Excavation Tools pickup areas, added room hints for both Crest of Lordaeron starters, and corrected several turn-in references.
+
 ## 1.5.163 - 2026-11-27
 
 - **Rank Quest:** Automatically follows the closest unfinished quest with a known distance, even outside the highlight range. A manual pick stays active until its objectives are complete; explicit tracking order still takes priority over distance.

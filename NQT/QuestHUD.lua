@@ -1270,9 +1270,8 @@ local function dropName(text)
     if not is(text,"string") then return end
     text=text:gsub("|c%x%x%x%x%x%x%x%x",""):gsub("|r","")
     text=text:gsub("^%s*%d+%s*/%s*%d+[%s:]+",""):gsub("%s*[(:]?%s*%d+%s*/%s*%d+%)?%s*$","")
-    return text:match("^%s*(.-)%s*$")
+    return text:gsub("%s+"," "):match("^%s*(.-)%s*$")
 end
-local dropIndex,dropIndexAt
 local function observedDropItem(qid,label)
     local items=AT.ObservedQuestDrops and AT.ObservedQuestDrops.items
     if not items then return end
@@ -1291,20 +1290,7 @@ local function observedDropItem(qid,label)
             return known
         end
     end
-    -- Index only names the client already knows. Never download item data
-    -- for every ID, and only refresh if unresolved text actually needs it.
-    local now=call(GetTime)
-    if not dropIndex or is(now,"number") and dropIndexAt and now-dropIndexAt>=8 then
-        dropIndex,dropIndexAt={},is(now,"number") and now or nil
-        for item in pairs(items) do
-            local n=call(C_Item and C_Item.GetItemNameByID,item)
-            if is(n,"string") and n~="" then
-                if dropIndex[n]~=nil and dropIndex[n]~=item then dropIndex[n]=false
-                else dropIndex[n]=item end
-            end
-        end
-    end
-    return dropIndex[label] or nil
+
 end
 
 
@@ -1340,11 +1326,15 @@ local function factDropItem(qid,objective,wanted)
     if not facts then return end
     local required=field(objective,"numRequired")
     local named,possible,unresolved
+    local locale=call(GetLocale)
+    local enUS=locale=="enUS" or locale=="enGB"
+    local bundled=enUS and AT.ForeverQuestItemNames
     for i=3,#facts do
         local item,amount=unpack(facts[i])
         local name=call(C_Item and C_Item.GetItemNameByID,item)
-        if is(name,"string") and name~="" then
-            if name==wanted then
+        local known=bundled and bundled[item]
+        if is(name,"string") and name~="" or is(known,"string") then
+            if dropName(name)==wanted or dropName(known)==wanted then
                 if named and named~=item then return nil,true end
                 named=item
             end
@@ -1362,6 +1352,7 @@ end
 local function objectiveDropItem(db,qid,objective,label)
     if field(objective,"type")~="item" then return end
     local exact=field(objective,"itemID")
+    if not id(exact) then exact=field(objective,"itemId") end
     if id(exact) then return exact end
     local linked
     for raw in label:gmatch("|Hitem:(%d+)") do
@@ -1374,14 +1365,15 @@ local function objectiveDropItem(db,qid,objective,label)
     -- Questie item ordering matches the quest log; compare exact item names.
     local wanted=dropName(label)
     if not wanted or wanted=="" then return end
+    local fact,uncertain=factDropItem(qid,objective,wanted)
+    if uncertain then return end
+    if fact then return fact end
     local objectives=field(db and call(db.GetQuest,qid),"ObjectiveData")
     if not is(objectives,"table") then
         local match,ambiguous=standaloneProviderDropItem(qid,wanted)
         if ambiguous then return end
         if match then return match end
-        local fact,uncertain=factDropItem(qid,objective,wanted)
-        if uncertain then return end
-        return fact or observedDropItem(qid,wanted) or call(AT.GetKnownQuestDropItem,qid,wanted)
+        return observedDropItem(qid,wanted) or call(AT.GetKnownQuestDropItem,qid,wanted)
     end
     local match
     for _,entry in pairs(objectives) do
@@ -1430,8 +1422,7 @@ local function observedRecord(item)
     if low then return low,high end
 end
 
-local function objectiveDropSuffix(db,qid,objective,label)
-    local item=objectiveDropItem(db,qid,objective,label)
+local function objectiveDropSuffix(db,qid,item)
     if not id(item) then return "" end
     local grouped=call(IsInGroup)==true
     local pack=AT.ForeverQuestDropSamples
@@ -1456,13 +1447,50 @@ local function objectiveDropSuffix(db,qid,objective,label)
             return " ("..(a==b and a or a.."\226\128\147"..b)..")",rows,grouped and "eg-group" or (openedWindows and "eg-solo-window" or "eg")
         end
     end
+    local early=AT.ForeverRivergladesEarlyDropSamples and AT.ForeverRivergladesEarlyDropSamples[qid]
+    local function earlyRate(mode)
+        local best
+        for _,e in ipairs(early or {}) do
+            if e[1]==item and e[7]==mode and (not best or e[4]>best[4]
+                or e[4]==best[4] and e[2]<best[2]) then best=e end
+        end
+        if best then return " ("..fmtDrop(best[3]/best[4]*100)..", "..(mode==1 and "party" or "solo")
+            .." sample: "..best[4].." loots)" end
+    end
+    local currentMode=grouped and 1 or 0
+    local estimate=earlyRate(currentMode)
+    if estimate then return estimate end
+    if AT.ForeverRivergladesDropComparison and AT.ForeverRivergladesDropComparison[qid] then
+        local other
+        if grouped then other=AT.ForeverQuestDropSamples else other=AT.ForeverGroupedQuestDropSamples end
+        local list=other and other[qid] and other[qid][item]
+        if list then
+            local low,high
+            for _,e in ipairs(list) do
+                local rate=grouped and e[2]/100 or e[2]/e[3]*100
+                low=not low and rate or math.min(low,rate)
+                high=not high and rate or math.max(high,rate)
+            end
+            if low then
+                local a,b=fmtDrop(low),fmtDrop(high)
+                return " ("..(grouped and "solo: " or "party: ")..(a==b and a or a.."\226\128\147"..b)..")"
+            end
+        end
+    end
     local lo,hi=questieDropRange(db,item)
     if lo then
         local a,b=fmtDrop(lo),fmtDrop(hi)
         return " ("..(a==b and a or a.."\226\128\147"..b)..")"
     end
     local low,high=observedRecord(item)
-    if not low then return "" end
+    if not low then
+        local estimate=earlyRate(1-currentMode)
+        if estimate then return estimate end
+        local ref=AT.ForeverReportedQuestDropReferences and AT.ForeverReportedQuestDropReferences[qid]
+        local row=ref and ref[item]
+        if row then return " ("..fmtDrop(row[2]/100).." reported)" end
+        return ""
+    end
     local a,b=fmtDrop(low),fmtDrop(high)
     return " ("..(a==b and a or a.."\226\128\147"..b)..")"
 end
@@ -1729,9 +1757,9 @@ local function renderObjectives(b,row,width,theme,hasItem,hasDetail)
             local label=field(o,"text")
             if is(label,"string") and label~="" then
                 local kill=call(AT.GetQuestKillMobName,row.id,o,label)
-                local item=AT.GetQuestDropMobNames and objectiveDropItem(db,row.id,o,label)
-                if AT.db.rankQuestDropRates~=false and (db or AT.ObservedQuestDrops or AT.ForeverQuestDropSamples or AT.ForeverGroupedQuestDropSamples or AT.ForeverSoloQuestWindowSamples) then
-                    label=label..objectiveDropSuffix(db,row.id,o,label)
+                local item=objectiveDropItem(db,row.id,o,label)
+                if AT.db.rankQuestDropRates~=false and item then
+                    label=label..objectiveDropSuffix(db,row.id,item)
                 end
                 local done=field(o,"finished")==true
                 local bullet=done and not theme.questie and "|cff8bd1a2+|r " or ""

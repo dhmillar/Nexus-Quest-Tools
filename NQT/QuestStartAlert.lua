@@ -30,7 +30,7 @@ local function questFor(bag,slot)
         and call(quests.IsOnQuest,quest)~=true
         and call(quests.IsQuestFlaggedCompleted,quest)~=true then return quest end
 end
-local function snapshot()
+local function snapshot(check)
     local totals, starters = {}, {}
     for bag=0,NUM_BAG_SLOTS or 4 do
         local size=call(bags.GetContainerNumSlots,bag)
@@ -40,7 +40,7 @@ local function snapshot()
             if positive(item) then
                 local qty=field(info,"stackCount")
                 totals[item]=(totals[item] or 0)+(positive(qty) and qty or 1)
-                if not starters[item] then
+                if check and check(item) and not starters[item] then
                     local quest=questFor(bag,slot)
                     if quest then
                         starters[item]={item=item,quest=quest,texture=field(info,"iconFileID"),
@@ -108,13 +108,17 @@ local function scheduleRetry()
 end
 refresh=function(reset)
     if not button then return end
-    local totals,starters=snapshot()
     if reset or not counts or not enabled() then
-        counts,pending,offers=totals,{},{}
+        counts,pending,offers=enabled() and snapshot() or nil,{},{}
         if not enabled() then seen={} end
         if not locked() then hide() end
         return
     end
+    local queued={}
+    for _,offer in ipairs(offers) do queued[offer.item]=true end
+    local totals,starters=snapshot(function(item)
+        return queued[item] or pending[item] or not counts[item] and not seen[item]
+    end)
     local now=call(GetTime) or 0
     for item in pairs(totals) do
         if not seen[item] and not counts[item] then pending[item]=now+4 end
@@ -170,7 +174,7 @@ function AT.InitQuestStartItemAlert()
             hide()
             return
         end
-        local _,starters=snapshot()
+        local _,starters=snapshot(function(item) return item==offer.item end)
         local entry=starters[offer.item]
         if not enabled() or not entry or entry.quest~=offer.quest then hide() end
     end)
@@ -202,6 +206,14 @@ function AT.InitQuestStartItemAlert()
         if event=="QUEST_ACCEPTED" then
             local quest=positive(reloaded) and reloaded or initial
             if positive(quest) then accepted[quest]=true end
+        end
+        if not enabled() then return end
+        if event=="UI_SCALE_CHANGED" then
+            if active and button:IsShown() and not locked() then position() end
+            return
+        end
+        if event=="QUEST_LOG_UPDATE" or event=="QUEST_DETAIL" or event=="QUEST_ACCEPTED" or event=="PLAYER_REGEN_ENABLED" then
+            if not next(pending) and #offers==0 then return end
         end
         refresh(event=="PLAYER_ENTERING_WORLD" and (initial or reloaded))
     end)

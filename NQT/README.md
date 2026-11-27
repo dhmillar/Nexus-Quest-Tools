@@ -1,4 +1,4 @@
-# Nexus Quest Tools 1.5.163
+# Nexus Quest Tools 1.5.168
 For World of Warcraft: Forever 1.60.1 (interface 16001). Uses the Blizzard quest tracker and a native character-specific action-bar macro. Optional compatibility with Questie.
 
 Quest-starting item popup (Rank Quest settings, on by default): when you acquire an item that starts an eligible quest, click its icon above your character to open the standard offer. The icon clears as soon as you accept. Right-click to dismiss without accepting. The addon does not accept quests for you.
@@ -33,7 +33,7 @@ Turn on Ping when placing marker for an optional Attack ping on the same eligibl
 Check Mute target macro sounds in the AT options to briefly silence the game's target-select and target-clear sounds during a recall without changing your other sound settings. Use Edit target name in the AT minimap options or /at target to type a name or part of a name out of combat. On an action bar that forwards right-clicks to macros, right-clicking the slot also opens the editor. Clear the name by saving a blank value. There is no floating target button. Blizzard action bars can show a portrait for the saved monster after you select it. Until that monster is seen in the current session, the slot uses its normal macro icon. For a regular key without a modifier, choose AT > Place primary macro (or /at skull), then place it in an empty action-bar slot. The minimap AT button opens settings; right-click it to pause or resume, or drag it to reposition.
 
 ## Quest focus
-Auto Track regularly focuses the closest unfinished quest with a verifiable objective distance, even beyond the highlight range. Click a quest's tracking circle to override it until its objectives are complete, then automatic focus resumes unless you have an explicit tracking order. Select an already-completed quest from the Completed view to navigate to turn-in. Other manually watched unfinished quests are preserved.
+Auto Track regularly focuses the closest unfinished quest with a verifiable objective distance, even beyond the highlight range. Click a quest's tracking circle to override it until its objectives are complete, then automatic focus resumes unless you have an explicit tracking order. Select an already-completed quest from the Completed view or the world map to keep navigating to its turn-in after you close the map. Other manually watched unfinished quests are preserved.
 
 Right-click a quest and toggle its Auto Track exclusion. That choice is saved per character. An excluded quest is left to manual tracking, including after completion, until you re-enable it from its quest menu. If the quest disappears from the tracker, use /at excluded and /at include ID to restore it.
 
@@ -284,3 +284,9 @@ With the party progress button on, a confirmed missing member appears in red wit
 Share Verify also shows quest level and pickup details, including the NPC and coordinates or the item and pickup area when known. Dungeon and objective context are labeled separately when the start location is unknown.
 
 Share Verify and the inline party rows show Offer pending while a recipient decides. An unanswered offer becomes available to retry after the short wait if WoW still confirms the quest is missing.
+
+Rank Quest can match exact enUS quest item names from bundled Forever client data before the item cache finishes loading. Unknown rates are not invented, and solo and group quest samples remain separate.
+
+A rate marked **reported** is a published reference for the exact item and mob where quest eligibility and solo/party mode were not confirmed. Stronger measured samples take precedence.
+
+Performance: coalesces routine quest-watch updates and native map pin refresh bursts, and avoids scanning unopened quest starter candidates or the full loot-item catalog during routine quest progress.
