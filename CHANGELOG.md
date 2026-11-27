@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.222
+
+- Quest objective portraits keep their fallback when the client hides the selected unit identity or combat flags.
+- Dungeon boss macros use hostile-target guards instead of existence checks, preserving living-boss targeting, marking and pinging.
+
 ## 1.5.221
 
 - Hunter Smart Buff uses successful aspect casts to recover from delayed or unreadable buff data, ignores a party member's Pack, and can fall back to a native cast sequence outside combat rather than repeatedly selecting Hawk.

@@ -1402,18 +1402,25 @@ end
 
 local objectiveMobTip
 local function liveMobPortrait(owner,texture)
-    if not owner.mobName or not SetPortraitTexture or call(UnitName,"target")~=owner.mobName
-        or call(UnitIsPlayer,"target")~=false then return false end
+    if not is(owner.mobName,"string") or not SetPortraitTexture then return false end
+    local liveName=call(UnitName,"target")
+    if not is(liveName,"string") or liveName~=owner.mobName then return false end
+    local isPlayer=call(UnitIsPlayer,"target")
+    if not is(isPlayer,"boolean") or isPlayer then return false end
+    local matches
     if owner.vendorItem or owner.npcObjective then
-        if call(UnitIsFriend,"player","target")~=true then return false end
-    elseif call(UnitCanAttack,"player","target")~=true then return false end
+        matches=call(UnitIsFriend,"player","target")
+    else
+        matches=call(UnitCanAttack,"player","target")
+    end
+    if not is(matches,"boolean") or not matches then return false end
     if owner.npcID then
         local guid=call(UnitGUID,"target")
         local npc=is(guid,"string") and tonumber(guid:match("^Creature%-%d+%-%d+%-%d+%-%d+%-(%d+)%-"))
         if (npc or owner.vendorItem or owner.npcObjective or owner.dropItem) and npc~=owner.npcID then return false end
     end
     local ok,result=pcall(SetPortraitTexture,texture,"target",true)
-    return ok and result~=false
+    return ok and ordinary(result) and result~=false
 end
 local function bundledMobPortrait(owner,texture)
     texture:SetTexture(132094)

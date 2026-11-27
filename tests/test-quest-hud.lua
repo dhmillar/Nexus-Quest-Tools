@@ -567,6 +567,20 @@ do
     UnitCanAttack=function(_,u) return u=="target" end
     UnitIsPlayer=function() return false end
     SetPortraitTexture=function(texture,unit) assert(unit=="target");texture:SetTexture("live:"..targetName) end
+    local oldSecret=issecretvalue
+    local renders=0
+    local liveTexture=SetPortraitTexture
+    SetPortraitTexture=function(...) renders=renders+1;return liveTexture(...) end
+    issecretvalue=function(v) return v==targetName end
+    AT.RefreshRankQuestMobPortraits()
+    assert(renders==0 and tip.shown and tip.portrait.texture=="display:42","hidden target name must not reach the portrait API")
+    issecretvalue=function(v) return v==false end
+    AT.RefreshRankQuestMobPortraits()
+    assert(renders==0,"hidden player flag must not reach the portrait API")
+    issecretvalue=function(v) return v==true end
+    AT.RefreshRankQuestMobPortraits()
+    assert(renders==0,"hidden hostility flag must not reach the portrait API")
+    issecretvalue=oldSecret
     AT.RefreshRankQuestMobPortraits()
     assert(icons[1].image.texture=="live:Second Named Mob" and tip.portrait.texture=="live:Second Named Mob")
     targetName="Unrelated mob";AT.RefreshRankQuestMobPortraits()

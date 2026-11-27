@@ -1969,8 +1969,8 @@ do
 
     local function reacquireTail(label,ping)
         if not label then return "" end
-        return "\n/stopmacro [harm,nodead]\n/cleartarget\n/stopmacro [exists]"
-            .."\n/targetexact [noexists] "..label.."\n/atmob k0:"..planFor(label:lower())..ping..clearDead
+        return "\n/stopmacro [harm,nodead]\n/cleartarget\n/stopmacro [harm]"
+            .."\n/targetexact [noharm] "..label.."\n/atmob k0:"..planFor(label:lower())..ping..clearDead
     end
 
     local function smartSearch(fallback,free)
@@ -1992,7 +1992,7 @@ do
         end
         if #freeNames==0 then return end
         searchSlots,searchHit={},nil
-        local body="/stopmacro [combat]\n/cleartarget\n/stopmacro [exists]"
+        local body="/stopmacro [combat]\n/cleartarget\n/stopmacro [harm]"
         local ping=AT.db.bossMarkPing and "\n/ping [@target,harm,nodead] Attack" or ""
         local recover=recent and reacquireTail(recent,ping) or clearDead
         local mark=free and ("\n/tm [harm,nodead] ~"..free) or ""
@@ -2000,7 +2000,7 @@ do
         for _,entry in ipairs(freeNames) do
             local name,slot=entry[1],entry[2]
             local plan=planFor(name:lower())
-            local line="\n/targetexact [noexists][dead] "..name
+            local line="\n/targetexact [noharm][dead] "..name
             local nextTail=mark.."\n/atmob j"..(free or 0)..":"..slot..ping
             local compiled=body..(lastProbe or "")..line
             -- SecureActionButton macrotext uses RunMacroText, not a
@@ -2075,9 +2075,9 @@ do
             or "No available icon for this boss.")
         -- Select the boss by exact name, not a recycled nameplate token. A
         -- failed selection performs no mark or ping.
-        local body="/stopmacro [combat]\n/cleartarget\n/stopmacro [exists]"
+        local body="/stopmacro [combat]\n/cleartarget\n/stopmacro [harm]"
         for i,label in ipairs(labels) do
-            body=body.."\n/targetexact [noexists] "..label
+            body=body.."\n/targetexact [noharm] "..label
 
         end
         local ping=AT.db.bossMarkPing and "\n/ping [@target,harm,nodead] Attack" or ""
@@ -2090,14 +2090,14 @@ do
                 if recent and recent~=labels[1] then
                     -- After the one planned marker attempt, recover our
                     -- last target on a miss, without giving it a new icon.
-                    local probe="\n/targetexact [noexists][dead] "..recent
+                    local probe="\n/targetexact [noharm][dead] "..recent
                     local recover=probe.."\n/atmob v"..planFor(recent:lower())
                     local function fits(core,tail)
                         return not maxBytes or #core+#tail+#ping+#clearDead<=maxBytes
                     end
                     if fits(body,recover) then body=body..recover
                     else
-                        local shorter=body:gsub("/targetexact %[noexists%] ","/targetexact ",1)
+                        local shorter=body:gsub("/targetexact %[noharm%] ","/targetexact ",1)
                         if fits(shorter,recover) then body=shorter..recover
                         -- This is already the last successful name; reporting
                         -- it again is optional when macro space is tight.
@@ -2111,7 +2111,7 @@ do
         -- natively, then clear the corpse after all acquisition paths.
         if maxBytes and #body+#ping+#clearDead>maxBytes then
             -- There is already a no-target guard immediately before the first probe.
-            body=body:gsub("/targetexact %[noexists%] ","/targetexact ",1)
+            body=body:gsub("/targetexact %[noharm%] ","/targetexact ",1)
         end
         if maxBytes and #body+#ping+#clearDead>maxBytes then ping="" end
         body=body..ping..clearDead
