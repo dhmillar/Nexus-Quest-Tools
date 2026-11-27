@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.184 - 2026-11-27
+
+- **Quest turn-ins:** Added six fallback hand-ins across the Alliance and Horde profession-sign chains. Rank Quest can show the correct recipient when the game omits its live pin. Elaine Compton has an area label only because the recorded coordinates disagree; approximate references do not create GPS routes.
+
 ## 1.5.183 - 2026-11-27
 
 - **Quest turn-ins:** Completed faction coverage for two A Sealed Crate quests. Alliance characters are directed to Marcy Baker in Redridge Mountains and Horde characters to Dokimi in The Barrens when the game does not return a live hand-in pin.

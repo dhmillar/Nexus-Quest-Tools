@@ -6,6 +6,11 @@
 -- Observed interactions: Efficient Games (https://efficient.games), CC BY 4.0.
 local _,AT=...
 AT.ForeverVerifiedEndpointReferences={
+ [95817]={{1455,.524,.425,1,10276,1,"Rotgath Stonebeard"}}, -- https://www.wowhead.com/forever/quest=95817/rotgath-stonebeard ; https://guided.news/en/guides/wow-forever-profession-sign-ironforge-quest-route-materials/
+ [95818]={{1455,.524,.425,1,10276,1,"Rotgath Stonebeard"}}, -- https://www.wowhead.com/forever/quest=95818/a-quick-craft ; same walkthrough
+ [95819]={{1413,.4991,.2935,1,256388,2,"Jornah"}}, -- https://foreverquestlog.com/quests/95819/ ; EG Link observed NPC 1.60.1.70938
+ [95820]={{1454,.6287,.4459,1,3365,2,"Karolek"}}, -- https://www.wowhead.com/forever/quest=95820/karolek ; EG Link observed NPC 1.60.1.70888
+ [95821]={{1454,.6287,.4459,1,3365,2,"Karolek"}}, -- https://www.wowhead.com/forever/quest=95821/a-quick-craft ; same NPC observation
  -- Efficient Games first-hand observations: https://github.com/JIVESCORP/eg-link-output-wowf/tree/1339ce5600bbc2b12e8f1081e584f548f62fa57f/data/wowf
  [2747]={{1446,.5235,.2697,1,7763,0,"Curgle Cranklehop"}}, -- EG Link exact turn-in 1.60.1.71139
  [8893]={{1446,.5236,.2704,2,142071,0,"Egg-O-Matic"}}, -- EG Link exact turn-in 1.60.1.71091
@@ -174,6 +179,7 @@ AT.ForeverVerifiedEndpointReferences={
 -- Only the actual recipient is listed, never the quest giver as a proxy.
 -- Original source attribution above; cross-checks: https://www.wowhead.com/forever/
 AT.ForeverTurnInAreaReferences={
+ [95816]={"Three Corners trading camp, Redridge Mountains","Elaine Compton",true,1}, -- https://foreverquestlog.com/quests/95816/ ; coordinates disagree across sources
  [1098]={"Shadowfang Keep","Deathstalker Vincent",true,2}, -- wiki rev 6956883
  [1144]={"Razorfen Kraul","Willix the Importer",true,0}, -- Forever quest 1144; escort NPC, not his cage
  [2278]={"Uldaman","Discs of Norgannon",false,0}, -- wiki rev 6554281
