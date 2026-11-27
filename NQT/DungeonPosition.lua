@@ -1328,12 +1328,29 @@ do
             s.beforeRender or "?",s.dockRender or "?",s.settled or s.returnRender or "?",sampleRender(),
             s.maskRefresh and "yes" or "no",s.backdropUncovered and "yes" or "no")
     end
+    local function stockHiddenParent(m,api)
+        if api or safe(m.IsShown,m)~=true or safe(m.IsVisible,m)~=false then return end
+        local parent=safe(m.GetParent,m)
+        if parent and safe(parent.IsVisible,parent)==false then return parent end
+    end
+    local function liftStock(s,parent)
+        local m,root=s.frame,_G.UIParent
+        if not parent or not root or root==parent or type(m.SetParent)~="function"
+            or safe(m.IsProtected,m)~=false or safe(InCombatLockdown)==true then return false end
+        if not pcall(m.SetParent,m,root) or safe(m.GetParent,m)~=root then return false end
+        s.originalParent=parent
+        return safe(m.IsVisible,m)==true
+    end
     local function restore()
         if not saved then return true end
         local s=saved
         if grip then grip:Hide() end
         stopDrag(s)
         if safe(s.frame.IsProtected,s.frame)~=false then return false end
+        if s.originalParent and safe(s.frame.GetParent,s.frame)~=s.originalParent then
+            if safe(InCombatLockdown)==true or not pcall(s.frame.SetParent,s.frame,s.originalParent)
+                or safe(s.frame.GetParent,s.frame)~=s.originalParent then return false end
+        end
         local a=anchor(s.frame,s.api,s.points)
         local actual=a and points(s.frame,s.api)
         if actual and #actual==#s.points then
@@ -1383,6 +1400,10 @@ do
         if not holder then failed=nil;restore();return end
         if saved then
             if saved.holder==holder and not saved.rollback then
+                local hiddenParent=stockHiddenParent(saved.frame,saved.api)
+                if hiddenParent and not saved.originalParent and liftStock(saved,hiddenParent) then
+                    refreshTerrain(saved.frame)
+                end
                 hideChrome(saved)
                 if saved.spot and not saved.dragX then
                     local x,y,scale,w,h=bounds(saved)
@@ -1396,7 +1417,7 @@ do
         end
         if failed==holder or safe(InCombatLockdown)==true then return end
         local m=_G.Minimap
-        if not m or safe(m.IsVisible,m)~=true or safe(m.IsProtected,m)~=false then
+        if not m or safe(m.IsProtected,m)~=false then
             lastDockStatus="The minimap is hidden, unavailable, or protected."
             return
         end
@@ -1409,6 +1430,11 @@ do
         if not (type(api)=="table" and type(api.SetPoint)=="function") then
             if safe(C_AddOns and C_AddOns.IsAddOnLoaded or IsAddOnLoaded,"SexyMap")==true then return end
             api=nil
+        end
+        local visible=safe(m.IsVisible,m)==true
+        local hiddenParent=not visible and stockHiddenParent(m,api)
+        if not visible and not hiddenParent then
+            lastDockStatus="The minimap itself is hidden or unavailable.";return
         end
         local before=points(m,api)
         if not before or (api and #before~=1) then
@@ -1427,7 +1453,7 @@ do
         saved.uiMap=safe(C_Minimap and C_Minimap.GetUiMapID)
         local d=AT.db.dungeonMinimapDock
         local u,v=type(d)=="table" and fraction(d.x),type(d)=="table" and fraction(d.y)
-        local applied=setLayer(m,raised)
+        local applied=(visible or liftStock(saved,hiddenParent)) and setLayer(m,raised)
         if applied then
             local _,_,_,w,h=bounds(saved)
             if w then

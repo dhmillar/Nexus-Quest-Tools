@@ -771,6 +771,37 @@ WorldMapFrame:Show();tick()
 assert(Minimap.points[1][2]==journal and Minimap:GetParent()==stockContainer and not Minimap.ZoomHitArea.shown,
     "stock default CENTER anchors also dock on the Journal map")
 WorldMapFrame:Hide();nativeRestored()
+-- The default fullscreen presentation can hide the host, while Minimap
+-- itself is still shown. Raising the strata and setting points alone cannot
+-- make a child of that invisible host render.
+local root=UIParent
+stockContainer:Show()
+local parent=stockContainer
+Minimap.GetParent=function()return parent end
+Minimap.SetParent=function(_,p)parent=p end
+Minimap.IsShown=function()return true end
+Minimap.IsVisible=function()return parent==root or parent:IsVisible() end
+Minimap.SetPoint=function(self,a,b,c,x,y)return nativeSetPoint(self,a,b or parent,c,x,y) end
+nativeAnchor()
+stockContainer:Hide()
+WorldMapFrame:Show();tick()
+assert(Minimap:GetParent()==root and Minimap:IsVisible() and Minimap.strata=="FULLSCREEN_DIALOG","hidden stock cluster is briefly bypassed")
+WorldMapFrame:Hide();nativeRestored()
+stockContainer:Show()
+assert(Minimap:IsVisible() and Minimap:GetParent()==stockContainer,"stock native map resumes after the close transition")
+nativeAnchor()
+WorldMapFrame:Show();tick()
+assert(Minimap:GetParent()==stockContainer)
+stockContainer:Hide();tick()
+assert(Minimap:GetParent()==root and Minimap:IsVisible(),"docking also survives a cluster hidden by a late map hook")
+WorldMapFrame:Hide();nativeRestored();stockContainer:Show()
+nativeAnchor()
+stockContainer:Hide();Minimap.IsShown=function()return false end
+WorldMapFrame:Show();tick()
+assert(Minimap:GetParent()==stockContainer,"respect a minimap intentionally hidden itself")
+WorldMapFrame:Hide();stockContainer:Show()
+Minimap.IsShown=nil;Minimap.IsVisible=function()return true end;Minimap.SetParent=nil
+print("PASS default minimap bypasses a hidden native parent only while docked, restores it, and respects intentionally hidden state")
 Minimap.ZoomHitArea=nil; Minimap.GetParent=nil; Minimap.SetPoint=nativeSetPoint
 Minimap.points={{"BOTTOM",baseAnchor,"BOTTOM",-230.729,22.586}}
 print("PASS real stock XML anchor, parent verification, stock zoom hit area, dock without overview art and on Journal")

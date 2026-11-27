@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.232
+
+- The stock minimap can dock over the dungeon map even when the fullscreen map hides its normal parent. Closing the map restores the stock parent, anchor, and zoom. SexyMap's path is unchanged.
+
 ## 1.5.231
 
 - Boss targeting recognizes readable native death reports and optionally checks Forever Dungeon Journal's active run for defeated bosses such as Twilight Commander Zarmok. It does not read prior runs or require Dungeon Journal.
