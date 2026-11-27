@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.195 - 2026-11-27
+
+- Pet Bar now follows the active pet’s visible nameplate instead of floating below screen center. The slim bar shows only the health percentage, bright green at 50% or higher and red below. Enable friendly/minion nameplates if the game is not showing the pet’s plate.
+
 ## 1.5.194 - 2026-11-27
 
 - Added Pet Bar under General, off by default. The thin bar shows your active pet’s health from 0% to 100%, green at 50% or more and red below 50%. It does not replace the stock pet frame.

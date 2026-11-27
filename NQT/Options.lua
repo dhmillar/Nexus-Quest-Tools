@@ -237,7 +237,7 @@ local function buildPanel()
         if AT.SetHunterDeadzonePreview then AT.SetHunterDeadzonePreview(false) end
     end)
     option(general, "petBarEnabled", "Pet Bar", -174,
-        "Shows a thin health bar for your active pet. Green at 50% and above, red below 50%.")
+        "Shows a thin bar above your active pet while its friendly minion nameplate is visible. Bright green at 50% and above, red below 50%.")
     status = makeText(general, "GameFontHighlightSmall", -209, "")
     status:SetTextColor(0.43, 0.88, 0.81)
 
