@@ -125,7 +125,8 @@ end
 
 local PREFIX="NQTQuestState1"
 local remote,outbound,departed={},{},{}
-local sentFor,queuedRefresh,queuedBagScan
+local nativeDone,waitingForNativeReset={},{}
+local sentFor,queuedRefresh,queuedBagScan,queuedCompleteScan
 local function questID(v) return number(v) and v>0 and v<=99999999 and v%1==0 end
 
 local function groupChannel()
@@ -177,6 +178,20 @@ local function decodeProgress(payload)
     return qid,{counts=counts,hasUnknown=partial=="1",needs=needs=="1"}
 end
 
+local function completeReport(data)
+    return data and not data.needs and not data.hasUnknown and #data.counts>0
+end
+
+local function coversSharedObjectives(data,shared)
+    if not completeReport(data) or #data.counts<#shared.counts then return false end
+    if shared.hasUnknown and #data.counts<=#shared.counts then return false end
+    for _,o in ipairs(shared.counts) do
+        local row=data.counts[o.index]
+        if not row or row.total~=o.total then return false end
+    end
+    return true
+end
+
 local function receive(payload,channel,sender)
     if not activeSync() or not is(payload,"string") or #payload>220 or not eq(channel,groupChannel()) then return end
     local state,raw=payload:match("^([DLO]):(%d+)$")
@@ -196,6 +211,20 @@ local function receive(payload,channel,sender)
     if not match then return end
     local guid=match.guid
     local states=remote[guid]
+    local previous=states and states[qid]
+    if is(state,"table") then
+        if is(previous,"table") and previous.wire==payload then return end
+        state.wire=payload
+    end
+    local seenDone=nativeDone[guid]
+    if state=="O" or is(state,"table") then
+        -- Explicit restart/regression beats a completed native snapshot from the previous pass.
+        if previous=="D" or previous=="L" or (seenDone and seenDone[qid]) then
+            if not waitingForNativeReset[guid] then waitingForNativeReset[guid]={} end
+            waitingForNativeReset[guid][qid]=true
+        end
+        if seenDone then seenDone[qid]=nil end
+    end
     if state=="O" then
         if states then states[qid]=nil end
     else
@@ -242,7 +271,9 @@ local function rosterChanged()
     for _,member in ipairs(partyRoster()) do
         if not member.offline then seen[member.guid]=true;keys[#keys+1]=member.guid end
     end
-    for guid in pairs(remote) do if not seen[guid] then remote[guid]=nil end end
+    for _,store in ipairs({remote,nativeDone,waitingForNativeReset}) do
+        for guid in pairs(store) do if not seen[guid] then store[guid]=nil end end
+    end
     for qid,states in pairs(pending) do
         for guid in pairs(states) do if not seen[guid] then states[guid]=nil end end
         if not next(states) then pending[qid]=nil end
@@ -299,6 +330,16 @@ local function onSyncEvent(_,event,a,b,c,d)
     elseif event=="QUEST_ACCEPTED" then
         local qid=questID(b) and b or a
         if questID(qid) then departed[qid]=nil;announce(qid,"O") end
+    elseif event=="QUEST_COMPLETE" then
+        -- This event can be a quest dialog; only announce after the quest log confirms ready.
+        scanLocal()
+        if not queuedCompleteScan and C_Timer and C_Timer.After then
+            queuedCompleteScan=true
+            C_Timer.After(.2,function()
+                queuedCompleteScan=nil
+                if activeSync() then scanLocal() end
+            end)
+        end
     elseif event=="BAG_UPDATE_DELAYED" and C_Timer and C_Timer.After then
         -- Allow the quest log to catch up with the changed bag contents.
         if not queuedBagScan then
@@ -319,7 +360,7 @@ function AT.InitQuestPartySync()
         or not eq(call(C_ChatInfo.RegisterAddonMessagePrefix,PREFIX),true) then return end
     local frame=CreateFrame("Frame")
     for _,event in ipairs({"CHAT_MSG_ADDON","GROUP_ROSTER_UPDATE","PLAYER_ENTERING_WORLD",
-        "QUEST_LOG_UPDATE","QUEST_WATCH_UPDATE","BAG_UPDATE_DELAYED","QUEST_TURNED_IN","QUEST_REMOVED","QUEST_ACCEPTED"}) do
+        "QUEST_LOG_UPDATE","QUEST_WATCH_UPDATE","BAG_UPDATE_DELAYED","QUEST_COMPLETE","QUEST_TURNED_IN","QUEST_REMOVED","QUEST_ACCEPTED"}) do
         pcall(frame.RegisterEvent,frame,event)
     end
     frame:SetScript("OnEvent",onSyncEvent)
@@ -328,6 +369,7 @@ end
 
 function AT.ClearRankQuestPartyProgress()
     cache,pending,remote,outbound,departed={},{},{},{},{}
+    nativeDone,waitingForNativeReset={},{}
     sentFor=nil
 end
 
@@ -349,12 +391,27 @@ function AT.GetQuestPartySnapshot(qid,force)
     for _,member in ipairs(roster) do
         local shared=remote[member.guid] and remote[member.guid][qid]
         local liveCounts=is(shared,"table")
-        local data=liveCounts and shared or reported[member.guid]
+        local native=reported[member.guid]
+        local seenDone=nativeDone[member.guid]
+        local blocked=waitingForNativeReset[member.guid]
+        if blocked and blocked[qid] and native and native.needs then blocked[qid]=nil end
+        local mayUseNative=not (blocked and blocked[qid])
+        local nativeCompletes=liveCounts and mayUseNative and coversSharedObjectives(native,shared)
+        if nativeCompletes and not member.offline then
+            if not seenDone then seenDone={};nativeDone[member.guid]=seenDone end
+            seenDone[qid]=true
+        end
+        local data=liveCounts and shared or (mayUseNative and native or nil)
         if member.offline then
             member.status="Offline"
         elseif not liveCounts and shared then
             snapshot.hasSharedResolution=true
             member.status=shared=="D" and "Objectives complete" or "No longer on this quest"
+        elseif liveCounts and seenDone and seenDone[qid] then
+            -- An old addon progress packet must not hold the HUD after the client sees completion.
+            snapshot.hasSharedResolution=true
+            member.counts=nativeCompletes and native.counts or nil
+            member.status="Objectives complete"
         elseif data and data.needs then
             if liveCounts then
                 snapshot.hasSharedResolution=true -- render fresh rows, not the stock tooltip
@@ -408,4 +465,10 @@ end
 function AT.TrimRankQuestPartyProgress(held)
     for qid in pairs(cache) do if not held[qid] then cache[qid]=nil end end
     for qid in pairs(pending) do if not held[qid] then pending[qid]=nil end end
+    for _,store in ipairs({nativeDone,waitingForNativeReset}) do
+        for guid,entries in pairs(store) do
+            for qid in pairs(entries) do if not held[qid] and not (remote[guid] and remote[guid][qid]) then entries[qid]=nil end end
+            if not next(entries) then store[guid]=nil end
+        end
+    end
 end

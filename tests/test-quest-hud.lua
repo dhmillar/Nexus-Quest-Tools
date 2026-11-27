@@ -2194,6 +2194,28 @@ do
     shown.scripts.OnLeave(shown)
     remoteState("L:5010","Kara-C")
     assert(not find("Forest hidden quest"),"real HUD should remove retained row on sync despite stale native counts")
+    -- Repro: an older shared count survives, then the client reports last teammate complete.
+    AT.ClearRankQuestPartyProgress()
+    resetPartyQuest()
+    remoteState("P:5010:01:1/6/7,","Kara-A")
+    remoteState("D:5010","Kara-C")
+    assert(find("Forest hidden quest").partyOnly)
+    current[1]=7
+    now=now+1.4
+    areaTick()
+    assert(not find("Forest hidden quest"),"native exact completion clears the stale shared row on the regular ticker, no hover")
+    liveReport=false
+    remoteState("P:5010:01:1/6/7,","Kara-A")
+    assert(not find("Forest hidden quest"),"duplicate old progress must not invalidate confirmed completion")
+    AT.ClearRankQuestPartyProgress()
+    resetPartyQuest()
+    remoteState("P:5010:01:1/6/7,","Kara-A")
+    remoteState("D:5010","Kara-C")
+    local hovering=assert(find("Forest hidden quest"))
+    current[1]=7
+    hovering.scripts.OnEnter(hovering)
+    drain()
+    assert(not find("Forest hidden quest"),"hover seeing new completion queues the row refresh, it does not just update its own text")
     C_ChatInfo=origChat
     AT.ClearRankQuestPartyProgress()
     print("PASS completion message clears the real Rank Quest row only after the last teammate finishes")

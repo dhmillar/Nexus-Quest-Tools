@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.5.154 - 2026-11-26
+- Rank Quest reconciles confirmed native party completion with stale shared progress and refreshes retained quest rows without a hover. Completion events also trigger party sync after the log confirms readiness.
+
 ## 1.5.153 - 2026-11-26
 
 - Level Guide: map pickup areas for 31 additional item-start quests since 1.5.149, including Field Marshal's Log, Furlbrow's Deed and The Admiral's Orders. Separate patrol areas stay separate; approximate circles do not become exact GPS points.

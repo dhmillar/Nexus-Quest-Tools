@@ -687,6 +687,8 @@ local function drawQuestHover()
     tip:SetOwner(row,"ANCHOR_LEFT")
     if tip.ClearLines then tip:ClearLines() end
     local snapshot=call(AT.GetQuestPartySnapshot,state.qid,true)
+    local rendered=model and model.rows[state.qid]
+    if rendered and rendered.partyPending~=(snapshot and snapshot.pending or false) then pushRefresh() end
     local usingStock=false
     if snapshot and not snapshot.hasSharedResolution and not row.partyOnly and tip.SetQuestPartyProgress and C_TooltipInfo
         and C_TooltipInfo.GetQuestPartyProgress then

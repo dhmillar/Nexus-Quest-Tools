@@ -133,4 +133,24 @@ remote.db.questPartyProgress=false
 fire(reader,"CHAT_MSG_ADDON",prefix,"D:5010","PARTY","Kara-Realm")
 remote.db.questPartyProgress=true
 assert(not snapshot().hasSharedResolution)
+-- Explicit newer progress may reopen a completed quest. Do not reuse the pre-regression native complete row.
+local nativeBase=C_TooltipInfo.GetQuestPartyProgress
+local n1,n2=7,8
+C_TooltipInfo.GetQuestPartyProgress=function(q)
+    return {lines={{type=1,id=q},{type=2,guid="guid:party1"},{type=3,numFulfilled=n1,numRequired=n2}}}
+end
+fire(reader,"CHAT_MSG_ADDON",prefix,"P:5010:01:1/5/7,","PARTY","Kara-Realm")
+assert(snapshot().members[1].counts[1].current==5,"a different total is not proof of completion")
+n2=7
+assert(remote.GetQuestPartySnapshot(5010,true).members[1].status=="Objectives complete")
+fire(reader,"CHAT_MSG_ADDON",prefix,"P:5010:01:1/2/7,","PARTY","Kara-Realm")
+assert(snapshot().members[1].counts[1].current==2,"explicit regression beats an old complete tooltip")
+n1=2
+assert(remote.GetQuestPartySnapshot(5010,true).verifiedPending)
+n1=7
+assert(remote.GetQuestPartySnapshot(5010,true).members[1].status=="Objectives complete","later completion still resolves")
+C_TooltipInfo.GetQuestPartyProgress=nativeBase
+remote.db.questPartyProgress=true
+ready=true
+assert(send("Kara-Realm","QUEST_COMPLETE")==1,"quest completion triggers a verified party notification")
 print("PASS party completion sync: private to party, same-name realms, immediate stale-count override, no false sharing, reaccept, group and off toggle")
