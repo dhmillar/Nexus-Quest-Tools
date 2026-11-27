@@ -164,6 +164,11 @@ local function createBar()
     local face=label:GetFont()
     if face then label:SetFont(face,8,"OUTLINE") end
     bar.label=label
+    local name=bar:CreateFontString(nil,"OVERLAY","GameFontHighlightSmall")
+    name:SetPoint("BOTTOM",bar,"TOP",0,3)
+    name:SetShadowOffset(1,-1)
+    if face then name:SetFont(face,11,"OUTLINE") end
+    bar.petName=name
     bar:Hide()
     return bar
 end
@@ -253,7 +258,7 @@ local function petEvent(_,event,unit)
         restoreAllArt()
         AT.RefreshPetBar()
         if outdoor() and read(UnitExists,"pet","boolean")==true then filterExistingPlates() end
-    elseif (event=="UNIT_HEALTH" or event=="UNIT_MAXHEALTH") and unit=="pet" then
+    elseif (event=="UNIT_HEALTH" or event=="UNIT_MAXHEALTH" or event=="UNIT_NAME_UPDATE") and unit=="pet" then
         AT.RefreshPetBar()
     end
 end
@@ -276,6 +281,7 @@ function AT.RefreshPetBar()
         events:RegisterEvent("NAME_PLATE_UNIT_ADDED")
         events:RegisterEvent("NAME_PLATE_UNIT_REMOVED")
         events:RegisterUnitEvent("UNIT_PET","player")
+        events:RegisterUnitEvent("UNIT_NAME_UPDATE","pet")
         events:RegisterUnitEvent("UNIT_HEALTH","pet")
         events:RegisterUnitEvent("UNIT_MAXHEALTH","pet")
         listening=true
@@ -311,6 +317,7 @@ function AT.RefreshPetBar()
         renderStatus="WoW did not supply a displayable health value"
         return
     end
+    bar.petName:SetText(read(UnitName,"pet","string") or "")
     hideStockArt(plate,token or "pet")
     renderStatus=nil
     bar:Show()

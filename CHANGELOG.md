@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.198 - 2026-11-27
+
+- Shows only your active pet’s name above the Pet Bar, replacing the stock owner label. The health display and nameplate settings are unchanged.
+
 ## 1.5.197 - 2026-11-27
 
 - Fixes the Pet Bar rendering path when WoW supplies a pet nameplate but the addon fails to draw health. The bar no longer inherits stock nameplate transparency and supports the client’s native health display API when raw health cannot be used. Nameplate settings are unchanged.

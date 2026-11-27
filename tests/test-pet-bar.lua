@@ -1,5 +1,5 @@
 local AT={db={enabled=true}}
-local sample={health=100,maximum=100,present=true}
+local sample={health=100,maximum=100,present=true,name="Ember"}
 local watcher,bar,created,reads=nil,nil,0,0
 UIParent={}
 UIParent.GetEffectiveScale=function()return 1 end
@@ -45,8 +45,9 @@ listed={mine,other,npc,enemy,protected}
 function UnitExists(unit) assert(unit=="pet");return sample.present end
 function UnitHealth(unit) assert(unit=="pet");reads=reads+1;return sample.health end
 function UnitHealthMax(unit) assert(unit=="pet");return sample.maximum end
+function UnitName(unit) assert(unit=="pet");return sample.name,"Owner information" end
 local function region()
-    return {SetAllPoints=function()end,SetColorTexture=function()end,SetPoint=function()end,
+    return {SetAllPoints=function()end,SetColorTexture=function()end,SetPoint=function(self,...)self.point={...} end,
         SetWidth=function()end,SetHeight=function()end,SetShadowOffset=function()end,GetFont=function()return "MockFont" end,SetFont=function()end,
         SetText=function(self,v)self.text=v end}
 end
@@ -88,7 +89,13 @@ assert(cv.nameplateShowFriendlyPlayerPets=="1" and cv.nameplateShowFriendlyPlaye
     and cv.nameplateShowFriendlyNpcs=="0" and cv.nameplateShowFriends=="0")
 assert(other.UnitFrame.a==0 and mine.UnitFrame.a==0 and npc.UnitFrame.a==.8 and enemy.UnitFrame.a==.9 and protected.UnitFrame.a==1)
 assert(bar.height==8 and not bar.interactive and bar.range[1]==0 and bar.range[2]==100)
-assert(watcher.events.UNIT_HEALTH=="pet" and watcher.events.UNIT_PET=="player")
+assert(watcher.events.UNIT_HEALTH=="pet" and watcher.events.UNIT_PET=="player" and watcher.events.UNIT_NAME_UPDATE=="pet")
+assert(bar.petName.text=="Ember" and bar.petName.point[1]=="BOTTOM" and bar.petName.point[2]==bar and bar.petName.point[3]=="TOP")
+sample.name="Cinder"
+watcher.onEvent(watcher,"UNIT_NAME_UPDATE","target");assert(bar.petName.text=="Ember")
+watcher.onEvent(watcher,"UNIT_NAME_UPDATE","pet");assert(bar.petName.text=="Cinder" and mine.UnitFrame.a==0)
+sample.name=nil
+watcher.onEvent(watcher,"UNIT_NAME_UPDATE","pet");assert(bar.petName.text=="" and bar.shown)
 local function health(n,unit)
     sample.health=n
     watcher.onEvent(watcher,"UNIT_HEALTH",unit or "pet")
