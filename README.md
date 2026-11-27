@@ -1,5 +1,7 @@
 # Nexus Quest Tools for WoW Forever
 
+**Rank Quest party announcements (on by default):** When you finish one of your own kill or collection objectives in a party, NQT posts the quest and objective in party chat with your chosen Primary raid marker. Turn this off in **Rank Quest → Announce objective completion in party chat**. It does not replay previously completed objectives or post to raids.
+
 <img src="https://raw.githubusercontent.com/dhmillar/Nexus-Quest-Tools/main/assets/nexus-fire-cat.png" alt="Nexus Quest Tools fire-cat icon" width="112">
 
 Nexus Quest Tools is a World of Warcraft: Forever addon that organizes your quest log, tracks what you’re working on, and helps you get to the next objective. It also adds a reusable action-bar macro for named targets and an optional dungeon map view. Formerly Rankor Tools and Auto Track.

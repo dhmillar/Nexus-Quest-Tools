@@ -80,6 +80,7 @@ AT.Say=function() end
 assert(loadfile("NQT/SmartTarget.lua"))("NQT",AT)
 last.script.OnEvent(last,"PLAYER_LOGIN")
 local btn=assert(buttons.AutoTrackSmartTargetButton)
+local nameplateEvents=assert(last.script.OnEvent)
 assert(btn.shown and btn.template=="SecureActionButtonTemplate" and btn.alpha==0 and btn.mouse==false and not btn.label and not btn.anchored)
 assert(owner and overrides["1"] and overrides["SHIFT-1"] and not overrides["2"],"automatically reuse only the owned slot shortcuts")
 actionKind="spell";owner.script.OnEvent();assert(not next(overrides),"page or slot changes restore unmodified bindings")
@@ -172,6 +173,19 @@ pick("mouseover")
 C_NamePlate={GetNamePlates=function() return {{namePlateUnitToken="nameplate77"}} end}
 units={nameplate77={name="Jungle Raptor",tap=false}}
 pick("nameplate77")
+C_NamePlate={GetNamePlates=function() return {{UnitFrame={unit="nameplate88"}}} end}
+units={nameplate88={name="Jungle Raptor",tap=false}}
+pick("nameplate88")
+C_NamePlate=nil
+units={nameplate92={name="Jungle Raptor",tap=false}}
+nameplateEvents(nil,"NAME_PLATE_UNIT_ADDED","nameplate92")
+pick("nameplate92")
+nameplateEvents(nil,"NAME_PLATE_UNIT_REMOVED","nameplate92")
+assert(not press():find("nameplate92",1,true),"a removed token cannot be selected")
+units={softenemy={name="Jungle Raptor",tap=false}}
+pick("softenemy")
+units.softenemy.tap=true;assert(press()=="/stopmacro")
+C_NamePlate={GetNamePlates=function() return {{namePlateUnitToken="nameplate77"}} end}
 units={nameplate77={name="Jungle Raptor",tap=true}}
 assert(press()=="/stopmacro","do not recall a known denied match")
 units={nameplate77={name="Jungle Raptor"}} -- unreadable tap off-target

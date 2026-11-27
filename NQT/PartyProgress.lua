@@ -472,3 +472,152 @@ function AT.TrimRankQuestPartyProgress(held)
         end
     end
 end
+
+-- Visible party announcements are independent of the addon-to-addon sync.
+do
+    local Q=C_QuestLog
+    local prior,departed,queue={},{},{}
+    local active,scanPending,sendPending
+    local function id(v) return number(v) and v>0 and v%1==0 end
+    local function partyChat()
+        if not AT.db or AT.db.enabled==false or AT.db.rankQuestPartyAnnouncements~=true
+            or not eq(call(IsInGroup),true) or not eq(call(IsInRaid),false) then return nil end
+        return C_ChatInfo and C_ChatInfo.SendChatMessage or SendChatMessage
+    end
+    local function cleanChatText(text)
+        if not is(text,"string") then return end
+        text=text:gsub("|H.-|h(.-)|h","%1"):gsub("|[TA].-|[ta]","")
+            :gsub("|c%x%x%x%x%x%x%x%x",""):gsub("|r","")
+            :gsub("[%c|{}]"," "):gsub("%s+"," "):match("^%s*(.-)%s*$")
+        if text~="" then return text end
+    end
+    local function clip(text,max)
+        if #text<=max then return text end
+        local cut=max-3
+        while cut>0 and text:byte(cut+1)>=128 and text:byte(cut+1)<192 do cut=cut-1 end
+        return text:sub(1,cut).."..."
+    end
+    local function reset()
+        prior,departed,queue={},{},{}
+        active,scanPending,sendPending=nil,nil,nil
+    end
+    local function sendNext()
+        local send=partyChat()
+        if type(send)~="function" then reset();return end
+        local message=table.remove(queue,1)
+        if not message then return end
+        call(send,message,"PARTY")
+        -- Space out simultaneous completions; never resend an attempted message.
+        if C_Timer and C_Timer.After and not sendPending then
+            local ticket={}
+            sendPending=ticket
+            C_Timer.After(1,function()
+                if sendPending~=ticket then return end
+                sendPending=nil;sendNext()
+            end)
+        end
+    end
+    local function observe(qid,allow,title)
+        if not id(qid) or departed[qid] or eq(call(Q.IsOnQuest,qid),false) then return end
+        local list=call(Q.GetQuestObjectives,qid)
+        if not is(list,"table") then return end
+        local rows=prior[qid] or {}
+        prior[qid]=rows
+        for i=1,math.min(#list,32) do
+            local row=list[i]
+            local kind,total,count=field(row,"type"),field(row,"numRequired"),field(row,"numFulfilled")
+            local finished=field(row,"finished")
+            if (kind=="item" or kind=="monster") and id(total) and number(count) and count%1==0 then
+                local complete=finished==true or count>=total
+                local previous=rows[i]
+                if not previous or previous.kind~=kind or previous.total~=total then
+                    rows[i]={kind=kind,total=total,completed=complete}
+                elseif complete and not previous.completed then
+                    previous.completed=true
+                    if allow and #queue<12 then
+                        local label=cleanChatText(field(row,"text"))
+                        if label then
+                            label=label:gsub("%s*[(]?%s*%d+%s*/%s*%d+%s*[)]?%s*$",""):gsub("[%s:]+$","")
+                        end
+                        if not label or label=="" then label=kind=="item" and "Collection" or "Kills" end
+                        label=clip(label,120)..": "..total.."/"..total
+                        local quest=title or cleanChatText(call(Q.GetTitleForQuestID,qid)) or ("Quest #"..qid)
+                        local mark=call(AT.GetPrimaryMarker)
+                        if not id(mark) or mark>8 then mark=8 end
+                        queue[#queue+1]=("{rt%d} [%s] %s (complete)"):format(mark,clip(quest,85),clip(label,138))
+                    end
+                end
+            end
+        end
+    end
+    local function activeQuestScan(allow)
+        if not Q then return end
+        local count=call(Q.GetNumQuestLogEntries)
+        if not number(count) then return end
+        local seen={}
+        for i=1,math.min(count,512) do
+            local row=call(Q.GetInfo,i)
+            local qid=field(row,"questID")
+            if field(row,"isHeader")==false and id(qid) then
+                seen[qid]=true
+                observe(qid,allow,cleanChatText(field(row,"title")))
+            end
+        end
+        -- Preserve previously observed quests hidden by collapsed headers.
+        for qid in pairs(prior) do
+            if not seen[qid] then
+                if eq(call(Q.IsOnQuest,qid),true) then observe(qid,allow)
+                else prior[qid]=nil end
+            end
+        end
+        if not sendPending then sendNext() end
+    end
+    function AT.RefreshRankQuestAnnouncements()
+        reset()
+        if type(partyChat())=="function" then active=true;activeQuestScan(false) end
+    end
+    local function onEvent(_,event,a,b)
+        if type(partyChat())~="function" then reset();return end
+        if not active or event=="PLAYER_ENTERING_WORLD" then AT.RefreshRankQuestAnnouncements();return end
+        if event=="GROUP_ROSTER_UPDATE" then
+            queue={} -- do not replay pending chat to a changed roster
+            scanPending=nil
+            activeQuestScan(false)
+            return
+        end
+        if event=="QUEST_REMOVED" or event=="QUEST_TURNED_IN" then
+            if id(a) then departed[a]=true;prior[a]=nil end
+            return
+        end
+        if event=="QUEST_ACCEPTED" then
+            local qid=id(b) and b or a
+            if id(qid) then
+                departed[qid],prior[qid]=nil,nil
+                observe(qid,false)
+            end
+        elseif event=="QUEST_WATCH_UPDATE" and id(a) and eq(call(Q.IsOnQuest,a),true) then
+            observe(a,true)
+            if not sendPending then sendNext() end
+        end
+        if scanPending then return end
+        if not (C_Timer and C_Timer.After) then activeQuestScan(true);return end
+        local ticket={}
+        scanPending=ticket
+        C_Timer.After(.2,function()
+            if scanPending~=ticket then return end
+            scanPending=nil
+            if type(partyChat())=="function" then activeQuestScan(true) else reset() end
+        end)
+    end
+    function AT.InitRankQuestAnnouncements()
+        if not Q or type(Q.GetQuestObjectives)~="function" then return end
+        local f=CreateFrame("Frame")
+        for _,event in ipairs({"PLAYER_ENTERING_WORLD","GROUP_ROSTER_UPDATE","QUEST_LOG_UPDATE","QUEST_WATCH_UPDATE",
+            "QUEST_ACCEPTED","QUEST_REMOVED","QUEST_TURNED_IN","QUEST_COMPLETE","BAG_UPDATE_DELAYED"}) do
+            pcall(f.RegisterEvent,f,event)
+        end
+        f:SetScript("OnEvent",onEvent)
+        AT.RefreshRankQuestAnnouncements()
+    end
+end
+

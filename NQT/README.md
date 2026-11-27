@@ -1,6 +1,8 @@
 # Nexus Quest Tools 1.5.169
 For World of Warcraft: Forever 1.60.1 (interface 16001). Uses the Blizzard quest tracker and a native character-specific action-bar macro. Quest data and tracking are standalone; Questie and QuestieDB are not used.
 
+**Rank Quest party announcements (on by default):** When you finish one of your own kill or collection objectives in a party, NQT posts the quest and objective in party chat with your chosen Primary raid marker. Turn this off in **Rank Quest → Announce objective completion in party chat**. It does not replay previously completed objectives or post to raids.
+
 Quest-starting item popup (Rank Quest settings, on by default): when you acquire an item that starts an eligible quest, click its icon above your character to open the standard offer. The icon clears as soon as you accept. Right-click to dismiss without accepting. The addon does not accept quests for you.
 
 ## Install or update
@@ -57,7 +59,7 @@ When the optional Polestar 0.4.2.2+ (0.4.x) navigation engine is already loaded 
 
 ## Optional Smart Target key
 Smart Target has no floating screen button. Use the action-bar macro and its slot keybind, or the optional dedicated keybind below.
-In WoW Options > Keybindings > Nexus Quest Tools, bind Smart Target (out of combat). A plain press can learn a different selected hostile mob, including a corpse, but does not replace the saved name from a living mob tagged by another group. Smart Target skips known tagged mobs and picks a readable living match on the same press, using the current target, mouseover, focus, visible enemy nameplates, pet target, or party targets outside raids. Enable enemy nameplates for wider coverage. If WoW does not expose a usable alternate, Smart Target does not blindly reacquire a known tagged match. The regular action-bar macro can still recall by name, but WoW name recall cannot filter by tap status, so it no longer automatically marks or pings. Boss Target Marking and the manual marker macros are separate.
+In WoW Options > Keybindings > Nexus Quest Tools, bind Smart Target (out of combat). A plain press can learn a different selected hostile mob, including a corpse, but does not replace the saved name from a living mob tagged by another group. Smart Target skips known tagged mobs and picks a readable living match on the same press, using the current target, mouseover, focus, visible enemy nameplates, soft target, pet target, or party targets outside raids. Enable enemy nameplates for wider coverage. If WoW does not expose a usable alternate, Smart Target does not blindly reacquire a known tagged match. The regular action-bar macro can still recall by name, but WoW name recall cannot filter by tap status, so it no longer automatically marks or pings. Boss Target Marking and the manual marker macros are separate.
 
 
 ### Full map route

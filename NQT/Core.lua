@@ -22,6 +22,7 @@ local defaults = {
     bossAutoMark = false,
     bossMarkPing = false,
     questPartyProgress = true,
+    rankQuestPartyAnnouncements = true,
     showQuestMapPins = true,
     showObservedQuestGivers = false,
     rankQuestDropRates = true,
@@ -104,6 +105,7 @@ loader:SetScript("OnEvent", function(self, event, arg)
         safeInit("Minimap guidance", AT.InitQuestRoute)
         safeInit("Rank Quest", AT.InitQuestHUD)
         safeInit("Quest party sync", AT.InitQuestPartySync)
+        safeInit("Quest party announcements", AT.InitRankQuestAnnouncements)
         safeInit("Standalone map pins", AT.InitQuestMapPins)
         safeInit("Quest leftover bag marks", AT.InitQuestLeftovers)
         safeInit("Bag quest links", AT.InitBagQuestLink)

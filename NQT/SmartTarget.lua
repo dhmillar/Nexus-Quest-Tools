@@ -7,6 +7,7 @@ _G["BINDING_NAME_" .. BINDING] = "Smart Target (out of combat)"
 local smartButton
 local lastPress="No Smart Target press since reload."
 local pending
+local liveNameplates={}
 function AT.GetSmartTargetDiagnostic()
     return (smartButton and "Smart Target loaded. " or "Smart Target did not load. ")..lastPress
 end
@@ -133,6 +134,10 @@ local function candidate(unit,ctx)
     return {unit=unit,name=name,lo=lo,hi=hi}
 end
 
+local function isNameplateToken(token)
+    return readable(token) and type(token)=="string" and token:match("^nameplate%d+$")~=nil
+end
+
 local function closest()
     local candidates = {}
     local ctx=sampleContext()
@@ -151,12 +156,21 @@ local function closest()
     scan("target")
     scan("mouseover")
     scan("focus")
+    scan("softenemy") -- available only when the client exposes a soft enemy
+    local plateTokens={}
+    for token in pairs(liveNameplates) do plateTokens[#plateTokens+1]=token end
+    table.sort(plateTokens)
+    for _,token in ipairs(plateTokens) do scan(token) end
     local plates=read(C_NamePlate and C_NamePlate.GetNamePlates)
     if type(plates)=="table" then
         for _,plate in ipairs(plates) do
             local ok,token=pcall(function() return plate.namePlateUnitToken end)
             if not ok then token=nil end
-            if readable(token) and type(token)=="string" and token:match("^nameplate%d+$") then scan(token) end
+            if not isNameplateToken(token) then
+                ok,token=pcall(function() return plate.UnitFrame.unit end)
+                if not ok then token=nil end
+            end
+            if isNameplateToken(token) then scan(token) end
         end
     end
     for i = 1, 40 do scan("nameplate"..i) end
@@ -313,7 +327,16 @@ local function initialize()
     AT.RefreshSmartTargetButton()
     local visibility=CreateFrame("Frame")
     visibility:RegisterEvent("PLAYER_REGEN_ENABLED")
-    visibility:SetScript("OnEvent", AT.RefreshSmartTargetButton)
+    visibility:RegisterEvent("PLAYER_ENTERING_WORLD")
+    visibility:RegisterEvent("NAME_PLATE_UNIT_ADDED")
+    visibility:RegisterEvent("NAME_PLATE_UNIT_REMOVED")
+    visibility:SetScript("OnEvent",function(_,event,unit)
+        if event=="PLAYER_REGEN_ENABLED" then AT.RefreshSmartTargetButton()
+        elseif event=="PLAYER_ENTERING_WORLD" then liveNameplates={}
+        elseif isNameplateToken(unit) then
+            liveNameplates[unit]=event=="NAME_PLATE_UNIT_ADDED" and true or nil
+        end
+    end)
     return true
 end
 

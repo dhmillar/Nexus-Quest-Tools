@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.172 - 2026-11-27
+
+- **Rank Quest:** Announces newly completed kill or collection objectives in party chat with your chosen raid marker. On by default; switch it off in Rank Quest settings. It does not replay already-completed objectives.
+- **Smart Target:** Checks the client's current soft target and tracks visible nameplate tokens from game events, so more eligible mobs can be targeted, marked and pinged on the first press. If the mob is only revealed by native name search, marking and pinging still require a second press so tapped mobs are not tagged.
+
 ## 1.5.171 - 2026-11-27
 
 - **Smart Target:** Skip mobs tagged by another group and select a readable, eligible match on the same out-of-combat keypress. A tagged selection no longer overwrites the saved name.
