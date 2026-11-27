@@ -244,8 +244,6 @@ local function buildPanel()
     markerStatus = makeText(macro, "GameFontHighlightSmall", -149, "")
     targetStatus = makeText(macro, "GameFontHighlightSmall", -172, "")
 
-    option(macro, "showSmartTargetButton", "Show Smart Target button", -288, "Click this button to recall, mark, and ping on one press out of combat. Hiding it does not remove its keybinding.")
-
     option(rank, "questHUDEnabled", "Enable Rank Quest", -2, "Show the movable, zone-organized Rank Quest panel and hide the stock quest display.")
     option(rank, "questPartyProgress", "Quest Party Progress", -30, "Show the party progress Blizzard reports on hover, and keep shared quests visible while a party member still needs objectives.")
     option(rank, "questLeftoverMarks", "Mark leftover quest items in bags", -58, "Shows a trash badge for verified leftovers and an amber badge for items from a quest you dropped. Keep amber items if you plan to retry the quest. Never deletes anything.")
@@ -279,7 +277,7 @@ local function buildPanel()
             local ok, why = AT.PickupTargetMacro()
             if ok then
                 panel:Hide()
-                AT.Say("Click an empty action-bar slot. For regular mob markers and pings, click Smart Target or bind it directly.")
+                AT.Say("Click an empty action-bar slot. For regular mob markers and pings, use that slot keybind or bind Smart Target directly.")
             elseif why then AT.Say(why) end
         end
         refreshPanel()

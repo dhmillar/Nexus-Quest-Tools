@@ -6,14 +6,16 @@ local secret={}
 function issecretvalue(v) return v==secret end
 local combat=false
 function InCombatLockdown() return combat end
-function CreateFrame(_,name)
-    local f={script={},attr={}}
+function CreateFrame(_,name,_,template)
+    local f={script={},attr={},template=template}
     function f:SetScript(k,v) self.script[k]=v end
     function f:SetAttribute(k,v) self.attr[k]=v end
     function f:Hide() self.shown=false end
     function f:Show() self.shown=true end
     function f:SetSize() end
-    function f:SetPoint() end
+    function f:SetPoint() self.anchored=true end
+    function f:SetAlpha(v) self.alpha=v end
+    function f:EnableMouse(v) self.mouse=v end
     function f:SetText(text) self.label=text end
     function f:RegisterEvent() end
     function f:UnregisterEvent() end
@@ -78,13 +80,15 @@ AT.Say=function() end
 assert(loadfile("NQT/SmartTarget.lua"))("NQT",AT)
 last.script.OnEvent(last,"PLAYER_LOGIN")
 local btn=assert(buttons.AutoTrackSmartTargetButton)
-assert(btn.shown and btn.label=="Smart Target")
+assert(btn.shown and btn.template=="SecureActionButtonTemplate" and btn.alpha==0 and btn.mouse==false and not btn.label and not btn.anchored)
 assert(owner and overrides["1"] and overrides["SHIFT-1"] and not overrides["2"],"automatically reuse only the owned slot shortcuts")
 actionKind="spell";owner.script.OnEvent();assert(not next(overrides),"page or slot changes restore unmodified bindings")
 actionKind="macro";owner.script.OnEvent();assert(overrides["1"])
 AT.db.enabled=false;AT.RefreshSmartTargetBarKeys();assert(not next(overrides));AT.db.enabled=true;AT.RefreshSmartTargetBarKeys()
-AT.db.showSmartTargetButton=false; AT.RefreshSmartTargetButton(); assert(not btn.shown)
-AT.db.showSmartTargetButton=true; AT.RefreshSmartTargetButton(); assert(btn.shown)
+AT.db.showSmartTargetButton=false; AT.RefreshSmartTargetButton(); assert(btn.shown and btn.alpha==0)
+AT.db.showSmartTargetButton=true; AT.RefreshSmartTargetButton(); assert(btn.shown and btn.alpha==0 and not btn.anchored)
+AT.db.enabled=false; AT.RefreshSmartTargetButton(); assert(not btn.shown)
+AT.db.enabled=true; AT.RefreshSmartTargetButton(); assert(btn.shown and btn.mouse==false)
 local function press()
     btn.script.PreClick(btn,"LeftButton",false)
     action=btn.attr.macrotext

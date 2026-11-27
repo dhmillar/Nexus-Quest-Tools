@@ -18,7 +18,7 @@ function AT.NoteSmartMacroExecuted()
 end
 function AT.RefreshSmartTargetButton()
     if not smartButton or InCombatLockdown() then return end
-    if AT.db and AT.db.enabled~=false and AT.db.showSmartTargetButton~=false then
+    if AT.db and AT.db.enabled~=false then
         smartButton:Show()
     else
         smartButton:Hide()
@@ -227,11 +227,11 @@ end
 
 local function initialize()
     if InCombatLockdown() then return false end
-    local button=CreateFrame("Button",NAME,UIParent,"UIPanelButtonTemplate,SecureActionButtonTemplate")
+    -- Binding receiver only: no template art, screen anchor, or mouse hitbox.
+    local button=CreateFrame("Button",NAME,UIParent,"SecureActionButtonTemplate")
     button:Hide()
-    button:SetSize(104,24)
-    button:SetPoint("RIGHT",UIParent,"RIGHT",-14,0)
-    button:SetText("Smart Target")
+    button:SetAlpha(0)
+    button:EnableMouse(false)
     button:RegisterForClicks("AnyUp")
     button:SetAttribute("useOnKeyDown",false)
     button:SetAttribute("type","macro")

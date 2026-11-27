@@ -5,6 +5,7 @@ local ALL_ZONES,ALL_DUNGEONS={},{}
 local popupOpen,completedView,toolbarOpen=false,false,false
 local preferredCompleted,resolveStatusOnSelection=false,false
 local selectedDungeon
+local shareOpen,shareJob
 local searchWords,searchOpen={},false
 local itemSearchQuestID,settingItemSearch,itemSearchCollapsed
 local observedObjectives, highlights={},{}
@@ -485,6 +486,213 @@ end
 AT.BuildQuestHUDModel=build
 function AT.GetLevelGuideQuestLog() return model and model.rows end
 
+local function shareNotice(message)
+    local chat=DEFAULT_CHAT_FRAME
+    if chat and chat.AddMessage then chat:AddMessage("Rank Quest: "..message)
+    elseif print then print("Rank Quest: "..message) end
+end
+
+local function stopSharing(reason)
+    local job=shareJob
+    if not job then return end
+    shareJob=nil
+    if reason then shareNotice(reason.." ("..job.attempted.." attempted).")
+    elseif job.attempted==0 then shareNotice("No shareable quests in that selection.")
+    else
+        shareNotice("Tried to share "..job.attempted..(job.attempted==1 and " quest." or " quests.")
+            .." Party members must accept in WoW.")
+    end
+end
+
+local Share={rejected={},pending={}}
+
+function Share.value(fn,...)
+    local result=call(fn,...)
+    if ordinary(result) then return result end
+end
+
+function Share.roster()
+    local members={}
+    if Share.value(IsInGroup)~=true or Share.value(IsInRaid)==true then return members end
+    local n=Share.value(GetNumSubgroupMembers)
+    for i=1,id(n) and math.min(n,4) or 0 do
+        local unit="party"..i
+        local guid=Share.value(UnitGUID,unit)
+        local name=Share.value(GetUnitName,unit,true)
+        if not is(name,"string") then name=Share.value(UnitName,unit) end
+        if is(guid,"string") and is(name,"string") and name~="" then
+            members[#members+1]={unit=unit,guid=guid,name=name}
+        end
+    end
+    return members
+end
+
+function Share.key(roster)
+    local keys={}
+    for _,m in ipairs(roster) do keys[#keys+1]=m.guid end
+    table.sort(keys)
+    return table.concat(keys,"|")
+end
+
+function Share.missing(q,members)
+    local missing,unknown={},false
+    local rejected=Share.rejected[q]
+    local pending=Share.pending[q]
+    local now=Share.value(GetTime)
+    if pending and is(now,"number") and now>=pending.expires then
+        Share.pending[q]=nil;pending=nil
+    end
+    for _,m in ipairs(members) do
+        if not rejected or not rejected[m.guid] then
+            local has=Share.value(Q.IsUnitOnQuest,m.unit,q)
+            if not ordinary(has) then has=nil end
+            if has==true then
+                if pending then pending.members[m.guid]=nil end
+            elseif has==false and Share.value(UnitIsVisible,m.unit)==true and Share.value(UnitIsConnected,m.unit)==true then
+                if not pending or not pending.members[m.guid] then missing[#missing+1]=m end
+            else
+                unknown=true
+            end
+        end
+    end
+    if pending and not next(pending.members) then Share.pending[q]=nil end
+    return missing,unknown
+end
+
+function Share.lookup(message,template,members)
+    if not is(message,"string") or not is(template,"string") then return end
+    local first,last=template:find("%%1%$s")
+    if not first then first,last=template:find("%%s") end
+    if not first then return end
+    local function literal(str) return (str:gsub("([^%w])","%%%1")) end
+    local name=message:match("^"..literal(template:sub(1,first-1)).."(.+)"..literal(template:sub(last+1)).."$")
+    if not name then return end
+    name=name:gsub("|c%x%x%x%x%x%x%x%x",""):gsub("|r","")
+    name=name:match("|h%[([^%]]+)%]|h") or name
+    name=name:gsub("^%[",""):gsub("%]$","")
+    local result
+    for _,m in ipairs(members) do
+        local exact=m.name==name
+        local short=not name:find("-",1,true) and m.name:match("^[^-]+")==name
+        if exact or short then
+            if result then return end -- do not guess between identical short names
+            result=m
+        end
+    end
+    return result
+end
+
+function Share.feedback(message)
+    local f=Share.feedbackFor
+    if not f then return end
+    local now=Share.value(GetTime)
+    if not is(now,"number") or now>f.untilAt then return end
+    local match=Share.lookup(message,ERR_QUEST_PUSH_ALREADY_DONE_S,f.roster)
+    local reason=match and "already completed this quest."
+    if not match then
+        match=Share.lookup(message,ERR_QUEST_PUSH_INVALID_S,f.roster)
+        reason=match and "is not eligible for this quest."
+    end
+    if not match or not f.recipients[match.guid] then return end
+    local rejects=Share.rejected[f.q] or {}
+    if rejects[match.guid] then return end
+    Share.rejected[f.q]=rejects;rejects[match.guid]=true
+    f.recipients[match.guid]=nil
+    shareNotice(f.title..": "..match.name.." "..reason)
+    if Share.refresh then Share.refresh() end
+    if AT.RefreshQuestHUD then AT.RefreshQuestHUD() end
+end
+
+function Share.attempt(q,title,memberGUID)
+    if not Q or not (AT.db and AT.db.enabled and AT.db.questHUDEnabled)
+        or Share.value(IsInGroup)~=true or Share.value(InCombatLockdown)==true then return "stopped" end
+    local push=QuestLogPushQuest or Q.QuestLogPushQuest
+    local prior=Share.value(Q.GetSelectedQuest)
+    if not push or not (id(prior) or prior==0) or removedQuests[q] or Share.value(Q.IsOnQuest,q)==false
+        or Share.value(Q.IsPushableQuest,q)~=true then return end
+    local roster=Share.roster()
+    local key=Share.key(roster)
+    if Share.groupKey and key~=Share.groupKey then
+        Share.groupKey=key;Share.pending={};Share.rejected={};Share.feedbackFor=nil
+        return "stopped"
+    end
+    Share.groupKey=key
+    local missing=Share.missing(q,roster)
+    if #missing==0 then return end
+    if memberGUID then
+        local stillMissing=false
+        for _,m in ipairs(missing) do if m.guid==memberGUID then stillMissing=true;break end end
+        if not stillMissing then return end
+    end
+    local now=Share.value(GetTime)
+    if not is(now,"number") then return end
+    if Share.lastOffer and now<Share.lastOffer+4 then return "wait" end
+    Share.value(Q.SetSelectedQuest,q)
+    if Share.value(Q.GetSelectedQuest)~=q then return end
+    local recipients={}
+    for _,m in ipairs(missing) do recipients[m.guid]=true end
+    Share.feedbackFor={q=q,title=title,untilAt=now+2.5,roster=roster,recipients=recipients}
+    Share.pending[q]={members=recipients,expires=now+20}
+    Share.lastOffer=now
+    local ok,result=pcall(push)
+    if prior~=q and Share.value(Q.GetSelectedQuest)==q then Share.value(Q.SetSelectedQuest,prior) end
+    if not ok or ordinary(result) and result==false then
+        Share.pending[q],Share.feedbackFor=nil,nil
+        return "blocked"
+    end
+    return "attempted"
+end
+
+function Share.snapshot(scope)
+    local z,name=playerZone()
+    if logCache and not logCache.full then logDirty=true end
+    local snapshot=build(z,name)
+    local bucket=snapshot.currentDungeon or snapshot.zones[z]
+    local roster,rows,unknown=Share.roster(),{},false
+    for q,row in pairs(snapshot.rows) do
+        local matches=scope=="all" or scope=="dungeons" and row.dungeon or scope=="zone" and bucket and bucket.rows[q]
+        if matches and not row.partyOnly and Share.value(Q.IsPushableQuest,q)==true then
+            local missing,uncertain=Share.missing(q,roster)
+            unknown=unknown or uncertain
+            if #missing>0 then rows[#rows+1]={qid=q,title=row.title,order=row.logIndex or 0,missing=missing} end
+        end
+    end
+    table.sort(rows,function(a,b) return a.order==b.order and a.qid<b.qid or a.order<b.order end)
+    return rows,unknown,#roster
+end
+
+local function shareQuests(scope)
+    if shareJob then shareNotice("A share batch is already running.");return end
+    if Share.value(IsInGroup)~=true or Share.value(IsInRaid)==true then shareNotice("Join a party to share quests.");return end
+    if Share.value(InCombatLockdown)==true then shareNotice("Share quests after combat.");return end
+    if not (Q and Q.IsUnitOnQuest and Q.IsPushableQuest and C_Timer and C_Timer.After) then
+        shareNotice("Bulk quest verification is unavailable on this client.");return
+    end
+    local rows=Share.snapshot(scope)
+    local job={attempted=0,next=1}
+    shareJob=job
+    local function step()
+        if shareJob~=job then return end
+        while job.next<=#rows do
+            local row=rows[job.next]
+            local result=Share.attempt(row.qid,row.title)
+            if result=="wait" then C_Timer.After(4,step);return end
+            job.next=job.next+1
+            if result=="stopped" then stopSharing("Sharing stopped");return end
+            if result=="blocked" then stopSharing("WoW blocked a share; the rest of the batch was stopped");return end
+            if result=="attempted" then
+                job.attempted=job.attempted+1
+                if Share.refresh then Share.refresh() end
+                if job.next<=#rows then C_Timer.After(4,step) else stopSharing() end
+                return
+            end
+        end
+        stopSharing()
+    end
+    step()
+end
+
+
 local function progressChanged(qid)
     local current=Q and call(Q.GetQuestObjectives,qid)
     if not is(current,"table") then return false end
@@ -620,6 +828,83 @@ local function setExtent(scroll,child,height)
     local limit=math.max(0,extent-visible)
     if current>limit then scroll:SetVerticalScroll(limit) end
 end
+
+function Share.refresh()
+    local f=Share.window
+    if not f or not f:IsShown() then return end
+    local rows,unknown,members=Share.snapshot("all")
+    local status
+    if members==0 then status="Join a party to verify quests."
+    elseif #rows==0 then status="No verified quests to share right now."
+    else status=#rows..(#rows==1 and " quest available to offer" or " quests available to offer") end
+    if unknown then status=status.." Some party progress is unavailable." end
+    f.summary:SetText(status)
+    for i,data in ipairs(rows) do
+        local row=f.rows[i]
+        if not row then
+            row=CreateFrame("Frame",nil,f.content)
+            row:SetSize(394,46);row:SetPoint("TOPLEFT",f.content,"TOPLEFT",0,-(i-1)*47)
+            local fill=box(row);fill:SetAllPoints(row);color(fill,.14,.19,.18,.50)
+            row.title=text(row,"GameFontNormal");row.title:SetPoint("TOPLEFT",10,-7);row.title:SetWidth(305)
+            row.title:SetJustifyH("LEFT");row.title:SetWordWrap(false)
+            row.detail=text(row,"GameFontHighlightSmall");row.detail:SetPoint("TOPLEFT",10,-25);row.detail:SetWidth(305)
+            row.detail:SetJustifyH("LEFT");row.detail:SetWordWrap(false)
+            row.action=button(row,"Share",0,0,58,25,function()
+                if not row.qid or not f:IsShown() then return end
+                if shareJob then shareNotice("Stop or finish the bulk share first.");return end
+                local chosen,title=row.qid,row.title:GetText()
+                local result=Share.attempt(chosen,title)
+                if result=="attempted" then shareNotice("Offer attempted: "..title)
+                elseif result=="wait" then shareNotice("Wait a moment before sending another offer.")
+                elseif result=="stopped" then shareNotice("Sharing is unavailable during combat or outside a party.")
+                elseif result=="blocked" then shareNotice("WoW blocked that share.")
+                else shareNotice("No verified recipient still needs that quest.") end
+                Share.refresh()
+            end)
+            row.action:ClearAllPoints();row.action:SetPoint("RIGHT",row,"RIGHT",-8,0)
+            row.action:RegisterForClicks("LeftButtonUp")
+            f.rows[i]=row
+        end
+        local names={}
+        for _,m in ipairs(data.missing) do names[#names+1]=m.name end
+        row.qid=data.qid
+        row.title:SetText(data.title);row.detail:SetText("Not in log: "..table.concat(names,", "))
+        row:Show()
+    end
+    for i=#rows+1,#f.rows do f.rows[i].qid=nil; f.rows[i]:Hide() end
+    setExtent(f.scroll,f.content,#rows*47)
+end
+
+function Share.open()
+    if not Share.window then
+        local f=CreateFrame("Frame","NQTShareVerify",UIParent)
+        f:SetSize(430,367);f:SetPoint("CENTER");f:SetFrameStrata("DIALOG")
+        f:SetClampedToScreen(true);f:EnableMouse(true);f:SetMovable(true)
+        local back=box(f);back:SetAllPoints(f);color(back,.042,.065,.061,.99)
+        local rule=box(f,"ARTWORK");rule:SetHeight(2);rule:SetPoint("TOPLEFT",12,-36)
+        rule:SetPoint("TOPRIGHT",-12,-36);color(rule,.34,.68,.40,.8)
+        local title=text(f,"GameFontNormalLarge");title:SetPoint("TOPLEFT",16,-12);title:SetText("Share Verify")
+        f.summary=text(f,"GameFontHighlightSmall");f.summary:SetPoint("TOPLEFT",16,-47)
+        f.summary:SetWidth(398);f.summary:SetHeight(31);f.summary:SetWordWrap(true);f.summary:SetJustifyH("LEFT")
+        local close=button(f,"X",0,0,24,22,function() f:Hide() end)
+        close:ClearAllPoints();close:SetPoint("TOPRIGHT",-10,-9);close:RegisterForClicks("LeftButtonUp")
+        local drag=CreateFrame("Frame",nil,f);drag:SetPoint("TOPLEFT");drag:SetPoint("TOPRIGHT",-44,0);drag:SetHeight(36)
+        drag:EnableMouse(true);drag:SetScript("OnMouseDown",function(_,key)
+            if key=="LeftButton" and f.StartMoving then f:StartMoving() end
+        end)
+        drag:SetScript("OnMouseUp",function() if f.StopMovingOrSizing then f:StopMovingOrSizing() end end)
+        f.scroll=wheelFrame(f,65);f.scroll:SetPoint("TOPLEFT",16,-83);f.scroll:SetPoint("BOTTOMRIGHT",-16,16)
+        f.content=CreateFrame("Frame",nil,f.scroll);f.content:SetSize(394,2)
+        f.scroll:SetScrollChild(f.content)
+        f.rows={}
+        Share.window=f
+        if type(UISpecialFrames)=="table" then UISpecialFrames[#UISpecialFrames+1]="NQTShareVerify" end
+    end
+    Share.window:Show()
+    Share.refresh()
+end
+
+
 
 local function pushRefresh()
     if refreshPending then return end
@@ -1236,6 +1521,7 @@ local function renderObjectives(b,row,width,theme,hasItem,hasDetail)
         if not f then f=text(b,"GameFontHighlightSmall"); f:SetWordWrap(true);b.objectives[used]=f end
         local lineTop=height
         f:ClearAllPoints()
+        f:SetWordWrap(true)
         f:SetPoint("TOPLEFT",12+indent,-lineTop)
         f:SetWidth(math.max(90,width-(hasItem and 62 or 24)-indent))
         applyTypography(f,theme,10,"GameFontHighlightSmall")
@@ -1377,7 +1663,12 @@ local function renderObjectives(b,row,width,theme,hasItem,hasDetail)
         end
     end
     local partyEnabled=AT.db.questPartyProgress~=false
-    local showParty=partyEnabled and inlineParty and row.partyPending
+    local showParty=partyEnabled and inlineParty
+    local missing,missingGUIDs={},{}
+    if showParty and not row.partyOnly and Share.value(Q.IsPushableQuest,row.id)==true then
+        missing=Share.missing(row.id,Share.roster())
+        for _,member in ipairs(missing) do missingGUIDs[member.guid]=true end
+    end
     local function partyLine(line,indent)
         if theme.questie then add(line,indent,.56,.90,.87)
         else add(line,indent,.12,.35,.32) end
@@ -1402,16 +1693,68 @@ local function renderObjectives(b,row,width,theme,hasItem,hasDetail)
             end
         end
     end
-    if showParty then
+    if showParty and row.partyPending then
         for _,member in ipairs(row.party and row.party.members or {}) do
             local counts=member.counts or member.lastCounts
             local current,total=0,0
             for _,o in ipairs(counts or {}) do current,total=current+o.current,total+o.total end
-            if total>current then
+            if total>current and not missingGUIDs[member.guid] then
                 local qualifier=member.lastCounts and " (last reported)" or member.countsPartial and " (reported objectives)" or ""
                 partyLine(member.name.."  "..current.."/"..total..qualifier,0)
             end
         end
+    end
+    b.partyShareButtons=b.partyShareButtons or {}
+    for i,member in ipairs(missing) do
+        local label,lineTop,lineHeight=add(member.name.."  -  Not on quest",0,1,.31,.29)
+        if not theme.questie then label:SetTextColor(.72,.16,.12) end
+        label:SetWordWrap(false)
+        local cap=math.max(70,label:GetWidth()-22)
+        label:SetWidth(cap)
+        local labelWidth=call(label.GetUnboundedStringWidth,label) or cap
+        if not is(labelWidth,"number") then labelWidth=cap end
+        local arrow=b.partyShareButtons[i]
+        if not arrow then
+            arrow=CreateFrame("Button",nil,b)
+            arrow:RegisterForClicks("LeftButtonUp");arrow:EnableMouse(true)
+            arrow:SetSize(18,18);arrow:SetFrameLevel(b:GetFrameLevel()+3)
+            local icon=box(arrow,"ARTWORK");icon:SetAllPoints(arrow)
+            icon:SetTexture("Interface\\AddOns\\NQT\\ShareArrow.tga")
+            arrow:SetScript("OnEnter",function(self)
+                if not self.memberName or not GameTooltip then return end
+                GameTooltip:SetOwner(self,"ANCHOR_TOP");GameTooltip:SetText("Offer quest to "..self.memberName)
+                GameTooltip:AddLine("WoW shares with eligible party members.",.8,.88,.85,true);GameTooltip:Show()
+            end)
+            arrow:SetScript("OnLeave",function(self)
+                if GameTooltip and GameTooltip.IsOwned and GameTooltip:IsOwned(self) then GameTooltip:Hide() end
+            end)
+            arrow:SetScript("OnClick",function(self)
+                if not (inlineParty and AT.db and AT.db.questPartyProgress~=false and self.questID==b.qid
+                    and self.memberGUID and self:IsVisible()) then return end
+                if shareJob then shareNotice("Stop or finish the bulk share first.");return end
+                local title,name=self.questTitle,self.memberName
+                local result=Share.attempt(self.questID,title,self.memberGUID)
+                if result=="attempted" then shareNotice("Group offer attempted: "..title)
+                elseif result=="wait" then shareNotice("Wait a moment before sending another offer.")
+                elseif result=="stopped" then shareNotice("Sharing is unavailable during combat or outside a party.")
+                elseif result=="blocked" then shareNotice("WoW blocked that share.")
+                else shareNotice(name.." is no longer a verified recipient.") end
+                AT.RefreshQuestHUD()
+                Share.refresh()
+            end)
+            b.partyShareButtons[i]=arrow
+        end
+        arrow.questID,arrow.questTitle,arrow.memberGUID,arrow.memberName=row.id,row.title,member.guid,member.name
+        arrow:ClearAllPoints()
+        arrow:SetPoint("LEFT",label,"LEFT",math.min(cap,labelWidth)+4,0)
+        arrow:Show()
+        height=math.max(height,lineTop+math.max(18,lineHeight)+2)
+    end
+    for i=#missing+1,#b.partyShareButtons do
+        local arrow=b.partyShareButtons[i]
+        arrow.questID,arrow.questTitle,arrow.memberGUID,arrow.memberName=nil,nil,nil,nil
+        if GameTooltip and GameTooltip.IsOwned and GameTooltip:IsOwned(arrow) then GameTooltip:Hide() end
+        arrow:Hide()
     end
     for i=used+1,#b.objectives do
         b.objectives[i]:Hide()
@@ -1770,8 +2113,13 @@ local function arrange()
     local minimum=82+offset*4
     hud.statusFilter:SetWidth(is(statusWidth,"number") and math.max(minimum,math.ceil(statusWidth+14)) or minimum)
     local partyEnabled=not AT.db or AT.db.questPartyProgress~=false
-    for _,control in ipairs({hud.palette,hud.statusFilter,hud.smaller,hud.larger,hud.zoneButton,hud.guideButton}) do
+    for _,control in ipairs({hud.palette,hud.statusFilter,hud.smaller,hud.larger,hud.zoneButton,hud.guideButton,hud.shareButton}) do
         control:SetShown(toolbarOpen)
+    end
+    hud.shareMenu:SetShown(toolbarOpen and shareOpen==true)
+    if shareOpen then
+        hud.cancelShares:SetShown(shareJob~=nil)
+        hud.shareMenu:SetHeight(shareJob and 123 or 99)
     end
     hud.collapse:Show()
     hud.partyToggle:SetShown(toolbarOpen and partyEnabled)
@@ -2164,7 +2512,7 @@ function AT.RefreshQuestHUD()
     if not AT.db or not AT.db.enabled or not AT.db.questHUDEnabled then
         if AT.SetRankQuestItemTargets then AT.SetRankQuestItemTargets() end
         hud.search:ClearFocus()
-        popupOpen,toolbarOpen=false,false; selectedDungeon=nil; hud:Hide(); observedObjectives,highlights,partyRetained,partyTurnedIn={},{},{},{}; stopQuestHover(); AT.SyncBlizzardQuestHUD(); return
+        popupOpen,toolbarOpen,shareOpen=false,false,false; stopSharing(); if Share.window then Share.window:Hide() end; selectedDungeon=nil; hud:Hide(); observedObjectives,highlights,partyRetained,partyTurnedIn={},{},{},{}; stopQuestHover(); AT.SyncBlizzardQuestHUD(); return
     end
     hud:Show()
     local pos,name=playerZone()
@@ -2188,7 +2536,7 @@ function AT.RefreshQuestHUD()
     end
     if not AT.db.questHUDCollapsed then arrange() else
         if AT.SetRankQuestItemTargets then AT.SetRankQuestItemTargets() end
-        popupOpen,toolbarOpen=false,false;stopQuestHover()
+        popupOpen,toolbarOpen,shareOpen=false,false,false;stopQuestHover()
     end
     AT.SyncBlizzardQuestHUD()
 end
@@ -2257,13 +2605,18 @@ local function releaseOnOutsideClick()
     -- button's own mouse-up click. Use the displayed HUD hit area as well.
     local inside=containsMouse(hud,target) or pointerOver(hud.body)
         or (hud.zoneMenu:IsShown() and pointerOver(hud.zoneMenu))
+        or (hud.shareMenu:IsShown() and pointerOver(hud.shareMenu))
     if toolbarOpen and not inside then
-        toolbarOpen,popupOpen=false,false
+        toolbarOpen,popupOpen,shareOpen=false,false,false
         arrange()
     elseif popupOpen and not (containsMouse(hud.zoneMenu,target) or pointerOver(hud.zoneMenu)
         or containsMouse(hud.zoneButton,target) or pointerOver(hud.zoneButton)) then
         popupOpen=false
         arrange()
+    end
+    if shareOpen and not (containsMouse(hud.shareMenu,target) or pointerOver(hud.shareMenu)
+        or containsMouse(hud.shareButton,target) or pointerOver(hud.shareButton)) then
+        shareOpen=false;arrange()
     end
     local search=hud.search
     if searchOpen and not (containsMouse(search,target) or pointerOver(search)) then
@@ -2315,7 +2668,7 @@ function AT.InitQuestHUD()
         if not clicked or not pointerOver(header) then return end
         toolbarOpen=not toolbarOpen
         if toolbarOpen then hideHeaderTip(header) end
-        if not toolbarOpen then popupOpen=false end
+        if not toolbarOpen then popupOpen,shareOpen=false,false end
         arrange()
     end)
     header:SetScript("OnDragStart",function()
@@ -2458,6 +2811,7 @@ function AT.InitQuestHUD()
     hud.smaller,hud.larger=less,more
     local zoneButton=button(body,"Zones",0,0,78,zoneMenuLayout.buttonHeight,function()
         popupOpen=not popupOpen
+        shareOpen=false
         if popupOpen then
             if logCache and not logCache.full then logDirty=true end
             hud.zoneMenuScroll:SetVerticalScroll(0)
@@ -2470,7 +2824,7 @@ function AT.InitQuestHUD()
     chevron:SetPoint("RIGHT",-7,0);chevron:SetText("▾")
     hud.zoneButton=zoneButton
     local guideButton=button(body,"",0,0,22,20,function()
-        if popupOpen then popupOpen=false;arrange() end
+        if popupOpen or shareOpen then popupOpen,shareOpen=false,false;arrange() end
         call(AT.ToggleLevelGuide)
     end)
     guideButton:ClearAllPoints();guideButton:SetPoint("RIGHT",zoneButton,"LEFT",-5,0)
@@ -2489,9 +2843,50 @@ function AT.InitQuestHUD()
         if GameTooltip and GameTooltip.IsOwned and GameTooltip:IsOwned(self) then GameTooltip:Hide() end
     end)
     hud.guideButton=guideButton
-    more:ClearAllPoints();more:SetPoint("RIGHT",guideButton,"LEFT",-4,0)
+    local shareButton=button(body,"",0,0,22,20,function()
+        if not toolbarOpen then return end
+        shareOpen=not shareOpen
+        popupOpen=false
+        arrange()
+    end)
+    shareButton:ClearAllPoints();shareButton:SetPoint("RIGHT",guideButton,"LEFT",-4,0)
+    local shareIcon=shareButton:CreateTexture(nil,"ARTWORK")
+    shareIcon:SetSize(17,17);shareIcon:SetPoint("CENTER")
+    shareIcon:SetTexture("Interface\\AddOns\\NQT\\ShareArrow.tga")
+    shareButton:SetScript("OnEnter",function(self)
+        if not GameTooltip then return end
+        GameTooltip:SetOwner(self,"ANCHOR_TOP");GameTooltip:SetText("Share Quests")
+        GameTooltip:AddLine("Offer quests to your current party.",.82,.89,.83,true);GameTooltip:Show()
+    end)
+    shareButton:SetScript("OnLeave",function(self)
+        if GameTooltip and GameTooltip.IsOwned and GameTooltip:IsOwned(self) then GameTooltip:Hide() end
+    end)
+    hud.shareButton=shareButton
+    local shareMenu=CreateFrame("Frame",nil,body)
+    shareMenu:SetSize(192,99);shareMenu:SetPoint("TOPRIGHT",shareButton,"BOTTOMRIGHT",0,-3)
+    shareMenu:SetClampedToScreen(true);shareMenu:EnableMouse(true);shareMenu:SetFrameStrata("HIGH")
+    if shareMenu.SetFrameLevel and body.GetFrameLevel then shareMenu:SetFrameLevel(body:GetFrameLevel()+14) end
+    local shareBack=box(shareMenu);shareBack:SetAllPoints(shareMenu);color(shareBack,.033,.043,.048,.98)
+    hud.shareMenu=shareMenu
+    local function shareChoice(title,y,action)
+        local choice=button(shareMenu,title,5,y,182,20,function()
+            if not shareOpen then return end
+            shareOpen=false;arrange()
+            action()
+        end)
+        choice:RegisterForClicks("LeftButtonUp")
+        choice.label:ClearAllPoints();choice.label:SetPoint("LEFT",9,0)
+        return choice
+    end
+    shareChoice("Share All Quests",-5,function() shareQuests("all") end)
+    shareChoice("Share Zone Quests",-28,function() shareQuests("zone") end)
+    shareChoice("Share All Dungeon Quests",-51,function() shareQuests("dungeons") end)
+    shareChoice("Share Verify",-74,Share.open)
+    hud.cancelShares=shareChoice("Stop Sharing",-97,function() stopSharing("Sharing cancelled") end)
+    shareMenu:Hide()
+    more:ClearAllPoints();more:SetPoint("RIGHT",shareButton,"LEFT",-4,0)
     less:ClearAllPoints();less:SetPoint("RIGHT",more,"LEFT",-4,0)
-    for _,control in ipairs({collapse,palette,statusFilter,partyToggle,less,more,guideButton,zoneButton}) do
+    for _,control in ipairs({collapse,palette,statusFilter,partyToggle,less,more,shareButton,guideButton,zoneButton}) do
         control:RegisterForClicks("LeftButtonUp")
         if control.SetFrameLevel and header.GetFrameLevel then control:SetFrameLevel(header:GetFrameLevel()+2) end
     end
@@ -2553,11 +2948,24 @@ function AT.InitQuestHUD()
     hud:SetScript("OnSizeChanged",pushRefresh)
     local watcher=CreateFrame("Frame")
     for _,event in ipairs({"PLAYER_ENTERING_WORLD","QUEST_ACCEPTED","QUEST_REMOVED","QUEST_COMPLETE","QUEST_TURNED_IN","QUEST_LOG_UPDATE",
-        "QUEST_WATCH_UPDATE","BAG_UPDATE_DELAYED","GET_ITEM_INFO_RECEIVED","GROUP_ROSTER_UPDATE","QUEST_DATA_LOAD_RESULT","PLAYER_REGEN_ENABLED","PLAYER_LEVEL_UP","PLAYER_MAP_CHANGED","ZONE_CHANGED","ZONE_CHANGED_INDOORS","ZONE_CHANGED_NEW_AREA","SUPER_TRACKING_CHANGED","GLOBAL_MOUSE_DOWN"}) do
+        "QUEST_WATCH_UPDATE","BAG_UPDATE_DELAYED","GET_ITEM_INFO_RECEIVED","GROUP_ROSTER_UPDATE","QUEST_DATA_LOAD_RESULT","PLAYER_REGEN_DISABLED","PLAYER_REGEN_ENABLED","PLAYER_LEVEL_UP","PLAYER_MAP_CHANGED","ZONE_CHANGED","ZONE_CHANGED_INDOORS","ZONE_CHANGED_NEW_AREA","SUPER_TRACKING_CHANGED","GLOBAL_MOUSE_DOWN","CHAT_MSG_SYSTEM","UI_ERROR_MESSAGE","UNIT_QUEST_LOG_CHANGED"}) do
         pcall(watcher.RegisterEvent,watcher,event)
     end
     watcher:SetScript("OnEvent",function(_,event,first,second)
         if event=="GLOBAL_MOUSE_DOWN" then releaseOnOutsideClick();return end
+        if event=="CHAT_MSG_SYSTEM" or event=="UI_ERROR_MESSAGE" then
+            Share.feedback(event=="CHAT_MSG_SYSTEM" and first or second);return
+        end
+        if event=="GROUP_ROSTER_UPDATE" then
+            local key=Share.key(Share.roster())
+            if key~=Share.groupKey then
+                Share.groupKey=key;Share.pending={};Share.rejected={};Share.feedbackFor=nil
+                stopSharing("Sharing stopped because the party changed")
+            end
+        elseif event=="PLAYER_REGEN_DISABLED" or event=="PLAYER_ENTERING_WORLD" then
+            Share.feedbackFor=nil;stopSharing("Sharing stopped because combat started or the instance changed")
+        end
+        if event=="GROUP_ROSTER_UPDATE" or event=="UNIT_QUEST_LOG_CHANGED" then Share.refresh() end
         if not AT.char then return end
         if event=="QUEST_ACCEPTED" or event=="QUEST_REMOVED" or event=="QUEST_TURNED_IN" then logDirty=true end
         if (event=="QUEST_REMOVED" or event=="QUEST_TURNED_IN") and id(first) then
@@ -2582,6 +2990,7 @@ function AT.InitQuestHUD()
     if C_Timer and C_Timer.NewTicker then
         C_Timer.NewTicker(1.4,function()
             if not AT.db or not AT.db.enabled or not AT.db.questHUDEnabled or not model then return end
+            Share.refresh()
             local _,dungeon,insideDungeon=playerDungeon(call(M and M.GetBestMapForUnit,"player"))
             if playerZone()~=currentZone or (insideDungeon and (dungeon or true))~=currentDungeon
                 or next(partyRetained) or call(AT.IsQuestPartyProgressActive)==true then AT.RefreshQuestHUD()

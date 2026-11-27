@@ -4,7 +4,7 @@ local ui={}
 UIParent={}
 function CreateFrame(kind,_,parent,template)
     local f={kind=kind,parent=parent,template=template,attrs={},scripts={},shown=true}
-    for _,n in ipairs({"SetSize","SetPoint","SetFrameStrata","SetAllPoints","RegisterForClicks","RegisterEvent"}) do f[n]=function()end end
+    for _,n in ipairs({"SetAlpha","EnableMouse","SetSize","SetPoint","SetFrameStrata","SetAllPoints","RegisterForClicks","RegisterEvent"}) do f[n]=function()end end
     function f:UnregisterEvent() end
     function f:SetScript(k,v) self.scripts[k]=v end
     function f:SetAttribute(k,v) self.attrs[k]=v end

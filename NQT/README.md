@@ -1,4 +1,4 @@
-# Nexus Quest Tools 1.5.154
+# Nexus Quest Tools 1.5.158
 For World of Warcraft: Forever 1.60.1 (interface 16001). Uses the Blizzard quest tracker and a native character-specific action-bar macro. Optional compatibility with Questie.
 
 ## Install or update
@@ -35,7 +35,7 @@ Auto Track keeps the current accepted quest until its objectives are complete, o
 
 Right-click a quest and toggle its Auto Track exclusion. That choice is saved per character. An excluded quest is left to manual tracking, including after completion, until you re-enable it from its quest menu. If the quest disappears from the tracker, use /at excluded and /at include ID to restore it.
 
-Entry radius is 180 yards and the current focus keeps its lock through 225 yards. Only usable quest-location data can establish range. The addon skips protected updates during combat and catches up afterward.
+Auto-focus and the Rank Quest highlight recognize eligible objectives within 100 yards or when WoW confirms you are inside the objective area. The current focus stays locked through 125 yards so it does not bounce at the edge. Only usable quest-location data can establish range. The addon skips protected updates during combat and catches up afterward.
 
 ## Manual quest queue
 Ctrl+left-click quests in the Blizzard quest log, on-screen tracker, or compatible Questie tracker to add them to your personal tracking order. In the native floating All Objectives tracker, each queued quest shows a large white number in a cyan-rimmed badge over its existing circle on the left. Normal icons return when you remove quests from the tracking order. The title and objective text are unchanged. The maximized world-map quest log uses the same badge over its quest circles, without adding numbers to the objective text. In the floating tracker, Ctrl+left-click changes the order without opening the map. Ordinary left-click still opens the quest. Ctrl+left-click again to remove a quest; use Add to Tracking Order or Remove from Tracking Order on a quest's right-click menu if needed. Choose Reset Tracking Order to clear all entries, or type /at order to list your saved order. Queued quests take priority over nearby automatic focus, even if no distance is available. Finishing a queued quest advances to the next one.
@@ -54,6 +54,7 @@ When the optional Polestar 0.4.2.2+ (0.4.x) navigation engine is already loaded 
 
 
 ## Optional Smart Target key
+Smart Target has no floating screen button. Use the action-bar macro and its slot keybind, or the optional dedicated keybind below.
 In WoW Options > Keybindings > Nexus Quest Tools, bind Smart Target (out of combat). A plain press still learns a different selected mob, even from a hostile corpse. Repeated presses pick a living, eligible match from the current target, mouseover and visible enemy nameplates, using distance or available range checks. If no match is confirmed eligible, it does nothing. The regular action-bar macro can still recall by name, but WoW name recall cannot filter by tap status, so it no longer automatically marks or pings. Boss Target Marking and the manual marker macros are separate.
 
 
@@ -271,3 +272,9 @@ ForeverVerifiedEndpoints.lua is adapted under [CC BY-SA 4.0](https://creativecom
 ### Quest mob names and drops
 
 Rank Quest shows known corpse-drop mobs under the item. Click a listed mob or a verified kill objective to set the exact saved Auto Macro name; this doesn't target, mark, or ping the mob. The saved-name lock and combat restrictions still apply. Hover the owned action-bar macro to see its saved name and any available mob details. The bundled English creature names, observed classifications and levels, and named quest corpse-drop links in `QuestMobData.lua` were adapted from [Efficient Games' live Forever data](https://github.com/JIVESCORP/eg-link-output-wowf/tree/1339ce5600bbc2b12e8f1081e584f548f62fa57f/data/wowf) under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Drop-source names are observations, not an exhaustive list.
+
+### Share quests with your party
+Open the Rank Quest toolbar and click the green arrow next to Level Guide. Share All Quests checks your full log, Share Zone Quests uses Current Zone (or your current dungeon), and Share All Dungeon Quests checks every dungeon represented in your log. The batch attempts native offers one at a time; WoW decides recipient eligibility, and party members still accept each offer themselves. Use Stop Sharing in the same menu to cancel the remaining attempts.
+
+Share Verify lists quests party members are confirmed not to have in their logs. Unavailable status is skipped. The same verification applies to bulk sharing. Use Share next to a quest to make a native group offer. Accepting the quest removes that member as a candidate on refresh. When WoW reports that a matched recipient has completed the quest or is not eligible, the addon reports the reason and drops that recipient for the current party session. WoW decides who receives each native group offer; a pending or unanswered offer is not a rejection.
+With the party progress button on, a confirmed missing member appears in red with a green Share arrow on the quest row. That arrow makes a native group offer, not a private invite; the game controls delivery. The member returns to the usual progress display when their quest is confirmed.

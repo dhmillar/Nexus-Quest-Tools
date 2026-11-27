@@ -5,7 +5,6 @@ local defaults = {
     hideCompleted = true,
     quietTarget = false,
     pressSkull = true,
-    showSmartTargetButton = true,
     pingWithMarker = false,
     nextMobHint = true,
     reacquireEachPress = false,

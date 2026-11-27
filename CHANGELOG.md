@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.5.158 - 2026-11-26
+- Rank Quest: bulk sharing verifies party quest ownership. Added Share Verify, per-quest and inline party Share buttons, pending offer deduplication, acceptance refresh, and handling for explicit WoW completion and eligibility replies.
+
+## 1.5.157 - 2026-11-26
+- Rank Quest: added the green Share Quests menu for the full log, the current zone or dungeon, and all dungeon quests. Uses native shareability checks, paced offers, and a Stop Sharing action.
+
+## 1.5.156 - 2026-11-26
+- Nearby auto-focus and Rank Quest highlights share a 100-yard objective check; current focus holds through 125 yards. Auto-focus recognizes confirmed quest areas and parent-zone waypoints when native distance is missing. Manual focus and tracking order still take priority.
+
+## 1.5.155 - 2026-11-26
+- Removed the floating Smart Target bar. Existing action-bar macro placement and keybinds are unchanged.
+
 ## 1.5.154 - 2026-11-26
 - Rank Quest reconciles confirmed native party completion with stale shared progress and refreshes retained quest rows without a hover. Completion events also trigger party sync after the log confirms readiness.
 

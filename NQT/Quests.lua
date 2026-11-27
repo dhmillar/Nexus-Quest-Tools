@@ -1,6 +1,6 @@
 local _, AT = ...
 local Q, M, S = C_QuestLog, C_Map, C_SuperTrack
-local ENTER_YARDS, EXIT_YARDS, ORDER_LIMIT = 180, 225, 10
+local ENTER_YARDS, EXIT_YARDS, ORDER_LIMIT = 100, 125, 10
 local focus, ownedWatch, ownedSuper, lastNear, focusFromOrder, running, queued, initialized
 local manualHUDQuest, retiringManual
 
@@ -388,9 +388,9 @@ local function questieDistance(id, ctx, visit)
     end
     return closest, closestX, closestY
 end
-local function nativeDistance(id, ctx, poi, strict)
+local function nativeDistance(id, ctx, poi)
     local d, continent = call(Q.GetDistanceSqToQuest, id)
-    if finite(d) and d>=0 and ((not strict and continent~=false) or (strict and d>0 and continent==true)) then return d end
+    local native = finite(d) and d>0 and continent==true and d or nil
     if ctx then
         local x, y = call(Q.GetNextWaypointForMap, id, ctx.id)
         local otherMap, otherX, otherY
@@ -402,14 +402,16 @@ local function nativeDistance(id, ctx, poi, strict)
                 otherMap, otherX, otherY = mapID, wx, wy
             end
         end
-        if not xyValid(x, y) and poi then
+        if not xyValid(x, y) and poi and field(poi,"isQuestStart")~=true
+            and field(poi,"inProgress")~=false then
             x, y = field(poi, "x"), field(poi, "y")
         end
         if xyValid(x, y) then
             local px, py = mapPlayer(ctx)
             if px then
                 local dx, dy = (px - x) * ctx.w, (py - y) * ctx.h
-                return dx * dx + dy * dy
+                local measured=dx * dx + dy * dy
+                return native and math.min(native,measured) or measured
             end
         end
         -- A real waypoint on another map is more precise than inferring
@@ -425,20 +427,17 @@ local function nativeDistance(id, ctx, poi, strict)
         end
     end
     if continent == false then return math.huge end
+    return native
 end
 
-local function distance(id, ctx, poi, yards, strict)
-    local d = nativeDistance(id, ctx, poi, strict)
+local function distance(id, ctx, poi, yards)
+    local d = nativeDistance(id, ctx, poi)
     if d and d <= yards * yards then return d end
     local questie = call(questieDistance, id, ctx)
     if questie and (not d or questie < d) then return questie end
     return d
 end
--- Read-only proximity query for Rank Quest's visual highlights. It does
--- not change order, focus, watches, or the navigation destination.
-function AT.SampleQuestAreas(ids,previous)
-    local result={}
-    if not Q then return result end
+local function proximityContext()
     local ctx=mapContext()
     local points={}
     if ctx then
@@ -466,28 +465,35 @@ function AT.SampleQuestAreas(ids,previous)
             end
         end
     end
+    return ctx,points,parent,blocked
+end
+
+local function measureProximity(id,ctx,poi,parent,blocked,limit)
+    local task=call(GetTaskInfo,id)
+    local blob=C_Minimap and call(C_Minimap.IsInsideQuestBlob,id)
+    if task==true or blob==true then return 0,"inside" end
+    if not blocked then
+        local dist=distance(id,ctx,poi,limit)
+        if parent and (not dist or dist>limit*limit) then
+            local other=distance(id,parent,parent.points and parent.points[id],limit)
+            if other and (not dist or other<dist) then dist=other end
+        end
+        if dist then return dist,dist<=limit*limit and "near" or "outside" end
+    end
+    if task==false or blob==false then return nil,"possible_exit" end
+end
+
+-- Read-only proximity query for Rank Quest's visual highlights. It does
+-- not change order, focus, watches, or the navigation destination.
+function AT.SampleQuestAreas(ids,previous)
+    local result={}
+    if not Q then return result end
+    local ctx,points,parent,blocked=proximityContext()
     for id in pairs(ids) do
         if validID(id) and not completed(id) then
-            local task=call(GetTaskInfo,id)
-            local blob=C_Minimap and call(C_Minimap.IsInsideQuestBlob,id)
-            if task==true or blob==true then
-                result[id]="inside"
-            else
-                if not blocked then
-                    local limit=previous[id] and EXIT_YARDS or ENTER_YARDS
-                    local dist=distance(id,ctx,points[id],limit,true)
-                    if parent and (not dist or dist>limit*limit) then
-                        local other=distance(id,parent,parent.points and parent.points[id],limit,true)
-                        if other and (not dist or other<dist) then dist=other end
-                    end
-                    if dist then result[id]=dist<=limit*limit and "near" or "outside" end
-                end
-                -- A negative signal alone is not a valid area test for an
-                -- ordinary quest. It can corroborate departure after a true.
-                if not result[id] and previous[id]=="inside" and (task==false or blob==false) then
-                    result[id]="possible_exit"
-                end
-            end
+            local limit=previous[id] and EXIT_YARDS or ENTER_YARDS
+            local _,area=measureProximity(id,ctx,points[id],parent,blocked,limit)
+            if area~="possible_exit" or previous[id]=="inside" then result[id]=area end
         end
     end
     return result
@@ -612,31 +618,24 @@ local function run()
         release()
     end
     if not db.autoFocus then release(); return end
-    local ctx = mapContext()
-    local poiByID = {}
-    if ctx and ctx.points then
-        for _, poi in ipairs(ctx.points) do
-            local id = field(poi, "questID")
-            if validID(id) then
-                poiByID[id] = poi
-                if activeQuest(id, ids) then ids[id] = true end
-            end
-        end
+    local ctx,poiByID,parent,blocked=proximityContext()
+    for id in pairs(poiByID) do
+        if activeQuest(id,ids) then ids[id]=true end
     end
     if focus then
-        local d = distance(focus, ctx, poiByID[focus], EXIT_YARDS)
+        local d = measureProximity(focus,ctx,poiByID[focus],parent,blocked,EXIT_YARDS)
         if d ~= nil and d <= EXIT_YARDS * EXIT_YARDS then
             noteNear(focus, ctx, d)
             return
         end
         -- Temporary loss of coordinates does not count as departure;
         -- a verified move into a distinct zone can still open the scan.
-        if d == nil and not confirmedDeparture(ctx) then return end
+        if d == nil and (blocked or not confirmedDeparture(ctx)) then return end
     end
     local best, bestDist
     for id in pairs(ids) do
         if id ~= focus and not AT.IsQuestExcluded(id) and not completed(id) then
-            local d = distance(id, ctx, poiByID[id], ENTER_YARDS)
+            local d = measureProximity(id,ctx,poiByID[id],parent,blocked,ENTER_YARDS)
             if d and d <= ENTER_YARDS * ENTER_YARDS and
                 (not bestDist or d < bestDist or (d == bestDist and id < best)) then
                 best, bestDist = id, d

@@ -70,7 +70,7 @@ local function object()
     function o:GetParent() return self.parent end
     function o:IsMouseOver() return self.mouseOver==true or (self.mouseOver==nil and self.kind~="EditBox" and self.kind~="Frame") end
     function o:SetFocus() self.focused=true end
-    function o:CreateTexture() local a=object();textures[#textures+1]=a;return a end
+    function o:CreateTexture() local a=object();a.parent=self;textures[#textures+1]=a;return a end
     function o:SetAtlas(atlas) self.atlas=atlas end
     function o:CreateFontString() local f=object();self.child[#self.child+1]=f;return f end
     return o
@@ -1260,13 +1260,13 @@ task[11]=true;areaTick()
 assert(AT.GetRankQuestHighlight(11)=="inside" and find("A flight to Duskwood").detail.text~="In quest area")
 count=3; AT.RefreshQuestHUD()
 assert(select(2,AT.GetRankQuestHighlight(15)) and find("No NPC metadata").detail.text:match("Progress updated"))
-distances[15]=200;areaTick()
+distances[15]=115;areaTick()
 assert(select(2,AT.GetRankQuestHighlight(15)),"nearby hysteresis preserves progress just beyond entry")
 distances[15]=nil;areaTick()
 assert(select(2,AT.GetRankQuestHighlight(15)),"brief unreadable location does not clear progress")
 distances[15]=240;areaTick()
 assert(not AT.GetRankQuestHighlight(15) and not select(2,AT.GetRankQuestHighlight(15)),"known departure clears highlight")
-distances[15]=110;areaTick()
+distances[15]=99;areaTick()
 assert(AT.GetRankQuestHighlight(15)=="near" and not select(2,AT.GetRankQuestHighlight(15)),"re-entry restores area but not old progress")
 ready[15]=true;AT.RefreshQuestHUD()
 assert(not AT.GetRankQuestHighlight(15) and not find("No NPC metadata"),"objective-complete quest leaves In Progress immediately")
@@ -1632,17 +1632,17 @@ for _,style in ipairs({"Map","Minimal"}) do
     assert(not find("Dungeons"),"only one filter control")
     local oldWidth,oldFont=hud:GetWidth(),AT.db.questHUDFontOffset
     hud:SetWidth(358);AT.db.questHUDFontOffset=5;AT.RefreshQuestHUD()
-    local guideButton=plus.anchor[2]
+    local shareButton=plus.anchor[2]; local guideButton=shareButton.anchor[2]
     assert(plus.anchor[1]=="RIGHT" and plus.anchor[3]=="LEFT" and plus.anchor[4]<0 and plus.anchor[5]==0)
     assert(guideButton.anchor[2]==zoneButton and guideButton.anchor[3]=="LEFT")
     local openedGuide=false;AT.ToggleLevelGuide=function() openedGuide=true end
     guideButton.scripts.OnClick(guideButton);assert(openedGuide);AT.ToggleLevelGuide=nil
     assert(minus.anchor[1]=="RIGHT" and minus.anchor[2]==plus and minus.anchor[3]=="LEFT" and minus.anchor[4]<0 and minus.anchor[5]==0)
     assert(zoneButton.anchor[5]==-35)
-    for _,b in ipairs({minus,plus,zoneButton,guideButton}) do
+    for _,b in ipairs({minus,plus,zoneButton,guideButton,shareButton}) do
         assert(b:GetFrameLevel()>2 and b.label:GetUnboundedStringWidth()<b:GetWidth())
     end
-    assert(358-13-zoneButton.w-5-guideButton.w-4-plus.w-4-minus.w>90,"count area stays clear")
+    assert(358-13-zoneButton.w-5-guideButton.w-4-shareButton.w-4-plus.w-4-minus.w>90,"count area stays clear")
     minus.scripts.OnClick(minus);assert(AT.db.questHUDFontOffset==4)
     plus.scripts.OnClick(plus);assert(AT.db.questHUDFontOffset==5)
     hud:SetWidth(oldWidth);AT.db.questHUDFontOffset=oldFont;AT.RefreshQuestHUD()
@@ -2339,4 +2339,152 @@ do
     AT.RefreshRankQuestAfterAbandon(5010);drain()
     assert(not find("Forest hidden quest"))
     print("PASS confirmed abandon removes stale and party-retained rows, clears tracking, stays gone, then reaccept restores it")
+end
+do
+    local ids={{isHeader=true,title="Stranglethorn Vale"},{questID=701,title="Zone share"},
+        {questID=95789,title="Shady Saltseers"},{questID=95309,title="Alcaz quest"},
+        {questID=702,title="Unshareable"},{questID=703,title="Hidden",isHidden=true},
+        {isHeader=true,title="Duskwood"},{questID=704,title="Other zone"}}
+    local picked,group,blocked,done=704,true,nil
+    local queue,attempts,notices={},{},{}
+    local now=100
+    local held={party1={},party2={}}
+    local visible={party1=true,party2=true}
+    GetTime=function() return now end
+    GetNumSubgroupMembers=function() return 2 end
+    IsInRaid=function() return false end
+    UnitGUID=function(unit) return "Player-"..unit end
+    GetUnitName=function(unit) return unit=="party1" and "Kara-A" or "Mira-B" end
+    UnitIsVisible=function(unit) return visible[unit]==true end
+    UnitIsConnected=function() return true end
+    C_QuestLog.IsUnitOnQuest=function(unit,q) return held[unit] and (held[unit][q]==true) end
+    partyOn=false
+    C_QuestLog.GetNumQuestLogEntries=function() return #ids end
+    C_QuestLog.GetInfo=function(i) return ids[i] end
+    C_QuestLog.IsOnQuest=function(q)
+        for _,entry in ipairs(ids) do if entry.questID==q then return true end end
+        return false
+    end
+    C_QuestLog.IsPushableQuest=function(q) return C_QuestLog.IsOnQuest(q) and q~=702 end
+    C_QuestLog.GetSelectedQuest=function() return picked end
+    C_QuestLog.SetSelectedQuest=function(q) picked=q end
+    QuestLogPushQuest=function()
+        if blocked then error("native block") end
+        attempts[#attempts+1]=picked
+    end
+    C_Timer.After=function(seconds,f) if seconds==4 then queue[#queue+1]=f else f() end end
+    DEFAULT_CHAT_FRAME={AddMessage=function(_,m) notices[#notices+1]=m end}
+    IsInGroup=function() return group end
+    IsInInstance=function() return false,"none" end
+    AT.db.questHUDEnabled=true;AT.db.questHUDCollapsed=false
+    map=1;AT.RefreshQuestHUD()
+    local shareArrow
+    for _,texture in ipairs(textures) do
+        if texture.texture and tostring(texture.texture):find("ShareArrow.tga",1,true) and not (texture.parent.parent and texture.parent.parent.partyShareButtons) then shareArrow=texture.parent end
+    end
+    assert(shareArrow and shareArrow.anchor[1]=="RIGHT" and shareArrow.anchor[3]=="LEFT")
+    if not shareArrow.shown then clickHeader() end
+    local function runBatch(label,expected)
+        now=now+30
+        queue,attempts={},{}
+        shareArrow.scripts.OnClick(shareArrow)
+        local option=assert(find(label),label)
+        assert(option:IsVisible())
+        option.scripts.OnClick(option)
+        while #queue>0 do local fn=table.remove(queue,1);now=now+4;fn() end
+        assert(table.concat(attempts,",")==expected,table.concat(attempts,",").." != "..expected)
+        assert(picked==704,"quest list selection must be restored")
+    end
+    runBatch("Share All Quests","701,95789,95309,704")
+    AT.BrowseQuestHUD(2)
+    runBatch("Share Zone Quests","701,95789,95309")
+    runBatch("Share All Dungeon Quests","95789,95309")
+    IsInInstance=function() return true,"party" end
+    GetInstanceInfo=function() return "The Drowned City","party",1,nil,5,nil,false,2970 end
+    AT.RefreshQuestHUD()
+    runBatch("Share Zone Quests","95789")
+    group=false
+    runBatch("Share All Quests","")
+    assert(notices[#notices]:find("Join a party",1,true))
+    group,blocked=true,true
+    runBatch("Share All Quests","")
+    assert(notices[#notices]:find("WoW blocked",1,true))
+    now=now+30;blocked=nil;queue,attempts={},{}
+    shareArrow.scripts.OnClick(shareArrow)
+    find("Share All Quests").scripts.OnClick()
+    assert(#attempts==1 and #queue==1,"only one quest per native offer interval")
+    shareArrow.scripts.OnClick(shareArrow)
+    assert(find("Stop Sharing"):IsVisible())
+    find("Stop Sharing").scripts.OnClick()
+    table.remove(queue,1)()
+    assert(#attempts==1,"cancelled batch must not share again")
+    now=now+30;attempts={};queue={}
+    visible.party2=false;held.party1[701]=true
+    held.party1[95309]=true
+    shareArrow.scripts.OnClick(shareArrow)
+    find("Share Verify").scripts.OnClick()
+    local function offer(q)
+        for _,obj in ipairs(objs) do
+            if obj.qid==q and obj.action and obj.action.label.text=="Share" and obj:IsVisible() then return obj.action end
+        end
+    end
+    assert(not offer(701) and not offer(95309),"known held plus unavailable party member is not a confirmed candidate")
+    assert(offer(95789) and offer(704),"verified missing quest gets its own Share button")
+    local b=offer(95789);b.scripts.OnClick()
+    assert(attempts[1]==95789 and not offer(95789),"pending offer is not offered twice")
+    held.party1[95789]=true;now=now+4;areaTick()
+    assert(not offer(95789),"accepted quest drops from the list on refresh")
+    ERR_QUEST_PUSH_INVALID_S="%s is not eligible for that quest."
+    ERR_QUEST_PUSH_ALREADY_DONE_S="%1$s has completed that quest."
+    b=offer(704);b.scripts.OnClick()
+    assert(attempts[2]==704)
+    watch.scripts.OnEvent(watch,"UI_ERROR_MESSAGE",461,"Kara-A has completed that quest.")
+    assert(notices[#notices]:find("Kara-A already completed",1,true))
+    now=now+30;areaTick()
+    assert(not offer(704),"reported completed quest stays off the list beyond pending expiry")
+    assert(not offer(95789),"accepted quest stays off after pending expiry")
+    held.party1[95309]=false
+    areaTick();b=assert(offer(95309));b.scripts.OnClick()
+    watch.scripts.OnEvent(watch,"CHAT_MSG_SYSTEM","Kara-A is not eligible for that quest.")
+    assert(notices[#notices]:find("Kara-A is not eligible",1,true))
+    now=now+30;areaTick();assert(not offer(95309))
+    assert(picked==704)
+    print("PASS Share Verify buttons: confirmed missing only, live accept, localized completion and ineligibility feedback, suppression, and selection restoration")
+
+    now=now+30
+    AT.BrowseQuestHUD(1)
+    held.party1[701]=false;held.party2[701]=true
+    AT.RefreshQuestHUD()
+    local function inlineArrow()
+        local row=find("Zone share")
+        for _,arrow in ipairs(row and row.partyShareButtons or {}) do
+            if arrow.memberGUID=="Player-party1" and arrow:IsVisible() then return arrow,row end
+        end
+    end
+    local arrow,row=inlineArrow()
+    assert(arrow and inlineText(row,"Kara-A  -  Not on quest"))
+    local red
+    for _,o in ipairs(row.objectives) do
+        if o.text=="Kara-A  -  Not on quest" then red=o.textColor end
+    end
+    assert(red and red[1]>red[2] and red[1]>red[3])
+    local toggle
+    for _,texture in ipairs(textures) do
+        if texture.texture and tostring(texture.texture):find("PartyPerson.tga",1,true) then toggle=texture.parent end
+    end
+    assert(toggle);toggle.scripts.OnClick(toggle)
+    assert(not inlineArrow() and not inlineText(row,"Not on quest"),"toggle off hides row sharing")
+    toggle.scripts.OnClick(toggle)
+    arrow=assert(inlineArrow())
+    arrow.scripts.OnClick(arrow)
+    assert(attempts[#attempts]==701 and not inlineArrow(),"inline share is a real native offer, not a menu")
+    held.party1[701]=true;now=now+30
+    AT.GetQuestPartySnapshot=function(q)
+        if q==701 then return {pending=true,members={{guid="Player-party1",name="Kara-A",counts={{current=1,total=3}}}}} end
+    end
+    partyOn=true;AT.RefreshQuestHUD()
+    row=find("Zone share")
+    assert(not inlineArrow() and inlineText(row,"Kara-A  1/3"),"accepted party member returns to progress display")
+    print("PASS inline party share respects toggle, shows readable red missing status, sends through native share and restores accepted progress")
+    print("PASS bulk quest sharing through the green toolbar menu: all scopes, no hidden quests, native eligibility, pacing, selection restore, blocked and cancelled")
 end
