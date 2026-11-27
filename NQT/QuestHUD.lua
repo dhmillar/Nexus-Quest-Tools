@@ -773,13 +773,14 @@ local function button(parent,value,x,y,w,h,onclick)
     b:SetScript("OnClick",onclick)
     return b
 end
-local function wheelFrame(parent,step)
+local function wheelFrame(parent,step,questItems)
     -- Use the native scroll viewport, not UIPanelScrollFrameTemplate:
     -- the latter creates a visible slider and arrow buttons.
     local f=CreateFrame("ScrollFrame",nil,parent)
     f:EnableMouse(true)
     f:EnableMouseWheel(true)
     f:SetScript("OnMouseWheel",function(self,delta)
+        if questItems and call(AT.IsRankQuestItemLayoutLocked) then return end
         if not is(delta,"number") or delta~=delta then return end
         local height=self:GetHeight()
         if not is(height,"number") or height<1 then return end
@@ -1059,7 +1060,7 @@ local function makeQuestItemTile(b,n)
         if GameTooltip and self.link then
             GameTooltip:SetOwner(self,"ANCHOR_LEFT")
             if GameTooltip.SetHyperlink then pcall(GameTooltip.SetHyperlink,GameTooltip,self.link) end
-            if InCombatLockdown and InCombatLockdown() then GameTooltip:AddLine("Use this item from your bags during combat.",1,.79,.39,true) end
+            if InCombatLockdown and InCombatLockdown() then GameTooltip:AddLine("If this item was not visible before combat, use it from your bags.",1,.79,.39,true) end
             GameTooltip:Show()
         end
     end)
@@ -2053,7 +2054,7 @@ local function groupQuestEntries(result,entries,scope)
 end
 
 local function arrange()
-    if not hud or not model then return end
+    if not hud or not model or call(AT.IsRankQuestItemLayoutLocked) then return end
     local activeID,source=call(AT.GetQuestNavigationID)
     local automaticTurnIn=source=="nearby-turn-in" and activeID or nil
     renderedNavigationID=activeID
@@ -2431,7 +2432,7 @@ local function browse(z)
     viewedZone=z
     selectedDungeon=nil
     popupOpen=false
-    if hud then hud.scroll:SetVerticalScroll(0) end
+    if hud and not call(AT.IsRankQuestItemLayoutLocked) then hud.scroll:SetVerticalScroll(0) end
     arrange()
 end
 
@@ -2602,7 +2603,7 @@ local function pollPartyChanges()
 end
 
 function AT.RefreshQuestHUD()
-    if initialPaintPending then return end
+    if initialPaintPending or call(AT.IsRankQuestItemLayoutLocked) then return end
     if not hud then return end
     if not AT.db or not AT.db.enabled or not AT.db.questHUDEnabled then
         if AT.SetRankQuestItemTargets then AT.SetRankQuestItemTargets() end
@@ -2643,6 +2644,7 @@ function AT.RefreshQuestHUD()
 end
 
 function AT.SearchRankQuestItem(qid,itemLabel)
+    if call(AT.IsRankQuestItemLayoutLocked) then return false end
     if not (hud and AT.db and AT.db.enabled~=false and AT.db.questHUDEnabled) then return false end
     local targets,count,only={},0,nil
     local list=id(qid) and {[qid]=true} or qid
@@ -2775,7 +2777,7 @@ function AT.InitQuestHUD()
     header:SetScript("OnDragStart",function()
         hideHeaderTip(header)
         dragged=true
-        if AT.db.rankQuestLocked then return end
+        if AT.db.rankQuestLocked or call(AT.IsRankQuestItemLayoutLocked) then return end
         if AT.SuspendRankQuestItems then AT.SuspendRankQuestItems(true) end
         moving=true
         hud:StartMoving()
@@ -2840,7 +2842,7 @@ function AT.InitQuestHUD()
         if not searchOpen then self:ClearFocus() end
         for token in lowerSearch(query):gmatch("%S+") do searchWords[#searchWords+1]=token end
         popupOpen=false
-        if hud.scroll then hud.scroll:SetVerticalScroll(0);arrange() end
+        if hud.scroll and not call(AT.IsRankQuestItemLayoutLocked) then hud.scroll:SetVerticalScroll(0);arrange() end
     end)
     search:SetScript("OnEditFocusLost",dismissEmptySearch)
     search:SetScript("OnEscapePressed",function(self)
@@ -2851,6 +2853,7 @@ function AT.InitQuestHUD()
     hud.zoneName:SetWordWrap(false)
     hud.count=text(body,"GameFontDisableSmall");hud.count:SetPoint("TOPLEFT",13,-82)
     local function toggle()
+        if call(AT.IsRankQuestItemLayoutLocked) then return end
         AT.db.questHUDCollapsed=not AT.db.questHUDCollapsed
         AT.RefreshQuestHUD()
     end
@@ -2869,7 +2872,7 @@ function AT.InitQuestHUD()
         completedView=not completedView
         preferredCompleted=completedView
         resolveStatusOnSelection=false
-        hud.scroll:SetVerticalScroll(0)
+        if not call(AT.IsRankQuestItemLayoutLocked) then hud.scroll:SetVerticalScroll(0) end
         arrange()
     end)
     statusFilter:ClearAllPoints();statusFilter:SetPoint("RIGHT",palette,"LEFT",-4,0)
@@ -3005,7 +3008,7 @@ function AT.InitQuestHUD()
     hud.selectDungeon=function(key)
         viewedZone,selectedDungeon,popupOpen=nil,key,false
         resolveStatusOnSelection=true
-        hud.scroll:SetVerticalScroll(0)
+        if not call(AT.IsRankQuestItemLayoutLocked) then hud.scroll:SetVerticalScroll(0) end
         arrange()
     end
     hud.scopeRows={}
@@ -3025,7 +3028,7 @@ function AT.InitQuestHUD()
     menu:Hide()
     hud.tab=button(hud,"Rank Quest  +",0,0,116,24,toggle)
     hud.tab:ClearAllPoints();hud.tab:SetPoint("TOPRIGHT",hud,"TOPRIGHT",0,0)
-    hud.scroll=wheelFrame(body,66)
+    hud.scroll=wheelFrame(body,66,true)
     if hud.scroll.HookScript and AT.InvalidateRankQuestItems then hud.scroll:HookScript("OnVerticalScroll",AT.InvalidateRankQuestItems) end
     hud.scroll:SetPoint("TOPLEFT",body,"TOPLEFT",115,-72)
     hud.scroll:SetPoint("BOTTOMRIGHT",body,"BOTTOMRIGHT",-13,15)
@@ -3037,7 +3040,7 @@ function AT.InitQuestHUD()
     local resize=button(body,"/",0,0,14,14,function() end)
     resize:ClearAllPoints();resize:SetPoint("BOTTOMRIGHT",-3,3)
     resize:SetScript("OnMouseDown",function()
-        if AT.db.rankQuestLocked then return end
+        if AT.db.rankQuestLocked or call(AT.IsRankQuestItemLayoutLocked) then return end
         if AT.SuspendRankQuestItems then AT.SuspendRankQuestItems(true) end
         hud:StartSizing("BOTTOMRIGHT")
     end)

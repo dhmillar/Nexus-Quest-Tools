@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.212
+
+- Rank Quest item icons that were visible and ready before combat remain clickable during combat. Their layout stays fixed until combat ends. WoW still decides whether the item can be used in combat; NPC targeting is unchanged.
+
 ## 1.5.211
 
 - Hunter Smart Buff now switches between Hawk and Cheetah when solo or Pack when grouped out of combat. In combat it casts Hawk by default or Monkey with Shift. The reminder can flag a melee threat without changing any protected action in combat.

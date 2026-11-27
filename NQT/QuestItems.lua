@@ -1,11 +1,16 @@
 local _,AT=...
 local pool,targets={},{}
 local viewport,verify,observer
-local suspended=false
+local suspended,preparedItems=false,false
 local elapsed,cooldownElapsed=0,0
 
 local function locked()
     return InCombatLockdown and InCombatLockdown()
+end
+-- Keep pre-bound item buttons on the exact icons the user could see when
+-- entering combat. Secure actions and geometry are not rewritten in combat.
+function AT.IsRankQuestItemLayoutLocked()
+    return preparedItems and locked() or false
 end
 local function readable(v,t)
     return (not issecretvalue or not issecretvalue(v)) and type(v)==t
@@ -167,7 +172,7 @@ local function newButton()
     btn:RegisterForClicks("LeftButtonUp")
     btn:SetAttribute("useOnKeyDown",false)
     btn:SetAttribute("_onstate-rankquestcombat",[[
-        if newstate == "locked" then
+        if newstate == "locked" and self:GetAttribute("type1") ~= "item" then
             self:SetAttribute("type1", nil)
             self:SetAttribute("item1", nil)
             self:SetAttribute("macrotext1", nil)
@@ -191,9 +196,11 @@ local function newButton()
 end
 function AT.InvalidateRankQuestItems()
     if locked() then return end
+    preparedItems=false
     for _,btn in ipairs(pool) do if btn.bound then clear(btn) end end
 end
 function AT.SuspendRankQuestItems(state)
+    if AT.IsRankQuestItemLayoutLocked() then return end
     suspended=state and true or false
     if suspended then AT.InvalidateRankQuestItems() end
     AT.RefreshRankQuestItemCooldowns()
@@ -202,6 +209,7 @@ function AT.SyncRankQuestItemButtons()
     if locked() then return end
     if suspended or not viewport then AT.InvalidateRankQuestItems();return end
     local used=0
+    preparedItems=false
     for _,b in ipairs(targets) do
         local l,y,w,h=matchingRect(b)
         if l then
@@ -227,12 +235,14 @@ function AT.SyncRankQuestItemButtons()
                         btn:Show()
                     end
                 end
+                if btn.bound==b and not b.kind and btn:IsShown() then preparedItems=true end
             end
         end
     end
     for i=used+1,#pool do if pool[i].bound then clear(pool[i]) end end
 end
 function AT.SetRankQuestItemTargets(rows,scroll,callback)
+    if AT.IsRankQuestItemLayoutLocked() then return end
     AT.InvalidateRankQuestItems()
     for _,b in ipairs(targets) do if not b.kind then paintCooldown(b.tile,nil) end end
     targets={}

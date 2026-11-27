@@ -1151,6 +1151,14 @@ local function checkWheel(scroll)
     scroll.scripts.OnMouseWheel(scroll,100)
     assert(scroll:GetVerticalScroll()==0)
 end
+AT.IsRankQuestItemLayoutLocked=function() return true end
+qscroll:SetVerticalScroll(12)
+qscroll.scripts.OnMouseWheel(qscroll,-1)
+assert(qscroll:GetVerticalScroll()==12,"combat cannot scroll out from under a bound item")
+AT.BrowseQuestHUD(nil)
+assert(qscroll:GetVerticalScroll()==12,"scope changes cannot move the combat layout")
+assert(not AT.SearchRankQuestItem(12),"bag search cannot recycle combat quest rows")
+AT.IsRankQuestItemLayoutLocked=nil
 checkWheel(qscroll)
 openZones()
 local popup=rscroll.parent

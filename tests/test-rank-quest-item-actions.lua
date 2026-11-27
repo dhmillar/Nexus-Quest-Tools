@@ -32,6 +32,28 @@ AT.SetRankQuestItemTargets({row},viewport,function(q,i,token)if q==617 and visib
 assert(#created==2 and created[1]:GetAttribute("item1")=="item:100" and created[2]:GetAttribute("item1")=="item:200")
 assert(created[1]:GetAttribute("type1")=="item" and created[2].shown)
 do
+    local a,b=created[1],created[2]
+    local snippet=a:GetAttribute("_onstate-rankquestcombat")
+    local transition=assert(loadstring("return function(self,newstate) "..snippet.." end"))()
+    -- Model Blizzard calling its restricted state handler before the hardware click.
+    locked=true
+    assert(AT.IsRankQuestItemLayoutLocked())
+    transition(a,"locked");transition(b,"locked")
+    assert(a.shown and a:GetAttribute("item1")=="item:100")
+    assert(b.shown and b:GetAttribute("item1")=="item:200")
+    a.scripts.PreClick(a)
+    AT.SuspendRankQuestItems(true);AT.SetRankQuestItemTargets({},viewport)
+    assert(a.shown and b.shown and a:GetAttribute("type1")=="item","combat cannot clear or recycle the visible bindings")
+    local m=CreateFrame();m:Show();m:SetAttribute("type1","macro");m:SetAttribute("macrotext1","/target Example")
+    transition(m,"locked")
+    assert(not m.shown and not m:GetAttribute("macrotext1"),"NPC actions remain disabled in combat")
+    table.remove(created) -- this fixture frame is not part of the production pool
+    locked=false
+    assert(not AT.IsRankQuestItemLayoutLocked())
+    AT.SyncRankQuestItemButtons()
+    assert(a.shown and b.shown)
+end
+do
     local function display()
         return {SetText=function(self,v)self.text=v end,SetShown=function(self,v)self.shown=v end}
     end
