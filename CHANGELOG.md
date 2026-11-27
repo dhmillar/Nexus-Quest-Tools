@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.203 - 2026-11-27
+
+- Clickable quest items in Rank Quest show the time remaining on cooldown directly on their icons. The countdown clears when the item is ready, and the click behavior is unchanged.
+
 ## 1.5.202 - 2026-11-27
 
 - Added **Focus Close Completed Quests** to Rank Quest settings, off by default. When enabled with Auto Focus, the nearest ready turn-in within 100 yards takes priority. Rank Quest shows Completed while focused on a nearby turn-in and returns to In Progress once none remain in range.

@@ -1047,6 +1047,14 @@ local function makeQuestItemTile(b,n)
     item.icon=box(item,"ARTWORK");item.icon:SetAllPoints(item)
     item.border=box(item,"BACKGROUND");item.border:SetPoint("TOPLEFT",-1,1);item.border:SetPoint("BOTTOMRIGHT",1,-1)
     item.count=text(item,"GameFontNormalSmall");item.count:SetPoint("BOTTOMRIGHT",-2,0)
+    item.cooldownShade=box(item,"OVERLAY")
+    item.cooldownShade:SetAllPoints(item);color(item.cooldownShade,0,0,0,.64);item.cooldownShade:Hide()
+    item.cooldownText=text(item,"GameFontNormal")
+    item.cooldownText:SetPoint("CENTER",item,"CENTER",0,1)
+    item.cooldownText:SetFont(STANDARD_TEXT_FONT or "Fonts/FRIZQT__.TTF",11,"OUTLINE")
+    item.cooldownText:SetTextColor(1,.93,.66);item.cooldownText:Hide()
+    if item.cooldownText.SetDrawLayer then item.cooldownText:SetDrawLayer("OVERLAY",3) end
+    if item.count.SetDrawLayer then item.count:SetDrawLayer("OVERLAY",2) end
     item:SetScript("OnEnter",function(self)
         if GameTooltip and self.link then
             GameTooltip:SetOwner(self,"ANCHOR_LEFT")

@@ -2,7 +2,7 @@ local _,AT=...
 local pool,targets={},{}
 local viewport,verify,observer
 local suspended=false
-local elapsed=0
+local elapsed,cooldownElapsed=0,0
 
 local function locked()
     return InCombatLockdown and InCombatLockdown()
@@ -68,6 +68,52 @@ local function matchingRect(b)
         return
     end
     if l>=vl-.01 and l+w<=vl+vw+.01 and y>=vy-.01 and y+h<=vy+vh+.01 then return l,y,w,h end
+end
+local function paintCooldown(tile,label)
+    if not tile.cooldownText or tile.cooldownLabel==label then return end
+    tile.cooldownLabel=label
+    tile.cooldownText:SetText(label or "")
+    tile.cooldownText:SetShown(label~=nil)
+    tile.cooldownShade:SetShown(label~=nil)
+end
+local function remainingCooldown(now,start,duration,enabled)
+    if not finite(start) or not finite(duration) or start<=0 or duration<=0
+        or not readable(enabled,"number") and not readable(enabled,"boolean")
+        or enabled==0 or enabled==false then return end
+    local left=start+duration-now
+    if finite(left) and left>0 then return math.ceil(left) end
+end
+local function cooldownFor(b,now)
+    if b.row.qid~=b.qid or b.row.partyOnly or b.tile.link~=b.link then return end
+    local q=C_QuestLog
+    local index=q and call(q.GetLogIndexForQuestID,b.qid)
+    if finite(index) and index>0 then
+        local info=call(q.GetInfo,index)
+        local id=readable(info,"table") and info.questID
+        if finite(id) and id==b.qid and itemToken(call(GetQuestLogSpecialItemInfo,index))==b.token then
+            local left=remainingCooldown(now,call(GetQuestLogSpecialItemCooldown,index))
+            if left then return left end
+        end
+    end
+    local item=tonumber(b.token:match("^item:(%d+)$"))
+    local fn=C_Item and C_Item.GetItemCooldown or GetItemCooldown
+    return remainingCooldown(now,call(fn,item))
+end
+function AT.RefreshRankQuestItemCooldowns()
+    local now=call(GetTime)
+    for _,b in ipairs(targets) do
+        if b.kind~="macro" and b.tile.cooldownText then
+            local left
+            if not suspended and finite(now) and matchingRect(b) then left=cooldownFor(b,now) end
+            local label
+            if left then
+                if left>=3600 then label=math.ceil(left/3600).."h"
+                elseif left>=60 then label=("%d:%02d"):format(math.floor(left/60),left%60)
+                else label=tostring(left) end
+            end
+            paintCooldown(b.tile,label)
+        end
+    end
 end
 local function npcMacro(name,vendor)
     if not readable(name,"string") or #name==0 or #name>80 or name:match("^%s") or name:match("%s$")
@@ -140,6 +186,7 @@ end
 function AT.SuspendRankQuestItems(state)
     suspended=state and true or false
     if suspended then AT.InvalidateRankQuestItems() end
+    AT.RefreshRankQuestItemCooldowns()
 end
 function AT.SyncRankQuestItemButtons()
     if locked() then return end
@@ -177,6 +224,7 @@ function AT.SyncRankQuestItemButtons()
 end
 function AT.SetRankQuestItemTargets(rows,scroll,callback)
     AT.InvalidateRankQuestItems()
+    for _,b in ipairs(targets) do if not b.kind then paintCooldown(b.tile,nil) end end
     targets={}
     viewport,verify=scroll,callback
     for _,row in ipairs(rows or {}) do
@@ -208,6 +256,7 @@ function AT.SetRankQuestItemTargets(rows,scroll,callback)
         end
     end
     AT.SyncRankQuestItemButtons()
+    AT.RefreshRankQuestItemCooldowns()
 end
 
 -- Stock merchant UI only. These are passive art regions, never click targets.
@@ -311,6 +360,11 @@ function AT.InitRankQuestItems()
     AT.InitRankQuestMerchantHighlights()
     observer:SetScript("OnUpdate",function(_,dt)
         if #targets==0 then return end
+        cooldownElapsed=cooldownElapsed+dt
+        if cooldownElapsed>=.20 then
+            cooldownElapsed=0
+            AT.RefreshRankQuestItemCooldowns()
+        end
         elapsed=elapsed+dt
         if elapsed<.075 then return end
         elapsed=0

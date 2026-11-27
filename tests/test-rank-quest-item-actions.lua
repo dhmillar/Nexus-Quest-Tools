@@ -31,6 +31,50 @@ local row={qid=617,item=a,itemTiles={a,b}}
 AT.SetRankQuestItemTargets({row},viewport,function(q,i,token)if q==617 and visible[token] then return token end end)
 assert(#created==2 and created[1]:GetAttribute("item1")=="item:100" and created[2]:GetAttribute("item1")=="item:200")
 assert(created[1]:GetAttribute("type1")=="item" and created[2].shown)
+do
+    local function display()
+        return {SetText=function(self,v)self.text=v end,SetShown=function(self,v)self.shown=v end}
+    end
+    a.cooldownText,a.cooldownShade=display(),display()
+    b.cooldownText,b.cooldownShade=display(),display()
+    local now=100
+    local secret={}
+    function issecretvalue(v)return v==secret end
+    function GetTime()return now end
+    C_QuestLog={GetLogIndexForQuestID=function(q)assert(q==617);return 3 end,
+        GetInfo=function(i)assert(i==3);return {questID=617} end}
+    function GetQuestLogSpecialItemInfo(i)assert(i==3);return "item:100" end
+    function GetQuestLogSpecialItemCooldown(i)assert(i==3);return 95,70,1 end
+    C_Item={GetItemCooldown=function(i)
+        if i==100 then return 0,0,true end
+        assert(i==200);return 98,12,true
+    end}
+    AT.SetRankQuestItemTargets({row},viewport,function(q,i,token)if q==617 and visible[token] then return token end end)
+    assert(a.cooldownText.text=="1:05" and a.cooldownShade.shown and b.cooldownText.text=="10")
+    locked=true;now=104.5
+    AT.RefreshRankQuestItemCooldowns()
+    assert(a.cooldownText.text=="1:01" and b.cooldownText.text=="6","visual countdown works in combat")
+    now=165
+    AT.RefreshRankQuestItemCooldowns()
+    assert(not a.cooldownText.shown and not b.cooldownShade.shown,"clear when ready")
+    now=105
+    GetQuestLogSpecialItemCooldown=function()return secret,70,1 end
+    AT.RefreshRankQuestItemCooldowns()
+    assert(not a.cooldownText.shown and b.cooldownText.text=="5","ignore restricted values")
+    viewport.GetRect=function()return 0,0,106,160 end
+    AT.RefreshRankQuestItemCooldowns()
+    assert(not b.cooldownText.shown,"clip offscreen countdown")
+    viewport.GetRect=function()return 0,0,160,160 end
+    a.link="item:999"
+    AT.RefreshRankQuestItemCooldowns()
+    assert(not a.cooldownText.shown and b.cooldownText.shown)
+    a.link="item:100";locked=false
+    AT.SetRankQuestItemTargets()
+    assert(not b.cooldownText.shown,"clear recycled row")
+    AT.SetRankQuestItemTargets({row},viewport,function(q,i,token)if q==617 and visible[token] then return token end end)
+    C_Item,C_QuestLog,GetQuestLogSpecialItemInfo,GetQuestLogSpecialItemCooldown,GetTime,issecretvalue=nil,nil,nil,nil,nil,nil
+    print("PASS clickable quest item cooldown: exact special item, bag fallback, live countdown, combat, expiry, clipping, secret data and row recycling")
+end
 visible["item:200"]=false
 created[2].scripts.PreClick(created[2])
 assert(not created[2].shown and not created[2]:GetAttribute("item1"),"spent item cannot be used by stale click")
