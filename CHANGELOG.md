@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.239
+
+- Added 2,377 standalone turn-in references. The bulk import matches QuestieDB Forever 1.1.6 against bundled Forever quest IDs and titles, validates unambiguous endpoints and map coordinates, and keeps native game pins authoritative. Includes every missing quest in the reported Riverglades Completed view; Baelog displays Dig Two, Uldaman, without inventing coordinates.
+- Ready-quest routing rejects native map pins that clearly disagree with the known turn-in location.
+- World-map routes now draw on visible MapWise maps even when the stock frame is hidden. Cross-zone direction lines reach the visible map edge, and minimap guides use solid lines instead of dashes.
+
 ## 1.5.238
 
 - Krol'dok targeting can reacquire the last living boss when a probe for another boss misses. Smart Target reserves room for recovery in the same press; the short action-bar macro retries on the following press if needed, without resetting its search order or repeating a ping.

@@ -4,7 +4,9 @@ local frames={}
 local function nothing() end
 local function region()
     return {SetText=function(self,v) self.text=v end,SetPoint=nothing,ClearAllPoints=nothing,SetTextColor=nothing,
-        SetThickness=nothing,SetColorTexture=nothing,SetStartPoint=nothing,SetEndPoint=nothing,
+        SetThickness=nothing,SetColorTexture=nothing,
+        SetStartPoint=function(self,_,_,x,y)self.x=x;self.y=y end,
+        SetEndPoint=function(self,_,_,x,y)self.endX=x;self.endY=y end,
         Show=nothing,Hide=nothing}
 end
 function CreateFrame(_,_,parent)
@@ -36,6 +38,7 @@ for _,f in ipairs(frames) do
     if f.core then bearing=f end
 end
 assert(meter and meter.shown and bearing and bearing.shown,"keep yards and directional guidance")
+assert(not bearing.dashes and bearing.core.x==0 and bearing.core.y==0 and bearing.core.endX>0, "render one uninterrupted bearing from center")
 x=.55;t=t+1;AT.RefreshQuestRoute()
 assert(meter.label.text=="200 yd" and bearing.shown)
 inside=true;t=t+1;AT.RefreshQuestRoute()

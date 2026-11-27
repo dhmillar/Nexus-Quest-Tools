@@ -26,7 +26,7 @@ local function mapWiseSurface(map)
     local ui=api.UI and api.UI.frame
     if not (m and m.view and m.canvas and m.container and r and type(r.Projection)=="function"
         and db and ui and call(ui.IsVisible,ui) and call(m.view.IsVisible,m.view)
-        and api.Integration and api.Integration.native==map
+        and (not api.Integration or not api.Integration.native or api.Integration.native==map)
         and not (api.Instances and api.Instances.active)) then return end
     return api,m,r,db
 end
@@ -208,15 +208,17 @@ end
 
 function AT.RenderWorldQuestRoute(status,quest,snapshot)
     local map=WorldMapFrame
-    if not (map and map.IsVisible and map:IsVisible() and map.GetCanvas and map.GetMapID
-        and CreateFrame and C_Map and finite(quest) and quest>0)
+    if not (CreateFrame and C_Map and finite(quest) and quest>0)
         or status=="arrival" or status=="disabled" or status=="no_quest" then
         AT.HideWorldQuestRoute()
         return
     end
-    local id,parent=map:GetMapID(),map:GetCanvas()
     local mw,m,r,db=mapWiseSurface(map)
-    if mw then parent=m.view end
+    local nativeVisible=map and call(map.IsVisible,map)
+    if not mw and not nativeVisible then AT.HideWorldQuestRoute(); return end
+    local id=map and call(map.GetMapID,map)
+    if not finite(id) and m then id=call(C_Map.GetBestMapForUnit,"player") end
+    local parent=m and m.view or (map and call(map.GetCanvas,map))
     if not finite(id) or not parent then AT.HideWorldQuestRoute(); return end
     local sizeHost=m and m.canvas or parent
     local w,h=sizeHost:GetWidth(),sizeHost:GetHeight()
@@ -236,7 +238,7 @@ function AT.RenderWorldQuestRoute(status,quest,snapshot)
         projectedPath,projectedMap,points=nil,nil,nil
     end
     viewBounds={0,1,0,1}
-    local port=map.ScrollContainer
+    local port=map and map.ScrollContainer
     local level=canvas:GetFrameLevel()+15
     local artScale=1
     if m then
@@ -334,7 +336,7 @@ function AT.RenderWorldQuestRoute(status,quest,snapshot)
                     local px,py=p:GetXY()
                     if fraction(px,py) then px,py=project(player,px,py,id,false) else px,py=nil,nil end
                     if finite(px) and finite(py) then
-                        if (source==player or (inView(px,py) and inView(x,y))) and line(1,w,h,px,py,x,y,false,turnIn,artScale) then
+                        if line(1,w,h,px,py,x,y,false,turnIn,artScale) then
                             used=1
                             text="ESTIMATED DIRECTION  |  NOT A WALKING ROUTE"
                         end

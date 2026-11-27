@@ -483,15 +483,10 @@ local function makeBearing()
     if dotFrame.SetFrameStrata then dotFrame:SetFrameStrata("HIGH") end
     dotFrame:SetFrameLevel(Minimap:GetFrameLevel()+13)
     dotFrame:EnableMouse(false)
-    dotFrame.dashes={}
-    for i=1,3 do
-        local glow=dotFrame:CreateLine(nil,"ARTWORK")
-        glow:SetThickness(3)
-        local core=dotFrame:CreateLine(nil,"OVERLAY")
-        core:SetThickness(1.4)
-        dotFrame.dashes[i]={glow,core}
-    end
-    dotFrame.glow,dotFrame.core=unpack(dotFrame.dashes[1])
+    dotFrame.glow=dotFrame:CreateLine(nil,"ARTWORK")
+    dotFrame.glow:SetThickness(3)
+    dotFrame.core=dotFrame:CreateLine(nil,"OVERLAY")
+    dotFrame.core:SetThickness(1.4)
     dotFrame:Hide()
     bearing=dotFrame
 end
@@ -524,18 +519,15 @@ local function drawBearing()
     local east,north=dx,-dy
     local vx=(east*math.cos(heading)+north*math.sin(heading))/distance
     local vy=(-east*math.sin(heading)+north*math.cos(heading))/distance
-    -- A bearing uses the quest color, but is dashed rather than a walk.
+    -- Keep estimates distinct by color/diagnostics, not by breaking the line.
     local px,py=display*vx,display*vy
-    for i,pair in ipairs(bearing.dashes) do
-        local lo,hi=(i-1)/3,((i-1)+.62)/3
-        for j,region in ipairs(pair) do
-            local alpha=j==1 and .22 or .84
-            if scopeTurnIn then region:SetColorTexture(.38,1,.33,alpha)
-            else region:SetColorTexture(1,.87,.24,alpha) end
-            region:SetStartPoint("CENTER",bearing,px*lo,py*lo)
-            region:SetEndPoint("CENTER",bearing,px*hi,py*hi)
-            region:Show()
-        end
+    for i,region in ipairs({bearing.glow,bearing.core}) do
+        local alpha=i==1 and .22 or .84
+        if scopeTurnIn then region:SetColorTexture(.38,1,.33,alpha)
+        else region:SetColorTexture(1,.87,.24,alpha) end
+        region:SetStartPoint("CENTER",bearing,0,0)
+        region:SetEndPoint("CENTER",bearing,px,py)
+        region:Show()
     end
     bearingStatus="estimated direction"
     bearing:Show()
@@ -634,7 +626,10 @@ local function refresh()
         if ordinary(why) and type(why)=="string" then drawFailure=why:sub(1,140) end
     end
     if AT.RenderWorldQuestRoute then
-        local mapOK=pcall(AT.RenderWorldQuestRoute, routeStatus, statusQuest, mapRoute)
+        local mapOK,mapError=pcall(AT.RenderWorldQuestRoute, routeStatus, statusQuest, mapRoute)
+        if not mapOK and ordinary(mapError) and type(mapError)=="string" then
+            drawFailure="world map: " .. mapError:sub(1,125)
+        end
         if not mapOK and AT.HideWorldQuestRoute then pcall(AT.HideWorldQuestRoute) end
     end
     if perf then AT.PerfEnd("Quest route",perf) end

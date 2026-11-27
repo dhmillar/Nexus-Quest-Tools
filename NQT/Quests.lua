@@ -405,6 +405,33 @@ local function turnInPin(p)
     return field(p,"isQuestStart")~=true and field(p,"inProgress")==false
 end
 
+local function matchesTurnInReference(id,map,x,y)
+    local refs=(AT.ForeverVerifiedEndpointReferences and AT.ForeverVerifiedEndpointReferences[id])
+        or (AT.ForeverSupplementalTurnInReferences and AT.ForeverSupplementalTurnInReferences[id])
+    if not refs then return true end
+    local faction=call(UnitFactionGroup,"player")
+    local side=faction=="Alliance" and 1 or faction=="Horde" and 2 or -1
+    local comparable
+    for _,r in ipairs(refs) do
+        if r[6]==0 or r[6]==side then
+            if r[1]==map then
+                comparable=true
+                if math.abs(r[2]-x)<=.018 and math.abs(r[3]-y)<=.018 then return true end
+            else
+                local rw,rx,ry=worldPosition(r[1],r[2],r[3])
+                local pw,px,py=worldPosition(map,x,y)
+                if rw and pw then
+                    comparable=true
+                    if rw==pw and (rx-px)^2+(ry-py)^2<=80^2 then return true end
+                end
+            end
+        end
+    end
+    -- Some native POIs look ready but still point to the old objective.
+    -- When we can compare against the known NPC, reject a clear mismatch.
+    return not comparable
+end
+
 local function turnInDistance(id,ctx,poi,parent,blocked,lookup,onlyZone)
     local function pointDistance(map,x,y,knownContext)
         if not xyValid(x,y) or onlyZone and zoneID(map)~=onlyZone then return end
@@ -430,7 +457,8 @@ local function turnInDistance(id,ctx,poi,parent,blocked,lookup,onlyZone)
     end
     local function nativePoint(c,p)
         if c and turnInPin(p) then
-            return pointDistance(c.id,field(p,"x"),field(p,"y"),c)
+            local x,y=field(p,"x"),field(p,"y")
+            if xyValid(x,y) and matchesTurnInReference(id,c.id,x,y) then return pointDistance(c.id,x,y,c) end
         end
     end
     local d,point=nativePoint(ctx,poi)
@@ -817,7 +845,7 @@ local function nativeTurnIn(id,map,lookup)
         -- The Forever quest POI API distinguishes starts and in-progress pins.
         if field(p,"questID")==id and turnInPin(p) then
             local x,y=field(p,"x"),field(p,"y")
-            if xyValid(x,y) then return map,x,y end
+            if xyValid(x,y) and matchesTurnInReference(id,map,x,y) then return map,x,y end
         end
     end
 end
@@ -869,6 +897,7 @@ observedTurnIn=function(id,map,x,y,reference,skipName)
         source=referenceTurnIns[id] or (AT.ForeverQuestNPCReferences and AT.ForeverQuestNPCReferences[id])
             or (AT.ForeverATTQuestNPCReferences and AT.ForeverATTQuestNPCReferences[id])
             or (AT.ForeverVerifiedEndpointReferences and AT.ForeverVerifiedEndpointReferences[id])
+            or (AT.ForeverSupplementalTurnInReferences and AT.ForeverSupplementalTurnInReferences[id])
     else
         source=AT.ObservedQuestTurnIns and AT.ObservedQuestTurnIns[id]
     end
@@ -949,7 +978,7 @@ resolveTurnInPoint=function(id,viewMap,wantName,lookup)
         end
         if not queryHints(AT.ObservedQuestTurnIns) and not queryHints(referenceTurnIns)
             and not queryHints(AT.ForeverQuestNPCReferences) and not queryHints(AT.ForeverATTQuestNPCReferences) then
-            queryHints(AT.ForeverVerifiedEndpointReferences)
+            if not queryHints(AT.ForeverVerifiedEndpointReferences) then queryHints(AT.ForeverSupplementalTurnInReferences) end
         end
     end
     if m then rememberTurnInMap(id,m) end

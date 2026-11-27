@@ -12,7 +12,7 @@ CreateFrame=function(_,_,parent)
     local overlay={parent=parent,SetAllPoints=nop,EnableMouse=nop,
         SetFrameLevel=function(self,level)self.level=level end,parts={}}
     function overlay:CreateFontString()
-        return {SetShadowOffset=nop,SetText=nop,SetTextColor=nop,SetPoint=nop,ClearAllPoints=nop,Show=nop,Hide=nop}
+        return {SetShadowOffset=nop,SetText=function(_,value) self.legendText=value end,SetTextColor=nop,SetPoint=nop,ClearAllPoints=nop,Show=nop,Hide=nop}
     end
     function overlay:CreateLine(_,layer)
         local line={SetThickness=nop,SetColorTexture=function(self,...)self.color={...}end,
@@ -72,6 +72,17 @@ assert(not overlay.shown and overlays[stock].shown and overlays[stock].parts[1].
 MapWiseAPI.UI.frame.hidden=false
 AT.RenderWorldQuestRoute("routed",20,route)
 assert(overlays[terrain]==overlay and not overlays[stock].shown and overlay.shown,"switching surfaces reuses the inert overlay")
+-- An independently visible MapWise canvas can render while the native frame is hidden.
+WorldMapFrame.IsVisible=function()return false end
+AT.RenderWorldQuestRoute("routed",20,route)
+assert(overlay.shown and overlay.parts[1].shown,"visible MapWise must not depend on native frame visibility")
+-- Bearings aimed outside the viewport continue as one solid segment to its edge.
+AT.GetQuestTurnInPoint=function()return 121,.2,.35 end
+C_Map.GetPlayerMapPosition=function()return CreateVector2D(.2,.2) end
+AT.RenderWorldQuestRoute("planning",20,nil)
+assert(overlay.shown and overlay.parts[1].shown and not overlay.parts[2].shown)
+assert(math.abs(overlay.parts[1].endX-50)<.00001 and overlay.parts[1].color[2]==.92)
+assert(overlay.legendText=="ESTIMATED DIRECTION  |  NOT A WALKING ROUTE")
 AT.RenderWorldQuestRoute("no_quest",nil,nil)
 assert(not overlay.shown)
 print("PASS MapWise shares full NQT route, clips on the visible terrain, reprojects when switching map mode, and matches yellow/green stock colors")

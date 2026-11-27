@@ -287,7 +287,9 @@ do
     pois[2548]={{questID=96084,x=.2,y=.2,isQuestStart=false,inProgress=true}}
     assert(select(3,AT.GetFocusedQuestRoutePoint())==.6178)
     pois[2548][1].inProgress=false
-    assert(select(3,AT.GetFocusedQuestRoutePoint())==.2,"client hand-in pin is always preferred")
+    assert(select(3,AT.GetFocusedQuestRoutePoint())==.6178,"an old kill-zone pin flagged as ready must not beat the known hand-in")
+    pois[2548][1].x=.618;pois[2548][1].y=.832
+    assert(select(3,AT.GetFocusedQuestRoutePoint())==.618,"a consistent client hand-in pin remains preferred")
     pois[2548]=nil
     function UnitFactionGroup() return "Horde" end
     assert(select(2,AT.GetFocusedQuestRoutePoint())==nil,"don't route to another faction's finisher")
