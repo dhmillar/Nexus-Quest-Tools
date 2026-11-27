@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.183 - 2026-11-27
+
+- **Quest turn-ins:** Completed faction coverage for two A Sealed Crate quests. Alliance characters are directed to Marcy Baker in Redridge Mountains and Horde characters to Dokimi in The Barrens when the game does not return a live hand-in pin.
+
 ## 1.5.182 - 2026-11-27
 
 - **Quest turn-ins:** Added four observed hand-in references in Tanaris and Eastern Plaguelands, including the separate Super Egg-O-Matic object quest. Corrected Lost Shipping Crate and A Few Furs for Friz to use Alliance-only Friz Frazzlespark hand-ins in Riverglades. Observed references do not create native GPS routes.

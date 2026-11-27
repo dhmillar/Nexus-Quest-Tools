@@ -83,4 +83,16 @@ end
 pins[2548]={{questID=93443,isQuestStart=false,inProgress=false,x=.771,y=.529}}
 map,x,y,name,click,approx=AT.GetReadyQuestTurnInPoint(93443,2548)
 assert(map==2548 and x==.771 and y==.529 and name=="Friz Frazzlespark" and click and not approx)
+pins[2548]=nil
+for _,id in ipairs({91900,91906}) do
+    for _,expected in ipairs({{"Alliance",1433,"Marcy Baker"},{"Horde",1413,"Dokimi"}}) do
+        faction=expected[1]
+        local m,_,_,npc,action=AT.GetReadyQuestTurnInPoint(id)
+        assert(m==expected[2] and npc==expected[3] and action, "wrong Sealed Crate faction "..id)
+    end
+end
+faction="Alliance"
+pins[1433]={{questID=91906,isQuestStart=false,inProgress=false,x=.097,y=.710}}
+map,x,y,name,click=AT.GetReadyQuestTurnInPoint(91906)
+assert(map==1433 and x==.097 and y==.710 and name=="Marcy Baker" and click)
 print("PASS Forever turn-in observations: standalone display, factions, locale, live pin precedence, no guess and no reference GPS")
