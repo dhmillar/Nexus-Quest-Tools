@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.173 - 2026-11-27
+
+- **Rank Quest party chat:** Announces all quest completions with your Primary raid marker, including delivery, exploration, escort, and quests without objective counters.
+- Announces a newly ready quest once. If it was turned in before the quest log showed it as ready, the turn-in event supplies the confirmation. Kill and collection milestones are still shown on unfinished quests.
+
 ## 1.5.172 - 2026-11-27
 
 - **Rank Quest:** Announces newly completed kill or collection objectives in party chat with your chosen raid marker. On by default; switch it off in Rank Quest settings. It does not replay already-completed objectives.

@@ -1,7 +1,7 @@
 # Nexus Quest Tools 1.5.169
 For World of Warcraft: Forever 1.60.1 (interface 16001). Uses the Blizzard quest tracker and a native character-specific action-bar macro. Quest data and tracking are standalone; Questie and QuestieDB are not used.
 
-**Rank Quest party announcements (on by default):** When you finish one of your own kill or collection objectives in a party, NQT posts the quest and objective in party chat with your chosen Primary raid marker. Turn this off in **Rank Quest → Announce objective completion in party chat**. It does not replay previously completed objectives or post to raids.
+**Rank Quest party announcements (on by default):** NQT announces every completed quest in party chat with your chosen Primary raid marker, including quests with no kill or collection objectives. Kill and collection milestones on unfinished quests still show. The final objective and quest completion are one announcement when confirmed together. Turn it off in **Rank Quest → Announce quest completion in party chat**. It does not replay old completions or post to raids.
 
 Quest-starting item popup (Rank Quest settings, on by default): when you acquire an item that starts an eligible quest, click its icon above your character to open the standard offer. The icon clears as soon as you accept. Right-click to dismiss without accepting. The addon does not accept quests for you.
 

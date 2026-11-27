@@ -517,12 +517,25 @@ do
             end)
         end
     end
-    local function observe(qid,allow,title)
+    local function announceCompletion(qid,state,detail)
+        local quest=state.title or cleanChatText(call(Q.GetTitleForQuestID,qid)) or ("Quest #"..qid)
+        local mark=call(AT.GetPrimaryMarker)
+        if not id(mark) or mark>8 then mark=8 end
+        queue[#queue+1]=("{rt%d} [%s] %s"):format(mark,clip(quest,85),detail)
+    end
+    local function observe(qid,allow,title,accepted)
         if not id(qid) or departed[qid] or eq(call(Q.IsOnQuest,qid),false) then return end
+        local state=prior[qid]
+        local ready=call(AT.IsQuestReadyForTurnIn or Q.ReadyForTurnIn,qid)
+        local complete=eq(ready,true) or eq(ready,1)
+        local newComplete=complete and (state and not state.completed or not state and accepted)
+        if not state then state={rows={}};prior[qid]=state end
+        state.title=title or state.title
+        if complete then state.completed=true end
+        if allow and newComplete then announceCompletion(qid,state,"Quest complete!") end
         local list=call(Q.GetQuestObjectives,qid)
         if not is(list,"table") then return end
-        local rows=prior[qid] or {}
-        prior[qid]=rows
+        local rows=state.rows
         for i=1,math.min(#list,32) do
             local row=list[i]
             local kind,total,count=field(row,"type"),field(row,"numRequired"),field(row,"numFulfilled")
@@ -534,17 +547,14 @@ do
                     rows[i]={kind=kind,total=total,completed=complete}
                 elseif complete and not previous.completed then
                     previous.completed=true
-                    if allow and #queue<12 then
+                    if allow and not state.completed and #queue<12 then
                         local label=cleanChatText(field(row,"text"))
                         if label then
                             label=label:gsub("%s*[(]?%s*%d+%s*/%s*%d+%s*[)]?%s*$",""):gsub("[%s:]+$","")
                         end
                         if not label or label=="" then label=kind=="item" and "Collection" or "Kills" end
                         label=clip(label,120)..": "..total.."/"..total
-                        local quest=title or cleanChatText(call(Q.GetTitleForQuestID,qid)) or ("Quest #"..qid)
-                        local mark=call(AT.GetPrimaryMarker)
-                        if not id(mark) or mark>8 then mark=8 end
-                        queue[#queue+1]=("{rt%d} [%s] %s (complete)"):format(mark,clip(quest,85),clip(label,138))
+                        announceCompletion(qid,state,clip(label,138).." (complete)")
                     end
                 end
             end
@@ -567,7 +577,7 @@ do
         for qid in pairs(prior) do
             if not seen[qid] then
                 if eq(call(Q.IsOnQuest,qid),true) then observe(qid,allow)
-                else prior[qid]=nil end
+                elseif not departed[qid] then prior[qid]=nil end
             end
         end
         if not sendPending then sendNext() end
@@ -585,15 +595,24 @@ do
             activeQuestScan(false)
             return
         end
-        if event=="QUEST_REMOVED" or event=="QUEST_TURNED_IN" then
-            if id(a) then departed[a]=true;prior[a]=nil end
+        if event=="QUEST_TURNED_IN" then
+            if id(a) and departed[a]~="turned-in" then
+                local state=prior[a] or {}
+                if not state.completed then announceCompletion(a,state,"Quest complete!") end
+                departed[a],prior[a]="turned-in",nil
+                if not sendPending then sendNext() end
+            end
+            return
+        elseif event=="QUEST_REMOVED" then
+            if id(a) and not departed[a] then departed[a]="removed" end
             return
         end
         if event=="QUEST_ACCEPTED" then
             local qid=id(b) and b or a
             if id(qid) then
                 departed[qid],prior[qid]=nil,nil
-                observe(qid,false)
+                observe(qid,true,nil,true)
+                if not sendPending then sendNext() end
             end
         elseif event=="QUEST_WATCH_UPDATE" and id(a) and eq(call(Q.IsOnQuest,a),true) then
             observe(a,true)

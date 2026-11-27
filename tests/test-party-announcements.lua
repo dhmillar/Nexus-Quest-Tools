@@ -24,6 +24,7 @@ function IsInGroup() return party end
 function IsInRaid() return raid end
 local log={294,508}
 local visible=2
+local ready={}
 local function item(n)
     return {type="item",numRequired=8,numFulfilled=n,finished=n==8,
         text="|cff44ffff|Hitem:2|h[Scout Insignia]|h|r: "..n.."/8"}
@@ -36,8 +37,9 @@ local quests={[294]={item(7),kill(3),{type="event",numRequired=1,numFulfilled=0}
 C_QuestLog={
     GetNumQuestLogEntries=function() return visible,#log end,
     GetInfo=function(i) return {questID=log[i],isHeader=false,title=i==1 and "Patrol {star}" or "The Hills"} end,
-    GetTitleForQuestID=function(qid) return qid==508 and "The Hills" or "Patrol {star}" end,
+    GetTitleForQuestID=function(qid) return ({[508]="The Hills",[701]="Delivery",[702]="Exploration",[703]="Escort",[704]="Instant turn-in",[705]="Already ready",[706]="Final collection",[707]="Instant accept"})[qid] or "Patrol {star}" end,
     GetQuestObjectives=function(qid) return quests[qid] end,
+    ReadyForTurnIn=function(qid) return ready[qid]==true end,
     IsOnQuest=function(qid) for _,id in ipairs(log) do if id==qid then return true end end return false end,
 }
 local AT={GetPrimaryMarker=function() return 7 end}
@@ -88,4 +90,23 @@ event("QUEST_LOG_UPDATE");tick()
 assert(#sent==4,"simultaneous messages are spaced")
 event("GROUP_ROSTER_UPDATE");tick()
 assert(#sent==4,"queued chat never crosses a roster change")
-print("PASS default-on party-only kill and collection announcements, custom raid marker, debounce, no duplicates or backlog, collapsed logs and roster changes")
+log={701,702,703,704,705,706,707};visible=#log
+C_QuestLog.GetInfo=function(i) local qid=log[i];return {questID=qid,isHeader=false,title=C_QuestLog.GetTitleForQuestID(qid)} end
+quests[701]=nil;quests[702]={{type="event",finished=false}};quests[703]={{type="progressbar",finished=false}}
+quests[706]={item(7)};ready[705]=true
+event("PLAYER_ENTERING_WORLD");event("QUEST_LOG_UPDATE");tick()
+assert(#sent==4,"no replay for a quest already ready when entering")
+ready[701],ready[702],ready[703],ready[706]=true,true,true,true
+quests[706][1]=item(8)
+event("QUEST_LOG_UPDATE");for i=1,5 do tick() end
+for i,name in ipairs({"Delivery","Exploration","Escort","Final collection"}) do
+    assert(sent[4+i]=="{rt7} ["..name.."] Quest complete!")
+end
+assert(#sent==8,"the final collection objective and quest completion are one message")
+event("QUEST_REMOVED",704);event("QUEST_TURNED_IN",704);event("QUEST_TURNED_IN",704);tick()
+assert(#sent==9 and sent[9]=="{rt7} [Instant turn-in] Quest complete!")
+event("QUEST_TURNED_IN",701);event("QUEST_TURNED_IN",705);tick()
+assert(#sent==9,"turn-in cannot duplicate already seen ready state")
+ready[707]=true;event("QUEST_ACCEPTED",707);tick()
+assert(#sent==10 and sent[10]=="{rt7} [Instant accept] Quest complete!")
+print("PASS party-only all quest types, instant completion, turn-in fallback, marker, no duplicate/backlog, intermediate objective milestones, and roster changes")

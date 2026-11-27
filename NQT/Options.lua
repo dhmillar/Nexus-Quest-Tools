@@ -253,8 +253,8 @@ local function buildPanel()
     option(rank, "showQuestMapPins", "Show standalone map pins", -114, "Adds quest and service pins to the world map. NQT adds no minimap pins. Recorded starts can still have prerequisites.")
     option(rank, "showObservedQuestGivers", "Show observed quest giver locations", -142, "Show known giver locations, even when the associated quest is not currently available.")
     option(rank, "questStartItemAlert", "Quest-starting item popup", -170, "Shows the icon for a newly acquired quest-starting item above your character. Click to open the quest offer, or right-click to dismiss.")
-    option(rank, "rankQuestPartyAnnouncements", "Announce objective completion in party chat", -198,
-        "Posts when you finish your own kill or collection objective, with your Primary marker in front. On by default; does not announce to raid, guild or public chat.")
+    option(rank, "rankQuestPartyAnnouncements", "Announce quest completion in party chat", -198,
+        "Announces any completed quest to your party, with your Primary marker in front. Also shows kill and collection milestones on unfinished quests. On by default.")
     makeText(rank, "GameFontHighlightSmall", -234, "Right-click a quest to exclude it from automatic tracking.")
     makeText(rank, "GameFontDisableSmall", -256, "Ctrl-click quest titles to number them. /at order lists them.")
 

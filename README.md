@@ -1,6 +1,6 @@
 # Nexus Quest Tools for WoW Forever
 
-**Rank Quest party announcements (on by default):** When you finish one of your own kill or collection objectives in a party, NQT posts the quest and objective in party chat with your chosen Primary raid marker. Turn this off in **Rank Quest → Announce objective completion in party chat**. It does not replay previously completed objectives or post to raids.
+**Rank Quest party announcements (on by default):** NQT announces every completed quest in party chat with your chosen Primary raid marker, including quests with no kill or collection objectives. Kill and collection milestones on unfinished quests still show. The final objective and quest completion are one announcement when confirmed together. Turn it off in **Rank Quest → Announce quest completion in party chat**. It does not replay old completions or post to raids.
 
 <img src="https://raw.githubusercontent.com/dhmillar/Nexus-Quest-Tools/main/assets/nexus-fire-cat.png" alt="Nexus Quest Tools fire-cat icon" width="112">
 
