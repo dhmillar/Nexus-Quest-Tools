@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.240
+
+- Pet Bar now reads the active pet's health for a fixed upper-left HUD. It works with friendly nameplates disabled, including in dungeons, and no longer moves or changes nameplates. Existing Pet Bar settings are retained.
+
 ## 1.5.239
 
 - Added 2,377 standalone turn-in references. The bulk import matches QuestieDB Forever 1.1.6 against bundled Forever quest IDs and titles, validates unambiguous endpoints and map coordinates, and keeps native game pins authoritative. Includes every missing quest in the reported Riverglades Completed view; Baelog displays Dig Two, Uldaman, without inventing coordinates.

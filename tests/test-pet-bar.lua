@@ -1,67 +1,30 @@
 local AT={db={enabled=true}}
 local sample={health=100,maximum=100,present=true,name="Ember"}
 local watcher,bar,created,reads=nil,nil,0,0
-UIParent={}
-UIParent.GetEffectiveScale=function()return 1 end
-UIParent.GetWidth=function()return 800 end
-UIParent.GetHeight=function()return 600 end
-local function plate(token)
-    return {namePlateUnitToken=token,IsForbidden=function(self)return self.forbidden==true end,
-        IsVisible=function()return true end,GetFrameLevel=function()return 14 end}
-end
-local mine,other=plate("nameplate7"),plate("nameplate9")
-local direct,listed,ownership=mine,{other,mine},"nameplate7"
-C_NamePlate={
-    GetNamePlateForUnit=function(token)
-        if token=="pet" then return direct end
-        for _,f in ipairs(listed) do if f.namePlateUnitToken==token then return f end end
-    end,
-    GetNamePlates=function()return listed end,
-}
-function UnitIsUnit(a,b)return a=="pet" and b==ownership end
-local cv={nameplateShowFriendlyPlayerPets="0",nameplateShowFriendlyPlayers="0",nameplateShowFriendlyNpcs="0",nameplateShowFriends="0"}
+local cv={nameplateShowFriendlyPlayerPets="0",nameplateShowFriendlyPets="0"}
 local writes={}
-local timers={}
-C_Timer={After=function(delay,callback)timers[#timers+1]={delay,callback}end}
+UIParent={}
+C_NamePlate=setmetatable({},{__index=function()error("HUD must not use any nameplate API")end})
 C_CVar={
     GetCVar=function(k)return cv[k] end,
-    SetCVar=function(k,v) writes[#writes+1]=k;cv[k]=v end,
+    SetCVar=function(k,v) writes[#writes+1]={k,v};cv[k]=v end,
 }
-local combat,instance=false,false
+local combat=false
 function InCombatLockdown()return combat end
-function IsInInstance()return instance end
-function UnitGUID(u)
-    if u=="pet" or u==ownership then return "Pet-0-0-0-0-19-FF" end
-    if u=="nameplate9" or u=="nameplate10" then return "Pet-0-0-0-0-20-AA" end
-    return "Creature-0-0-0-0-21-AB"
-end
-function UnitIsFriend(_,u)return u~="nameplate10" end
-local function stock(alpha,forbidden)
-    return {a=alpha,IsForbidden=function()return forbidden==true end,
-        GetAlpha=function(self)return self.a end,SetAlpha=function(self,v)self.a=v end}
-end
-mine.UnitFrame,other.UnitFrame=stock(1),stock(.72)
-mine.unitFramePlater,other.unitFramePlater=stock(.84),stock(.71)
-mine.ActorNameSpecial,mine.ActorTitleSpecial,mine.unitName=stock(.91),stock(.88),stock(.93)
-other.ActorTitleSpecial=stock(.67)
-for _,font in ipairs({mine.ActorNameSpecial,mine.ActorTitleSpecial,mine.unitName}) do font.IsForbidden=nil; font.GetParent=function()return mine.unitFramePlater end end
-local npc,enemy,protected=plate("nameplate11"),plate("nameplate10"),plate("nameplate12")
-npc.UnitFrame,enemy.UnitFrame,protected.UnitFrame=stock(.8),stock(.9),stock(1,true)
-listed={mine,other,npc,enemy,protected}
 function UnitExists(unit) assert(unit=="pet");return sample.present end
 function UnitHealth(unit) assert(unit=="pet");reads=reads+1;return sample.health end
 function UnitHealthMax(unit) assert(unit=="pet");return sample.maximum end
 function UnitName(unit) assert(unit=="pet");return sample.name,"Owner information" end
 local function region()
     return {SetAllPoints=function()end,SetColorTexture=function()end,SetPoint=function(self,...)self.point={...} end,
-        SetWidth=function()end,SetHeight=function()end,SetShadowOffset=function()end,GetFont=function()return "MockFont" end,SetFont=function()end,
-        SetText=function(self,v)self.text=v end}
+        SetWidth=function()end,SetHeight=function()end,SetShadowOffset=function()end,GetFont=function()return "MockFont" end,
+        SetFont=function()end,SetText=function(self,v)self.text=v end}
 end
-function CreateFrame(kind)
+function CreateFrame(kind,_,parent)
     created=created+1
-    local f={events={},shown=true}
-    function f:SetScript(k,fn)if k=="OnEvent" then self.onEvent=fn else self.onUpdate=fn end end
-    function f:RegisterEvent(e)self.events[e]=true end
+    local f={events={},shown=true,parent=parent}
+    function f:SetScript(k,fn) assert(k=="OnEvent","no polling");self.onEvent=fn end
+    function f:RegisterEvent(e)assert(not e:find("NAME_PLATE"));self.events[e]=true end
     function f:RegisterUnitEvent(e,u)self.events[e]=u end
     function f:UnregisterAllEvents()self.events={} end
     function f:Hide()self.shown=false end
@@ -69,13 +32,10 @@ function CreateFrame(kind)
     function f:IsShown()return self.shown end
     if kind=="Frame" then watcher=f;return f end
     assert(kind=="StatusBar")
-    bar=f;f.parent=UIParent
+    bar=f
     f.SetFrameStrata=function()end
     f.SetSize=function(self,w,h)self.width,self.height=w,h end
-    f.SetPoint=function(self,point,owner,anchor,x,y)self.point={point,owner,anchor,x,y} end
-    f.ClearAllPoints=function(self)self.point=nil end
-    f.SetParent=function(self,o)self.parent=o end
-    f.SetFrameLevel=function(self,v)self.level=v end
+    f.SetPoint=function(self,...)self.point={...} end
     f.EnableMouse=function(self,v)self.interactive=v end
     f.SetMinMaxValues=function(self,m,x)self.range={m,x} end
     f.SetStatusBarTexture=function(self,v)assert(v=="Interface\\Buttons\\WHITE8X8")end
@@ -87,30 +47,17 @@ function CreateFrame(kind)
 end
 assert(loadfile("NQT/PetBar.lua"))("NQT",AT)
 AT.InitPetBar()
-assert(not bar and reads==0 and not next(watcher.events) and #writes==0,"default off, no polling")
-AT.db.petBarEnabled=true
-AT.RefreshPetBar()
+assert(not bar and reads==0 and not next(watcher.events) and #writes==0,"default off")
+AT.db.petBarEnabled=true;AT.RefreshPetBar()
 assert(bar.shown and bar.value==100 and bar.label.text=="100%" and bar.green==1 and not bar.red)
-assert(bar.parent==UIParent and bar.point[2]==mine and bar.point[1]=="BOTTOM" and bar.point[3]=="TOP" and bar.point[5]>0)
-assert(cv.nameplateShowFriendlyPlayerPets=="1" and cv.nameplateShowFriendlyPlayers=="0"
-    and cv.nameplateShowFriendlyNpcs=="0" and cv.nameplateShowFriends=="0")
-assert(other.UnitFrame.a==0 and mine.UnitFrame.a==0 and npc.UnitFrame.a==.8 and enemy.UnitFrame.a==.9 and protected.UnitFrame.a==1)
-assert(mine.unitFramePlater.a==.84 and other.unitFramePlater.a==.71 and other.ActorTitleSpecial.a==.67,"leave both Plater frame opacities and other pets alone")
-assert(mine.ActorNameSpecial.a==0 and mine.ActorTitleSpecial.a==0 and mine.unitName.a==0)
-for _,opacity in ipairs({.12,1,.05,.84,1}) do
-    mine.unitFramePlater.a=opacity
-    watcher.onUpdate(watcher,.21)
-    assert(mine.unitFramePlater.a==opacity and mine.ActorNameSpecial.a==0 and mine.ActorTitleSpecial.a==0,
-        "Plater parent opacity can freely change without re-exposing either label")
-end
+assert(bar.parent==UIParent and bar.point[2]==UIParent and bar.point[1]=="TOPLEFT")
 assert(bar.height==8 and not bar.interactive and bar.range[1]==0 and bar.range[2]==100)
 assert(watcher.events.UNIT_HEALTH=="pet" and watcher.events.UNIT_PET=="player" and watcher.events.UNIT_NAME_UPDATE=="pet")
-assert(bar.petName.text=="Ember" and bar.petName.point[1]=="BOTTOM" and bar.petName.point[2]==bar and bar.petName.point[3]=="TOP")
+assert(bar.petName.text=="Ember" and bar.petName.point[1]=="BOTTOM" and bar.petName.point[2]==bar)
+local anchor=bar.point
 sample.name="Cinder"
 watcher.onEvent(watcher,"UNIT_NAME_UPDATE","target");assert(bar.petName.text=="Ember")
-watcher.onEvent(watcher,"UNIT_NAME_UPDATE","pet");assert(bar.petName.text=="Cinder" and mine.UnitFrame.a==0)
-sample.name=nil
-watcher.onEvent(watcher,"UNIT_NAME_UPDATE","pet");assert(bar.petName.text=="" and bar.shown)
+watcher.onEvent(watcher,"UNIT_NAME_UPDATE","pet");assert(bar.petName.text=="Cinder")
 local function health(n,unit)
     sample.health=n
     watcher.onEvent(watcher,"UNIT_HEALTH",unit or "pet")
@@ -118,33 +65,19 @@ end
 health(10,"target");assert(bar.value==100)
 health(50);assert(bar.value==50 and not bar.red)
 health(49.9);assert(bar.red and bar.label.text=="49%")
-health(0);assert(bar.value==0 and bar.red and bar.label.text=="0%")
+health(0);assert(bar.value==0 and bar.red)
 sample.maximum=50;sample.health=30
 watcher.onEvent(watcher,"UNIT_MAXHEALTH","pet");assert(bar.value==60 and not bar.red)
-sample.present=false
-watcher.onEvent(watcher,"UNIT_PET","player");assert(not bar.shown and cv.nameplateShowFriendlyPlayerPets=="0" and other.UnitFrame.a==.72 and mine.unitFramePlater.a==1)
-assert(mine.ActorNameSpecial.a==.91 and mine.ActorTitleSpecial.a==.88 and mine.unitName.a==.93,"restore original font alpha on dismissal")
-sample.present=true
-watcher.onEvent(watcher,"UNIT_PET","player");assert(bar.shown and created==2)
-watcher.onEvent(watcher,"NAME_PLATE_UNIT_REMOVED","nameplate7")
-assert(not bar.shown and bar.parent==UIParent and bar.point==nil,"no stale frame after native removal")
-direct=nil;listed={other}
-health(40);assert(not bar.shown,"no center fallback or wrong pet")
-watcher.onEvent(watcher,"NAME_PLATE_UNIT_ADDED","nameplate9")
-assert(not bar.shown,"ignore somebody else's nameplate")
-local replacement=plate("nameplate8")
-ownership,listed="nameplate8",{other,replacement}
-watcher.onEvent(watcher,"NAME_PLATE_UNIT_ADDED","nameplate8")
-assert(bar.shown and bar.parent==UIParent and bar.point[2]==replacement and not bar.red,"attach by exact event token")
-replacement.forbidden=true
-health(40);assert(not bar.shown,"never attach to protected nameplates")
-replacement.forbidden=false
-AT.RefreshPetBar();assert(bar.shown and bar.parent==UIParent and bar.point[2]==replacement,"recover a visible pet via nameplate enumeration")
+sample.present=false;watcher.onEvent(watcher,"UNIT_PET","player");assert(not bar.shown)
+sample.present=true;watcher.onEvent(watcher,"UNIT_PET","player");assert(bar.shown and created==2)
+watcher.onEvent(watcher,"PLAYER_ENTERING_WORLD")
+assert(bar.shown and bar.point==anchor,"dungeon zone changes cannot move or hide the HUD")
+combat=true;health(20)
+assert(bar.shown and bar.point==anchor and bar.red and #writes==0)
 local secret=123
-issecretvalue=function(v)return v==secret end
-health(secret);assert(not bar.shown,"hide if no supported API can display restricted values")
 local secretPercent={}
 issecretvalue=function(v)return v==secret or v==secretPercent end
+health(secret);assert(not bar.shown,"unknown health does not leave a stale bar")
 CurveConstants={ScaleTo100={}}
 Enum={LuaCurveType={Step=1}}
 function CreateColor(...)local rgba={...};return {GetRGBA=function()return unpack(rgba) end} end
@@ -159,72 +92,16 @@ function UnitHealthPercent(unit,predicted,curve)
 end
 function bar.label:SetFormattedText(fmt,value)assert(value==secretPercent and fmt=="%.0f%%");self.text="native" end
 health(secret);assert(bar.shown and bar.value==secretPercent and bar.red and bar.label.text=="native")
-replacement.GetCenter=function()return 345 end
-replacement.GetTop=function()return 270 end
-replacement.GetEffectiveScale=function()return 1 end
-watcher.onEvent(watcher,"PLAYER_ENTERING_WORLD")
-assert(bar.shown and bar.point[2]==UIParent and bar.point[4]==345)
-replacement.GetCenter=function()return 367 end
-watcher.onUpdate(watcher,.05)
-assert(bar.point[4]==367,"follows exposed screen coordinates without reparenting")
-issecretvalue=nil
-sample.health=25
-combat=true
+-- Migrate only the setting this addon previously owned, never other CVars.
+AT.db.petBarNameplateLease="nameplateShowFriendlyPlayerPets";cv.nameplateShowFriendlyPlayerPets="1"
 AT.db.petBarEnabled=false
-AT.RefreshPetBar();assert(not bar.shown and watcher.events.PLAYER_REGEN_ENABLED and cv.nameplateShowFriendlyPlayerPets=="1")
-combat=false
-watcher.onEvent(watcher,"PLAYER_REGEN_ENABLED")
-assert(not next(watcher.events) and cv.nameplateShowFriendlyPlayerPets=="0","defer and restore the exact owned category")
-AT.db.petBarEnabled=true;AT.db.enabled=false
-AT.RefreshPetBar();assert(not bar.shown and not next(watcher.events))
-AT.db.enabled=true;AT.db.petBarEnabled=true
+AT.RefreshPetBar()
+assert(not bar.shown and watcher.events.PLAYER_REGEN_ENABLED and #writes==0)
+combat=false;watcher.onEvent(watcher,"PLAYER_REGEN_ENABLED")
+assert(not next(watcher.events) and not AT.db.petBarNameplateLease and #writes==1)
+assert(writes[1][1]=="nameplateShowFriendlyPlayerPets" and writes[1][2]=="0")
 cv.nameplateShowFriendlyPlayerPets="1"
-AT.RefreshPetBar()
-AT.db.petBarEnabled=false;AT.RefreshPetBar()
-assert(cv.nameplateShowFriendlyPlayerPets=="1","do not restore a setting we didn't change")
-cv.nameplateShowFriendlyPlayerPets="0"
 AT.db.petBarEnabled=true;AT.RefreshPetBar()
-local beforeDungeonCVars=#writes
-instance=true;watcher.onEvent(watcher,"PLAYER_ENTERING_WORLD")
-assert(cv.nameplateShowFriendlyPlayerPets=="0" and #writes==beforeDungeonCVars+1,"only release the outdoor lease")
-assert(bar.shown and bar.point[4]==367,"a usable pet plate still gets the overhead bar in a dungeon")
-replacement.forbidden=true
-watcher.onUpdate(watcher,.05)
-assert(bar.shown and bar.point[1]=="TOPLEFT" and bar.point[3]=="TOPLEFT" and bar.point[4]==24 and bar.point[5]==-158,"fall back to a fixed bar if the dungeon hides the pet plate")
-sample.name="Cinder"
-watcher.onEvent(watcher,"UNIT_NAME_UPDATE","pet")
-health(20)
-assert(bar.shown and bar.red and bar.petName.text=="Cinder" and bar.label.text=="40%")
-replacement.forbidden=false
-watcher.onEvent(watcher,"NAME_PLATE_UNIT_ADDED","nameplate8")
-assert(bar.shown and bar.point[4]==367,"rebind if a usable plate becomes available")
-direct=nil;listed={other}
-watcher.onEvent(watcher,"NAME_PLATE_UNIT_REMOVED","nameplate8")
-assert(bar.shown and bar.point[1]=="TOPLEFT","live removal hands off to the fixed bar")
-sample.present=false
-watcher.onEvent(watcher,"UNIT_PET","player")
-assert(not bar.shown and not bar.point,"hide the dungeon bar when the pet is dismissed")
-sample.present=true
-watcher.onEvent(watcher,"UNIT_PET","player")
-assert(bar.shown and bar.point[1]=="TOPLEFT","the new pet gets the same fixed HUD fallback")
-assert(cv.nameplateShowFriendlyPlayerPets=="0" and #writes==beforeDungeonCVars+1,"no CVar enforcement or other plates in a dungeon")
-local ownPlayerPlate=plate("player")
-local unidentifiedPlate=plate(nil)
-direct=ownPlayerPlate;listed={ownPlayerPlate,other}
-AT.RefreshPetBar()
-assert(bar.shown and bar.point[1]=="TOPLEFT","never attach the overhead pet bar to the player plate")
-direct=unidentifiedPlate;listed={unidentifiedPlate,other}
-AT.RefreshPetBar()
-assert(bar.shown and bar.point[1]=="TOPLEFT","a dungeon plate without a confirmed pet token is not used")
-direct=nil;listed={other}
-instance=false; direct=nil; listed={}; timers={}
-watcher.onEvent(watcher,"PLAYER_ENTERING_WORLD")
-assert(not bar.shown and #timers==4,"saved toggle retries without a ready plate")
-cv.nameplateShowFriendlyPlayerPets="0"
-listed={replacement}
-assert(timers[2][1]==.6);timers[2][2]()
-assert(bar.shown and cv.nameplateShowFriendlyPlayerPets=="1","late Plater setting and plate are reconciled without toggling")
-AT.db.petBarEnabled=false;AT.RefreshPetBar()
-timers[4][2]();assert(not bar.shown and cv.nameplateShowFriendlyPlayerPets=="0","stale startup callback cannot re-enable disabled bar")
-for _,key in ipairs(writes) do assert(key=="nameplateShowFriendlyPlayerPets") end
-print("PASS Pet Bar: bright green and red threshold, exact pet anchor, pet-only category lease and restoration, confirmed friendly pet filtering and instance guards")
+assert(bar.shown and bar.point==anchor and cv.nameplateShowFriendlyPlayerPets=="1" and #writes==1)
+AT.db.enabled=false;AT.RefreshPetBar();assert(not bar.shown and not next(watcher.events))
+print("PASS Pet Bar HUD: health watches, instance/combat persistence, zero nameplate API calls, native restricted-health rendering and one-time legacy restoration")
