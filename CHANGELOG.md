@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.182 - 2026-11-27
+
+- **Quest turn-ins:** Added four observed hand-in references in Tanaris and Eastern Plaguelands, including the separate Super Egg-O-Matic object quest. Corrected Lost Shipping Crate and A Few Furs for Friz to use Alliance-only Friz Frazzlespark hand-ins in Riverglades. Observed references do not create native GPS routes.
+
 ## 1.5.181 - 2026-11-27
 
 - **Level Guide pickups:** Theocritus’ Retrieval now highlights two observed Redridge pickup areas for the Glowing Shadowhide Pendant. It does not show a drop percentage from the small samples. The Horde version of Sign Me Up! now points to the correct Advertising License Application sold by Gishah in The Barrens. Neither reference sets native GPS.

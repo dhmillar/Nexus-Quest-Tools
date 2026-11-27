@@ -6,6 +6,11 @@
 -- Observed interactions: Efficient Games (https://efficient.games), CC BY 4.0.
 local _,AT=...
 AT.ForeverVerifiedEndpointReferences={
+ -- Efficient Games first-hand observations: https://github.com/JIVESCORP/eg-link-output-wowf/tree/1339ce5600bbc2b12e8f1081e584f548f62fa57f/data/wowf
+ [2747]={{1446,.5235,.2697,1,7763,0,"Curgle Cranklehop"}}, -- EG Link exact turn-in 1.60.1.71139
+ [8893]={{1446,.5236,.2704,2,142071,0,"Egg-O-Matic"}}, -- EG Link exact turn-in 1.60.1.71091
+ [5214]={{1423,.7088,.4859,1,11033,0,"Smokey LaRue"}}, -- EG Link exact turn-in 1.60.1.71139
+ [5251]={{1423,.7159,.5004,1,11039,0,"Duke Nicholas Zverenhoff"}}, -- EG Link exact turn-in 1.60.1.71139
  [29]={{1450,.3651,.4026,1,11799,0,"Tajarri"}}, -- wiki quest rev 6230318; observed interaction
  [274]={{1432,.4601,.136,1,1093,1,"Chief Engineer Hinderweir VII"}}, -- wiki quest rev 6307981; observed interaction
  [283]={{1432,.4601,.136,1,1093,1,"Chief Engineer Hinderweir VII"}}, -- wiki quest rev 6307982; observed interaction

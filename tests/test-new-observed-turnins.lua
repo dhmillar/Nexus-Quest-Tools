@@ -61,4 +61,26 @@ assert(AT.ToggleQuestHUDManualFocus(5529) and not AT.GetQuestTurnInPoint(5529),"
 local area,recipient,clickable=AT.GetReadyQuestTurnInArea(7463)
 assert(area=="Dire Maul, the Athenaeum" and recipient=="Lorekeeper Lydros" and clickable and not AT.GetReadyQuestTurnInPoint(7463))
 assert(not AT.ForeverVerifiedEndpointReferences[95454],"keep conflicting completion recipient unresolved")
+for _,id in ipairs({2747,8893,5214,5251}) do
+    local ref=assert(AT.ForeverVerifiedEndpointReferences[id])[1]
+    faction=ref[6]==2 and "Horde" or "Alliance"
+    local m,sx,sy,recipient,canTarget,estimated=AT.GetReadyQuestTurnInPoint(id)
+    assert(m==ref[1] and sx==ref[2] and sy==ref[3] and recipient==ref[7] and estimated, "bad fallback "..id)
+    assert((not not canTarget)==(ref[4]==1), "object or NPC action mismatch "..id)
+    assert(AT.ToggleQuestHUDManualFocus(id) and not AT.GetQuestTurnInPoint(id), "observation is not native GPS "..id)
+    if ref[6]~=0 then
+        faction=faction=="Alliance" and "Horde" or "Alliance"
+        assert(not AT.GetReadyQuestTurnInPoint(id), "opposite-faction fallback "..id)
+    end
+end
+for _,id in ipairs({93443,94928}) do
+    faction="Horde"
+    assert(not AT.GetReadyQuestTurnInPoint(id),"neutral NPC is not a Horde hand-in "..id)
+    faction="Alliance"
+    local m,sx,sy,npc,action,estimated=AT.GetReadyQuestTurnInPoint(id)
+    assert(m==2548 and sx==.7708 and sy==.5285 and npc=="Friz Frazzlespark" and action and estimated)
+end
+pins[2548]={{questID=93443,isQuestStart=false,inProgress=false,x=.771,y=.529}}
+map,x,y,name,click,approx=AT.GetReadyQuestTurnInPoint(93443,2548)
+assert(map==2548 and x==.771 and y==.529 and name=="Friz Frazzlespark" and click and not approx)
 print("PASS Forever turn-in observations: standalone display, factions, locale, live pin precedence, no guess and no reference GPS")
