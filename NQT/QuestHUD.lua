@@ -1400,7 +1400,7 @@ local function liveMobPortrait(owner,texture)
     if owner.npcID then
         local guid=call(UnitGUID,"target")
         local npc=is(guid,"string") and tonumber(guid:match("^Creature%-%d+%-%d+%-%d+%-%d+%-(%d+)%-"))
-        if (npc or owner.vendorItem) and npc~=owner.npcID then return false end
+        if (npc or owner.vendorItem or owner.dropItem) and npc~=owner.npcID then return false end
     end
     local ok,result=pcall(SetPortraitTexture,texture,"target",true)
     return ok and result~=false
@@ -1414,7 +1414,7 @@ local function bundledMobPortrait(owner,texture)
 end
 local function paintMobIcon(icon,tryLive)
     if not icon.mobName or icon.overflow then return end
-    local key=icon.questId..":"..icon.mobName..(icon.vendorItem and (":"..icon.vendorItem..":"..icon.npcID) or "")
+    local key=icon.questId..":"..icon.mobName..((icon.vendorItem or icon.dropItem) and (":"..tostring(icon.vendorItem or icon.dropItem)..":"..tostring(icon.npcID)) or "")
     local fixed=key..":"..tostring(icon.displayID)
     if (tryLive or icon.renderKey~=fixed and icon.renderKey~="live:"..key)
         and liveMobPortrait(icon,icon.image) then icon.renderKey="live:"..key;return end
@@ -1503,22 +1503,22 @@ local function wireObjectiveMobHover(button,b)
     button:SetScript("OnLeave",hideObjectiveMobTip)
     button:SetScript("OnHide",hideObjectiveMobTip)
 end
-local function setObjectiveMob(button,qid,name,overflow,vendor)
+local function setObjectiveMob(button,qid,name,overflow,vendor,sourceItem)
     local display,npc
     if vendor then display,npc=vendor.display,vendor.npc
-    elseif name then display,npc=call(AT.GetQuestMobDisplayID,name,true,qid) end
+    elseif name then display,npc=call(AT.GetQuestMobDisplayID,name,true,qid,sourceItem) end
     if button.questId~=qid or button.mobName~=name or button.displayID~=display
-        or button.vendorItem~=(vendor and vendor.item) then
+        or button.vendorItem~=(vendor and vendor.item) or button.npcID~=npc or button.dropItem~=sourceItem then
         hideObjectiveMobTip(button)
     end
     button.questId,button.mobName,button.overflow,button.displayID,button.npcID=qid,name,overflow,display,npc
-    button.vendorItem=vendor and vendor.item
+    button.vendorItem,button.dropItem=vendor and vendor.item,sourceItem
 end
 local function resetObjectiveMobButtons(buttons,first)
     for i=first or 1,#buttons do
         local button=buttons[i]
         hideObjectiveMobTip(button)
-        button.questId,button.mobName,button.overflow,button.displayID,button.npcID,button.vendorItem=nil,nil,nil,nil,nil,nil
+        button.questId,button.mobName,button.overflow,button.displayID,button.npcID,button.vendorItem,button.dropItem=nil,nil,nil,nil,nil,nil,nil
         button:Hide()
     end
 end
@@ -1549,7 +1549,7 @@ local function renderObjectives(b,row,width,theme,hasItem,hasDetail)
         return f,lineTop,lineHeight
     end
     local inlineMobSize=18
-    local function addObjectiveMobIcon(name,overflow,x,y,vendor)
+    local function addObjectiveMobIcon(name,overflow,x,y,vendor,sourceItem)
         iconsUsed=iconsUsed+1
         local icon=b.objectiveMobIcons[iconsUsed]
         if not icon then
@@ -1580,7 +1580,7 @@ local function renderObjectives(b,row,width,theme,hasItem,hasDetail)
             end)
             b.objectiveMobIcons[iconsUsed]=icon
         end
-        setObjectiveMob(icon,row.id,name,overflow,vendor)
+        setObjectiveMob(icon,row.id,name,overflow,vendor,sourceItem)
         icon:ClearAllPoints();icon:SetPoint("TOPLEFT",b,"TOPLEFT",x,-y)
         icon.count:SetShown(overflow~=nil)
         if overflow then
@@ -1593,7 +1593,7 @@ local function renderObjectives(b,row,width,theme,hasItem,hasDetail)
         end
         icon:Show()
     end
-    local function addObjectiveMobHit(label,name,indent,y,h,vendor)
+    local function addObjectiveMobHit(label,name,indent,y,h,vendor,sourceItem)
         hitsUsed=hitsUsed+1
         local hit=b.objectiveMobHits[hitsUsed]
         if not hit then
@@ -1610,7 +1610,7 @@ local function renderObjectives(b,row,width,theme,hasItem,hasDetail)
             end)
             b.objectiveMobHits[hitsUsed]=hit
         end
-        setObjectiveMob(hit,row.id,name,nil,vendor)
+        setObjectiveMob(hit,row.id,name,nil,vendor,sourceItem)
         local cap=label:GetWidth()
         local pixels=call(label.GetStringWidth,label) or call(label.GetUnboundedStringWidth,label)
         local hitWidth=is(pixels,"number") and pixels>0 and math.min(cap,pixels+3) or cap
@@ -1619,7 +1619,7 @@ local function renderObjectives(b,row,width,theme,hasItem,hasDetail)
         hit:SetSize(vendor and cap+indent or hitWidth,vendor and math.max(h,inlineMobSize) or h)
         hit:Show()
     end
-    local function addObjectiveWithMobs(label,names,done)
+    local function addObjectiveWithMobs(label,names,done,sourceItem)
         local stride=inlineMobSize+3
         local cap=math.max(90,width-(hasItem and 62 or 24))
         local cols=math.max(1,math.min(4,math.floor((cap-95)/stride)))
@@ -1635,9 +1635,9 @@ local function renderObjectives(b,row,width,theme,hasItem,hasDetail)
         local objective,y,h
         if done then objective,y,h=add(label,indent,.64,.78,.68)
         else objective,y,h=add(label,indent) end
-        addObjectiveMobHit(objective,names[1],indent,y,h)
+        addObjectiveMobHit(objective,names[1],indent,y,h,nil,sourceItem)
         for i=1,direct do
-            addObjectiveMobIcon(names[i],nil,12+(i-1)%cols*stride,y+math.floor((i-1)/cols)*stride)
+            addObjectiveMobIcon(names[i],nil,12+(i-1)%cols*stride,y+math.floor((i-1)/cols)*stride,nil,sourceItem)
         end
         if overflow then addObjectiveMobIcon(nil,overflow,12+direct*stride,y) end
         height=math.max(height,y+math.ceil(units/cols)*stride+2)
@@ -1706,7 +1706,7 @@ local function renderObjectives(b,row,width,theme,hasItem,hasDetail)
                 local names=call(AT.GetQuestDropMobNames,item)
                 if vendor then addObjectiveWithVendor(label,vendor,npc,display,item,done)
                 elseif kill then addObjectiveWithMobs(bullet..label,{kill},done)
-                elseif names and #names>0 then addObjectiveWithMobs(bullet..label,names,done)
+                elseif names and #names>0 then addObjectiveWithMobs(bullet..label,names,done,item)
                 elseif done then add(bullet..label,0,.64,.78,.68)
                 else add(bullet..label,0) end
             end

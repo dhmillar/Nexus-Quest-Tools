@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.193 - 2026-11-27
+
+- Keeps Rank Quest highlighted when stepping out of a quest area, using a 100-yard buffer from the last confirmed in-area position instead of relying only on the map pin.
+- Resolves drop portraits by exact item source when creatures share a name. Crawler Spittle now uses the Riverglades Shore Crawler, not the generic fallback.
+
 ## 1.5.192 - 2026-11-27
 
 - Highlights outstanding quest purchases at their verified merchants with a gold box and a bottom-right exclamation mark. The highlight clears on completion, paging, buyback, and close as appropriate. Nothing is purchased automatically.

@@ -169,21 +169,24 @@ function AT.GetKnownQuestDropItem(qid,label)
     end
     return match
 end
-local itemNames,itemNamesPack,itemNamesData
+local itemNames,itemSources,itemNamesPack,itemNamesData
 function AT.GetQuestDropMobNames(item)
     if not english() or not pos(item) then return end
     local pack=AT.ObservedQuestDrops
     local data=AT.QuestMobData
     if itemNamesPack~=pack or itemNamesData~=data or not itemNames then
-        itemNamesPack,itemNamesData,itemNames=pack,data,{}
+        itemNamesPack,itemNamesData,itemNames,itemSources=pack,data,{},{}
     end
     if itemNames[item]~=nil then return itemNames[item] or nil end
     local rows=pack and pack.items and pack.items[item]
     local names,seen={},{}
+    itemSources[item]=seen
     local function add(id)
         local npc=mob(id)
         local name=npc and npc[1]
-        if name and not seen[name] then seen[name]=true;names[#names+1]=name end
+        if not name then return end
+        if seen[name]==nil then seen[name]=id;names[#names+1]=name
+        elseif seen[name]~=id then seen[name]=false end
     end
     for _,e in ipairs(rows or {}) do
         if e[6]==0 and pos(e[2]) then add(e[1]) end
@@ -194,10 +197,19 @@ function AT.GetQuestDropMobNames(item)
     itemNames[item]=#names>0 and names or false
     return itemNames[item] or nil
 end
-function AT.GetQuestMobDisplayID(name,exactName,qid)
+function AT.GetQuestMobDisplayID(name,exactName,qid,sourceItem)
     if not english() or (not exactName and AT.IsPartialTarget and AT.IsPartialTarget()) then return end
     local key=normalize(name)
     if not key then return end
+    if pos(sourceItem) then
+        AT.GetQuestDropMobNames(sourceItem)
+        local source=itemSources and itemSources[sourceItem] and itemSources[sourceItem][name]
+        if source==false then return end
+        if source then
+            local row=mob(source)
+            return row and row[5],source
+        end
+    end
     local catalog=AT.ForeverLevelGuideQuests
     local q=pos(qid) and catalog and catalog[qid]
     local display,npc

@@ -65,6 +65,9 @@ for _,case in ipairs({
     local actual,source=AT.GetQuestMobDisplayID(name,true,qid)
     assert(actual==display and source==npc,"Bundled portrait: "..qid.."/"..name)
 end
+assert(not AT.GetQuestMobDisplayID("Shore Crawler",true,95988),"name alone has two models")
+local display,creature=AT.GetQuestMobDisplayID("Shore Crawler",true,95988,271650)
+assert(display==999 and creature==256807,"Crawler Spittle uses the Riverglades Shore Crawler")
 local prior=AT.ObservedQuestDrops
 AT.ObservedQuestDrops={items={[99999]={{259987,1,2,3,1,1}}}}
 assert(not AT.GetQuestDropMobNames(99999),"object IDs must not become NPC names")

@@ -127,3 +127,33 @@ expect(11)
 assert(select(3,AT.GetFocusedQuestRoutePoint())==.54,"the native ready pin need not repeat isQuestStart=false")
 C_QuestLog.GetNumQuestLogEntries=baseLog
 print("PASS ready quest without native pin, hidden rows, stock watch required, broad blob ranking, distance-only GPS safety and omitted POI flags")
+
+do
+    local id=ids[1]
+    assert(id)
+    ready[id],inside[id],measured[id],cont[id]=false,true,380,true
+    map,instance=1,false
+    local x=.5
+    local oldPos=C_Map.GetPlayerMapPosition
+    C_Map.GetPlayerMapPosition=function()
+        return {GetXY=function() return x,.5 end}
+    end
+    local samples={[id]=true}
+    assert(AT.SampleQuestAreas(samples,{})[id]=="inside")
+    inside[id]=false
+    x=.51
+    assert(AT.SampleQuestAreas(samples,{[id]="inside"})[id]=="near","far POI does not override verified objective edge")
+    measured[id]=nil
+    x=.60
+    assert(AT.SampleQuestAreas(samples,{[id]="near"})[id]=="near","highlight stays at 100 yards even without a POI")
+    x=.601
+    assert(AT.SampleQuestAreas(samples,{[id]="near"})[id]=="outside","clear past 100 yards")
+    x=.55
+    assert(AT.SampleQuestAreas(samples,{})[id]=="near","reenter the nearby band without touching the blob")
+    instance=true
+    assert(AT.SampleQuestAreas(samples,{})[id]~="near","do not carry outdoor samples into an instance")
+    instance=false
+    assert(AT.SampleQuestAreas(samples,{})[id]~="near","old samples do not return after zoning out of an instance")
+    C_Map.GetPlayerMapPosition=oldPos
+    print("PASS Rank Quest preserves area highlights at the edge and up to 100 yards beyond; same-map measurement; instance reset")
+end

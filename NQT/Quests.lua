@@ -470,19 +470,61 @@ end
 
 -- Read-only proximity query for Rank Quest's visual highlights. It does
 -- not change order, focus, watches, or the navigation destination.
+local lastInsideByQuest={}
+local function currentAreaPosition(ctx,parent)
+    if not ctx then return end
+    local world,x,y=getPlayerWorld(ctx)
+    local usable=ctx
+    local px,py=mapPlayer(usable)
+    if not px and parent then usable=parent;px,py=mapPlayer(usable) end
+    if px or world~=nil then
+        return {world=world,x=x,y=y,map=px and usable.id,px=px and px*usable.w,py=py and py*usable.h}
+    end
+end
+local function distanceFromAreaSample(a,b)
+    if not a or not b then return end
+    local dx,dy
+    if a.world~=nil and b.world~=nil then
+        if a.world~=b.world then return math.huge end
+        dx,dy=a.x-b.x,a.y-b.y
+    elseif a.map and a.map==b.map then
+        dx,dy=a.px-b.px,a.py-b.py
+    end
+    if dx then return dx*dx+dy*dy end
+end
 function AT.SampleQuestAreas(ids,previous)
     local result={}
     if not Q then return result end
     local ctx,points,parent,blocked=proximityContext()
+    for id in pairs(lastInsideByQuest) do if not ids[id] then lastInsideByQuest[id]=nil end end
+    local position,checkedPosition
+    local radius2=ENTER_YARDS^2+1e-6
     for id in pairs(ids) do
         if validID(id) then
+            if blocked or completed(id) or call(Q.IsOnQuest,id)==false then lastInsideByQuest[id]=nil end
             if completed(id) then
                 local d=turnInDistance(id,ctx,points[id],parent,blocked)
                 if d then result[id]=d<=ENTER_YARDS^2+1e-6 and "near" or "outside" end
             else
-                local limit=previous[id] and EXIT_YARDS or ENTER_YARDS
+                local limit=not lastInsideByQuest[id] and previous and previous[id] and EXIT_YARDS or ENTER_YARDS
                 local _,area=measureProximity(id,ctx,points[id],parent,blocked,limit)
-                if area~="possible_exit" or previous[id]=="inside" then result[id]=area end
+                if not blocked and (area=="inside" or lastInsideByQuest[id]) then
+                    if not checkedPosition then
+                        checkedPosition=true
+                        position=currentAreaPosition(ctx,parent)
+                    end
+                    if area=="inside" then
+                        -- Save the last confirmed point inside the objective, not the
+                        -- map pin (which can be hundreds of yards from its edge).
+                        if position then lastInsideByQuest[id]=position end
+                    else
+                        local d=distanceFromAreaSample(lastInsideByQuest[id],position)
+                        if d and d<=radius2 then area="near"
+                        elseif d and area~="near" then area="outside" end
+                        if d==math.huge then lastInsideByQuest[id]=nil end
+                    end
+                end
+                if area~="possible_exit" or previous and previous[id]=="inside" then result[id]=area end
             end
         end
     end
