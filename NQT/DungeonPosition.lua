@@ -1978,10 +1978,11 @@ do
 
     local clearDead="\n/cleartarget [@target,dead]"
 
-    local function reacquireTail(label,ping)
+    -- Guard separately, then use the same native ping a player types.
+    local pingTarget="\n/stopmacro [noexists]\n/ping [@target] Attack"
+    local function reacquireTail(label)
         if not label then return "" end
-        return "\n/stopmacro [exists,nodead]\n/cleartarget\n/stopmacro [exists]"
-            .."\n/targetexact [noexists] "..label.."\n/atmob k0:"..planFor(label:lower())..ping..clearDead
+        return "\n/targetexact [noexists][dead] "..label.."\n/atmob v"..planFor(label:lower())
     end
 
     local function smartSearch(fallback,free)
@@ -1998,21 +1999,21 @@ do
         if #freeNames==0 and recent then
             -- Every known candidate already has a mark. Reacquire the
             -- last one rather than start over at an out-of-range entry.
-            return "/stopmacro [combat]"..reacquireTail(recent,
-                AT.db.bossMarkPing and "\n/ping [@target,exists,nodead] Attack" or ""):gsub("^\n/stopmacro %[exists,nodead%]", "", 1)
+            return "/stopmacro [combat]\n/cleartarget\n/stopmacro [exists]"..reacquireTail(recent)
+                ..clearDead..(AT.db.bossMarkPing and pingTarget or "")
         end
         if #freeNames==0 then return end
         searchSlots,searchHit={},nil
         local body="/stopmacro [combat]\n/cleartarget\n/stopmacro [exists]"
-        local ping=AT.db.bossMarkPing and "\n/ping [@target,exists,nodead] Attack" or ""
-        local recover=recent and reacquireTail(recent,ping) or clearDead
-        local mark=free and ("\n/tm [exists,nodead] ~"..free) or ""
+        local ping=AT.db.bossMarkPing and pingTarget or ""
+        local recover=reacquireTail(recent)..clearDead..ping
+        local mark=free and ("\n/tm [nodead] ~"..free) or ""
         local tail,count,lastProbe
         for _,entry in ipairs(freeNames) do
             local name,slot=entry[1],entry[2]
             local plan=planFor(name:lower())
             local line="\n/targetexact [noexists][dead] "..name
-            local nextTail=mark.."\n/atmob j"..(free or 0)..":"..slot..ping
+            local nextTail=mark.."\n/atmob j"..(free or 0)..":"..slot
             local compiled=body..(lastProbe or "")..line
             -- SecureActionButton macrotext uses RunMacroText, not a
             -- stored character macro. Stay below its engine limit.
@@ -2097,8 +2098,8 @@ do
             body=body.."\n/targetexact "..(i==1 and "" or "[noexists] ")..label
 
         end
-        local ping=AT.db.bossMarkPing and "\n/ping [@target,exists,nodead] Attack" or ""
-        body=body..(index and ("\n/tm [exists,nodead] ~"..index) or "")
+        local ping=AT.db.bossMarkPing and pingTarget or ""
+        body=body..(index and ("\n/tm [nodead] ~"..index) or "")
             ..("\n/atmob k"..(index or 0)..":"..planFor(labels[1]:lower())..(not pick and "f" or ""))
         if not pick then
             if not smart then
@@ -2126,7 +2127,7 @@ do
         -- a live boss when this macro was prepared. Guard marks and pings
         -- natively, then clear the corpse after all acquisition paths.
         if maxBytes and #body+#ping+#clearDead>maxBytes then ping="" end
-        body=body..ping..clearDead
+        body=body..clearDead..ping
         if maxBytes and #body>maxBytes then return true,nil,"That boss name does not fit in the action-bar macro." end
         return true,body
     end

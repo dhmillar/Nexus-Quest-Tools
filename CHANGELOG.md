@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.229
+
+- Boss macros use the same targeted ping command as chat, after clearing corpses and checking for an acquired target. Raid marks retain living-target and existing-marker protection.
+
 ## 1.5.228
 
 - The overhead Pet Bar only follows a verified pet nameplate in dungeons. The fallback sits at the upper left, away from the player character.

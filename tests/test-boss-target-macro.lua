@@ -87,10 +87,10 @@ units.nameplate2.dist=81
 units.nameplate3=mob(648,103,"Trash")
 units.nameplate3.dist=1
 units.target=units.nameplate1
-assert(press()=="/stopmacro [combat]\n/cleartarget\n/stopmacro [exists]\n/targetexact Boss B\n/tm [exists,nodead] ~8\n/atmob k8:1\n/cleartarget [@target,dead]")
+assert(press()=="/stopmacro [combat]\n/cleartarget\n/stopmacro [exists]\n/targetexact Boss B\n/tm [nodead] ~8\n/atmob k8:1\n/cleartarget [@target,dead]")
 units.nameplate2.mark=8
 AT.db.bossMarkPing=true
-assert(press()=="/stopmacro [combat]\n/cleartarget\n/stopmacro [exists]\n/targetexact Boss A\n/tm [exists,nodead] ~7\n/atmob k7:2\n/ping [@target,exists,nodead] Attack\n/cleartarget [@target,dead]")
+assert(press()=="/stopmacro [combat]\n/cleartarget\n/stopmacro [exists]\n/targetexact Boss A\n/tm [nodead] ~7\n/atmob k7:2\n/cleartarget [@target,dead]\n/stopmacro [noexists]\n/ping [@target] Attack")
 units.nameplate1.mark=7
 units.nameplate4=mob(645,104,"Boss C")
 assert(press():find("~4",1,true),"third boss gets Triangle")
@@ -132,7 +132,7 @@ function EditMacro(i,n,icon,b)
 end
 assert(loadfile("NQT/Target.lua"))("NQT",AT)
 assert(AT.RefreshBossActionBar())
-assert(body:find("/targetexact Hamhock",1,true) and body:find("/ping [@target,exists,nodead] Attack",1,true))
+assert(body:find("/targetexact Hamhock",1,true) and body:find("/ping [@target] Attack",1,true))
 assert(not body:find("/atmob [btn:2]e;c",1,true),"does not capture the secondary target")
 units.nameplate1.mark=8
 units.nameplate3=mob(1716,789,"Bazil Thredd")
@@ -156,7 +156,7 @@ function issecretvalue(v) return v==secret or v==hidden end
 units={nameplate1=mob(1696,773,"Targorr the Dread"),nameplate2=mob(648,205,"Defias Prisoner")}
 assert(AT.RefreshBossActionBar())
 assert(body:find("Targorr the Dread",1,true) and not body:find("Defias Prisoner",1,true))
-assert(body:find("/tm [exists,nodead] ~8",1,true))
+assert(body:find("/tm [nodead] ~8",1,true))
 units.nameplate2.mark=hidden
 assert(AT.RefreshBossActionBar())
 assert(body:find("Targorr the Dread",1,true) and not body:find("/tm",1,true),"an unreadable unrelated mark does not prevent targeting")
@@ -192,6 +192,8 @@ local function native(text,lookup,refuse)
             if not refuse then priorTarget,target=target,nil; units.target=target end
         elseif line=="/stopmacro [exists,nodead]" then
             if live then return end
+        elseif line=="/stopmacro [noexists]" then
+            if not target then return end
         elseif line=="/stopmacro [exists]" then
             if target then return end
         elseif line:find("^/targetexact") then
@@ -201,14 +203,14 @@ local function native(text,lookup,refuse)
                 local hit=lookup[name]
                 if hit then units.target=hit;ui[1].scripts.OnEvent(ui[1],"PLAYER_TARGET_CHANGED") end
             end
-        elseif line:find("^/tm ") and (line:find("[exists,nodead]",1,true) and live or hostile) then
+        elseif line:find("^/tm ") and (line:find("[nodead]",1,true) and live or hostile) then
             local index=tonumber(line:match("~(%d)$")); assert(index)
             if not actual[target] then
                 for unit,mark in pairs(actual) do if mark==index then actual[unit]=nil end end
                 actual[target]=index
             end
-        elseif line:find("^/ping ") and (line:find("[@target,exists,nodead]",1,true) and live or hostile) then
-            assert(line=="/ping [@target,exists,nodead] Attack","boss ping must use target, not cursor")
+        elseif line:find("^/ping ") then
+            assert(live and line=="/ping [@target] Attack","native guard must prevent pinging a corpse or the ground")
             pings[#pings+1]=target
         elseif line:find("^/atmob ") then
             SlashCmdList.AUTOTRACKMOB(line:sub(8))
@@ -399,7 +401,7 @@ for _,useSmart in ipairs({false,true}) do
     units={nameplate1=a,nameplate2=b2,nameplate3=c};actual={[a]=8,[b2]=7};pings={}
     assert(AT.RefreshBossActionBar())
     local first=useSmart and press() or body
-    assert(first:find("~4",1,true) and first:sub(-27)=="/cleartarget [@target,dead]")
+    assert(first:find("~4",1,true) and first:find("/cleartarget [@target,dead]",1,true))
     units.target=c;SlashCmdList.AUTOTRACKMOB("k4") -- server failed to apply the first request
     when=when+1
     assert(AT.RefreshBossActionBar())
