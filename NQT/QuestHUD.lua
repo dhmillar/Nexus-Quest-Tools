@@ -1340,7 +1340,7 @@ local function objectiveDropSuffix(qid,item)
             return " ("..(a==b and a or a.."\226\128\147"..b)..")",rows,grouped and "eg-group" or (openedWindows and "eg-solo-window" or "eg")
         end
     end
-    local early=AT.ForeverRivergladesEarlyDropSamples and AT.ForeverRivergladesEarlyDropSamples[qid]
+    local early=AT.ForeverEarlyDropSamples and AT.ForeverEarlyDropSamples[qid]
     local function earlyRate(mode)
         local best
         for _,e in ipairs(early or {}) do

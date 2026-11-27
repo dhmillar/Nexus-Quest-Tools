@@ -13738,10 +13738,13 @@ AT.ForeverQuestItemNames={
  [287992]="Old Key",
 }
 
--- Riverglades: separate early observations, exact quest/item/NPC IDs, no pooled builds.
+-- Early observations, exact quest/item/NPC IDs, no pooled builds.
 -- Efficient Games CC BY 4.0: https://github.com/JIVESCORP/eg-link-output-wowf
 -- Each row: item, NPC, drops, opened windows, contributors, client build, group (1) or solo (0).
-AT.ForeverRivergladesEarlyDropSamples={
+AT.ForeverEarlyDropSamples={
+ [596]={{3915,595,5,19,2,70938,1}},
+ [2418]={{8009,4844,3,15,2,71037,1}},
+ [2862]={{9237,5249,8,16,2,71037,1},{9237,5253,5,15,2,71037,1}},
  [94535]={{265358,255769,13,19,2,70938,0},{265358,255774,11,17,2,70938,0},{265358,255774,13,15,2,70959,1}},
  [94680]={{265745,254560,6,15,2,70959,1}},
  [94961]={{267073,256798,11,11,2,70938,0},{267073,256798,8,10,2,70959,1},{267073,256952,7,10,2,70959,1}},

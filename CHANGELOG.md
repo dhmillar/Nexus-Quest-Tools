@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.174 - 2026-11-27
+
+- **Rank Quest loot data:** Added verified party loot observations for Bloody Bone Necklaces, War on the Woodpaw, and Power Stones. Percentages are labeled as party samples with the number of loot windows. Observations were not pooled across builds or carried over to other quests.
+
 ## 1.5.173 - 2026-11-27
 
 - **Rank Quest party chat:** Announces all quest completions with your Primary raid marker, including delivery, exploration, escort, and quests without objective counters.

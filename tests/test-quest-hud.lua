@@ -416,11 +416,21 @@ do
     do
         local packed={}
         assert(loadfile("NQT/ForeverQuestFacts.lua"))("NQT",packed)
-        local early=packed.ForeverRivergladesEarlyDropSamples
+        local early=packed.ForeverEarlyDropSamples
         assert(early[94680][1][1]==265745 and early[94680][1][3]==6 and early[94680][1][4]==15)
         assert(not early[95121],"no mixed hotfix data")
-        local prevEarly,comp,solo,group=AT.ForeverRivergladesEarlyDropSamples,AT.ForeverRivergladesDropComparison,AT.ForeverQuestDropSamples,IsInGroup
-        AT.ForeverRivergladesEarlyDropSamples={[12]=early[94680]}
+        local expected={{596,3915,595,5,19},{2418,8009,4844,3,15},{2862,9237,5249,8,16},{2862,9237,5253,5,15}}
+        for _,record in ipairs(expected) do
+            local q,item,npc,drops,loots=unpack(record)
+            local matched,typed
+            for _,r in ipairs(early[q] or {}) do
+                if r[1]==item and r[2]==npc then matched=r[3]==drops and r[4]==loots and r[5]==2 and r[7]==1 end
+            end
+            for i=3,#packed.ForeverQuestFacts[q] do if packed.ForeverQuestFacts[q][i][1]==item then typed=true end end
+            assert(matched and typed,"verified party sample stays with its typed quest item")
+        end
+        local prevEarly,comp,solo,group=AT.ForeverEarlyDropSamples,AT.ForeverRivergladesDropComparison,AT.ForeverQuestDropSamples,IsInGroup
+        AT.ForeverEarlyDropSamples={[12]=early[94680]}
         AT.ForeverRivergladesDropComparison={[12]=true}
         AT.ForeverQuestDropSamples={[12]=packed.ForeverQuestDropSamples[93788]}
         IsInGroup=function()return true end
@@ -450,7 +460,18 @@ do
         assert(find("Acquired in Stranglethorn").objectives[1].text:find("9% reported",1,true))
         assert(not find("A flight to Duskwood").objectives[1].text:find("reported",1,true))
         AT.ForeverReportedQuestDropReferences=refs
-        AT.ForeverRivergladesEarlyDropSamples,AT.ForeverRivergladesDropComparison,AT.ForeverQuestDropSamples,IsInGroup=prevEarly,comp,solo,group
+        AT.ForeverEarlyDropSamples={[12]=early[596]}
+        C_QuestLog.GetQuestObjectives=function(q)
+            if q==12 or q==11 then return {{type="item",itemID=3915,text="Bloody Bone Necklace: 0/25"}} end
+            return getObjectives(q)
+        end
+        for _,grouped in ipairs({true,false}) do
+            IsInGroup=function() return grouped end
+            AT.RefreshQuestHUD()
+            assert(find("Acquired in Stranglethorn").objectives[1].text:find("27%, party sample: 19 loots",1,true))
+            assert(not find("A flight to Duskwood").objectives[1].text:find("27%",1,true))
+        end
+        AT.ForeverEarlyDropSamples,AT.ForeverRivergladesDropComparison,AT.ForeverQuestDropSamples,IsInGroup=prevEarly,comp,solo,group
     end
     C_Item,AT.ForeverQuestFacts=oldItem,oldFacts
     C_QuestLog.GetQuestObjectives=getObjectives
