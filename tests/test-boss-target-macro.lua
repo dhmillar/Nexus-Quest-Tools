@@ -768,9 +768,9 @@ for _,smart in ipairs({false,true}) do
     units.nameplate1=nil;units.nameplate2=nil
     ui[1].scripts.OnEvent(ui[1],"NAME_PLATE_UNIT_REMOVED","nameplate1")
     local last=smart and press() or body
-    assert(not last:find("/ping ",1,true))
+    assert(not last:find("/targetexact "..c.name.."\n/ping ",1,true))
     native(last,{},false)
-    assert(units.target==c and #pings==6)
+    assert((not units.target or units.target==c) and #pings==6)
     C_Timer=savedTimer
 end
 print("PASS Krol'dok: both buttons cycle three marked bosses without repeating, keep their markers, skip corpses, and suppress lone-boss ping spam")
@@ -819,3 +819,65 @@ for _,smart in ipairs({false,true}) do
     UnitName,UnitGUID=oldName,oldGUID
 end
 print("PASS Krol'dok native hidden-identity fallback: Ashka, second living boss, unchanged raid icon, no exists predicates, misses and corpse cleanup")
+
+
+-- A readable Toof must not monopolize selection when the next boss is
+-- hidden from Lua. Removing that second boss's marker must re-arm the same
+-- icon and ping without moving Toof's existing Skull.
+for _,smart in ipairs({false,true}) do
+    units={};kind="none";ui[1].scripts.OnEvent(ui[1],"PLAYER_ENTERING_WORLD")
+    kind="party";current=3039;ui[1].scripts.OnEvent(ui[1],"PLAYER_ENTERING_WORLD")
+    local toof=mob(264773,9901,"Bossman Toof")
+    local ashka=mob(259281,9902,"War Handler Ashka")
+    local names={[toof.name]=toof,[ashka.name]=ashka}
+    local oldName,oldGUID=UnitName,UnitGUID
+    UnitName=function(u)if units[u]==ashka then return secret end return oldName(u) end
+    UnitGUID=function(u)if units[u]==ashka then return secret end return oldGUID(u) end
+    units.nameplate7=toof
+    actual={};pings={}
+    assert(AT.RefreshBossActionBar())
+    native(smart and press() or body,names,false)
+    assert(units.target==toof and actual[toof]==8 and pings[1]==toof)
+    toof.mark=8
+    ui[1].scripts.OnEvent(ui[1],"RAID_TARGET_UPDATE")
+    for i=1,7 do
+        assert(AT.RefreshBossActionBar())
+        native(smart and press() or body,names,false)
+        if actual[ashka] then break end
+    end
+    assert(units.target==ashka and actual[ashka]==7 and actual[toof]==8 and pings[2]==ashka and #pings==2)
+    ashka.mark=7
+    ui[1].scripts.OnEvent(ui[1],"RAID_TARGET_UPDATE")
+    ashka.mark=nil;actual[ashka]=nil
+    ui[1].scripts.OnEvent(ui[1],"RAID_TARGET_UPDATE")
+    -- The scanner knows Toof is visible and Ashka's icon was cleared,
+    -- so the next press should retry Ashka instead of retargeting Toof.
+    assert(AT.RefreshBossActionBar())
+    local rearm=smart and press() or body
+    native(rearm,names,false)
+    assert(actual[toof]==8 and actual[ashka]==7 and pings[3]==ashka,rearm)
+    UnitName,UnitGUID=oldName,oldGUID
+end
+print("PASS repeat Krol'dok marks: visible Toof does not block hidden Ashka, confirmed clear re-arms Ashka's marker and ping")
+
+
+-- A defeated hidden boss can disappear before its raid marker can be read.
+-- The confirmed encounter kill should release its icon for the next boss.
+do
+    units={};kind="none";ui[1].scripts.OnEvent(ui[1],"PLAYER_ENTERING_WORLD")
+    kind="party";current=3039;ui[1].scripts.OnEvent(ui[1],"PLAYER_ENTERING_WORLD")
+    local g=mob(258966,9991,"Slavecrusher Grox")
+    local a=mob(259281,9992,"War Handler Ashka")
+    local oldName,oldGUID=UnitName,UnitGUID
+    UnitName=function()return secret end
+    UnitGUID=function()return secret end
+    actual={};pings={}
+    native(press(),{[g.name]=g},false)
+    assert(actual[g]==8 and pings[1]==g)
+    g.dead=true;units={}
+    ui[1].scripts.OnEvent(ui[1],"ENCOUNTER_END",3450,"Slavecrusher Grox",1,5,1)
+    native(press(),{[g.name]=g,[a.name]=a},false)
+    assert(units.target==a and actual[a]==8 and pings[2]==a)
+    UnitName,UnitGUID=oldName,oldGUID
+end
+print("PASS confirmed Grox defeat retires the hidden reservation and frees Skull for Ashka")

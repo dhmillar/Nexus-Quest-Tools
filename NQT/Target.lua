@@ -630,6 +630,12 @@ function AT.InitTarget()
         if step and AT.ObserveBossSearch then AT.ObserveBossSearch(tonumber(step)); return end
         local finish,slot=command:match("^j([0-8]):(%d+)$")
         if finish and AT.FinishBossSearch then AT.FinishBossSearch(tonumber(finish),tonumber(slot)); return end
+        local nativeIcon,nativePlan,nativeSlot=command:match("^n([0-8]):(%d+):(%d+)$")
+        if nativeIcon and AT.ReserveBossMark then
+            AT.ReserveBossMark(tonumber(nativeIcon),tonumber(nativePlan),true)
+            if AT.AdvanceBossSearch then AT.AdvanceBossSearch(tonumber(nativeSlot)) end
+            return
+        end
         if AT.ReserveBossMark then
             local index,plan,advance=command:match("^k([0-8]):(%d+)(f?)$")
             if index then

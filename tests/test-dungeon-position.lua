@@ -800,6 +800,56 @@ stockContainer:Hide();Minimap.IsShown=function()return false end
 WorldMapFrame:Show();tick()
 assert(Minimap:GetParent()==stockContainer,"respect a minimap intentionally hidden itself")
 WorldMapFrame:Hide();stockContainer:Show()
+-- Some fullscreen UI transitions fade the stock host to zero alpha but
+-- leave IsVisible true. Lift the minimap, not the host, and restore exactly.
+local hostAlpha,ownAlpha,rootAlpha=0,1,1
+Minimap.IsShown=function()return true end
+stockContainer.GetEffectiveAlpha=function()return hostAlpha end
+Minimap.GetAlpha=function()return ownAlpha end
+Minimap.GetEffectiveAlpha=function()return (parent==root and rootAlpha or hostAlpha)*ownAlpha end
+nativeAnchor();WorldMapFrame:Show();tick()
+assert(Minimap:IsVisible() and Minimap:GetEffectiveAlpha()==1 and Minimap:GetParent()==root
+    and not Minimap.ZoomHitArea.shown,"a faded stock host does not hide the dock")
+WorldMapFrame:Hide();nativeRestored()
+hostAlpha=1
+nativeAnchor();WorldMapFrame:Show();tick()
+assert(Minimap:GetParent()==stockContainer)
+hostAlpha=0;tick()
+assert(Minimap:GetParent()==root and Minimap:GetEffectiveAlpha()==1,"late fade recovers the dock")
+WorldMapFrame:Hide();nativeRestored()
+hostAlpha,ownAlpha=0,0
+nativeAnchor();WorldMapFrame:Show();tick()
+assert(Minimap:GetParent()==stockContainer and Minimap.ZoomHitArea.shown,"a user-transparent minimap is not resurrected")
+WorldMapFrame:Hide();assert(#Minimap.points==1 and #Minimap.points[1]==1 and Minimap.points[1][1]=="CENTER")
+ownAlpha,rootAlpha=1,0
+nativeAnchor();WorldMapFrame:Show();tick()
+nativeRestored()
+WorldMapFrame:Hide()
+hostAlpha,rootAlpha=1,1
+-- Early in the map animation, no frame geometry is available. Keep the
+-- temporary anchor until it is, then honor the user's persisted dock point.
+local dock=AT.db.dungeonMinimapDock
+AT.db.dungeonMinimapDock={x=.25,y=.5}
+nativeAnchor();WorldMapFrame:Show();tick()
+assert(Minimap.points[1][2]==journal,"temporary direct dock before geometry")
+journal.GetLeft=function()return 100 end
+journal.GetBottom=function()return 50 end
+journal.GetEffectiveScale=function()return 1 end
+Minimap.GetWidth=function()return 140 end
+Minimap.GetHeight=function()return 140 end
+Minimap.GetEffectiveScale=function()return 1 end
+tick()
+local stableDock=Minimap.points[1][2]
+assert(stableDock~=journal and stableDock.parent==journal
+    and stableDock.anchor[4]==8+.25*(journal:GetWidth()-156)
+    and stableDock.anchor[5]==8+.5*(journal:GetHeight()-156),
+    "measured dock replaces the temporary anchor using the saved position")
+WorldMapFrame:Hide();nativeRestored()
+AT.db.dungeonMinimapDock=dock
+journal.GetLeft=nil;journal.GetBottom=nil;journal.GetEffectiveScale=nil
+Minimap.GetWidth=nil;Minimap.GetHeight=nil;Minimap.GetEffectiveScale=nil
+Minimap.GetAlpha=nil;Minimap.GetEffectiveAlpha=nil
+print("PASS stock minimap restores after an initial or late host fade, leaves its own hidden state intact, and recovers delayed dock geometry")
 Minimap.IsShown=nil;Minimap.IsVisible=function()return true end;Minimap.SetParent=nil
 print("PASS default minimap bypasses a hidden native parent only while docked, restores it, and respects intentionally hidden state")
 Minimap.ZoomHitArea=nil; Minimap.GetParent=nil; Minimap.SetPoint=nativeSetPoint

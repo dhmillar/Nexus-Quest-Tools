@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.237
+
+- Krol'dok boss searches move on from the last marked boss to look for others, even when only the previous boss is readable. A confirmed removal re-arms that boss's marker and ping; confirmed defeats free reserved markers.
+- The stock minimap checks inherited fading as well as hidden parents, then restores its original layout when the dungeon overlay closes or fails to render.
+
 ## 1.5.236
 
 - When WoW withholds Krol'dok boss names and IDs from addons, use WoW's native exact-name targeting with the hostile/living condition confirmed on Ashka. Corpses are cleared without marks or pings, known defeats stay excluded, and searches advance to the remaining bosses.

@@ -1328,10 +1328,25 @@ do
             s.beforeRender or "?",s.dockRender or "?",s.settled or s.returnRender or "?",sampleRender(),
             s.maskRefresh and "yes" or "no",s.backdropUncovered and "yes" or "no")
     end
+    local function canRenderMinimap(m,api)
+        if safe(m.IsVisible,m)~=true then return false end
+        if api then return true end
+        local alpha=safe(m.GetEffectiveAlpha,m)
+        return not num(alpha) or alpha>0
+    end
     local function stockHiddenParent(m,api)
-        if api or safe(m.IsShown,m)~=true or safe(m.IsVisible,m)~=false then return end
+        if api or safe(m.IsShown,m)~=true or canRenderMinimap(m,api) then return end
+        -- A child may be "visible" to FrameXML while its host's fullscreen
+        -- fade gives it zero effective alpha. Do not show a minimap whose
+        -- own visibility or alpha was intentionally changed by the user/UI.
+        local ownAlpha=safe(m.GetAlpha,m)
+        if num(ownAlpha) and ownAlpha<=0 then return end
         local parent=safe(m.GetParent,m)
-        if parent and safe(parent.IsVisible,parent)==false then return parent end
+        if not parent then return end
+        local parentAlpha=safe(parent.GetEffectiveAlpha,parent)
+        if safe(parent.IsVisible,parent)==false or (num(parentAlpha) and parentAlpha<=0) then
+            return parent
+        end
     end
     local function liftStock(s,parent)
         local m,root=s.frame,_G.UIParent
@@ -1339,7 +1354,7 @@ do
             or safe(m.IsProtected,m)~=false or safe(InCombatLockdown)==true then return false end
         if not pcall(m.SetParent,m,root) or safe(m.GetParent,m)~=root then return false end
         s.originalParent=parent
-        return safe(m.IsVisible,m)==true
+        return canRenderMinimap(m,s.api)
     end
     local function restore()
         if not saved then return true end
@@ -1400,15 +1415,23 @@ do
         if not holder then failed=nil;restore();return end
         if saved then
             if saved.holder==holder and not saved.rollback then
-                local hiddenParent=stockHiddenParent(saved.frame,saved.api)
-                if hiddenParent and not saved.originalParent and liftStock(saved,hiddenParent) then
-                    refreshTerrain(saved.frame)
+                if not saved.api and not canRenderMinimap(saved.frame,saved.api) then
+                    if safe(InCombatLockdown)==true then return end
+                    local hiddenParent=stockHiddenParent(saved.frame,saved.api)
+                    if hiddenParent and not saved.originalParent and liftStock(saved,hiddenParent) then
+                        refreshTerrain(saved.frame)
+                    else
+                        lastDockStatus="Stock minimap: the dock became invisible; reverting its layout."
+                        saved.rollback=true;failed=holder;restore();return
+                    end
                 end
                 hideChrome(saved)
-                if saved.spot and not saved.dragX then
+                if not saved.dragX then
                     local x,y,scale,w,h=bounds(saved)
-                    if w and (w~=saved.spanX or h~=saved.spanY or x~=saved.holderX or y~=saved.holderY or scale~=saved.holderScale) then
-                        place(saved,saved.u,saved.v)
+                    if w and (not saved.spot or w~=saved.spanX or h~=saved.spanY or x~=saved.holderX or y~=saved.holderY or scale~=saved.holderScale) then
+                        local u=saved.u or (w>0 and math.max(0,1-16/w) or 0)
+                        local v=saved.v or (h>0 and math.min(1,28/h) or 0)
+                        place(saved,u,v)
                     end
                 end
                 return
@@ -1431,7 +1454,7 @@ do
             if safe(C_AddOns and C_AddOns.IsAddOnLoaded or IsAddOnLoaded,"SexyMap")==true then return end
             api=nil
         end
-        local visible=safe(m.IsVisible,m)==true
+        local visible=canRenderMinimap(m,api)
         local hiddenParent=not visible and stockHiddenParent(m,api)
         if not visible and not hiddenParent then
             lastDockStatus="The minimap itself is hidden or unavailable.";return
@@ -1452,7 +1475,8 @@ do
         saved.ground=safe(C_Minimap and C_Minimap.GetDrawGroundTextures)
         saved.uiMap=safe(C_Minimap and C_Minimap.GetUiMapID)
         local d=AT.db.dungeonMinimapDock
-        local u,v=type(d)=="table" and fraction(d.x),type(d)=="table" and fraction(d.y)
+        local u,v=type(d)=="table" and fraction(d.x) or nil,type(d)=="table" and fraction(d.y) or nil
+        saved.u,saved.v=u,v
         local applied=(visible or liftStock(saved,hiddenParent)) and setLayer(m,raised)
         if applied then
             local _,_,_,w,h=bounds(saved)
@@ -1464,7 +1488,7 @@ do
                 applied=now and #now==1 and now[1][2]==holder
             end
         end
-        if not applied then
+        if not applied or (not api and not canRenderMinimap(m,api)) then
             lastDockStatus=(api and "SexyMap" or "Stock minimap")..": could not dock; reverting its layout.";saved.rollback=true;failed=holder;restore()
         else
             lastDockStatus=nil
@@ -2091,7 +2115,14 @@ do
                 if pick and pick.index then break end
             end
         end
-        return pick,#unresolved==0 and index or nil,index~=nil and #unresolved>0,deadNames,livingNames
+        local nativeRetries={}
+        if id==3039 and #unresolved==0 then
+            for _,icon in ipairs(raidOrder) do
+                local owner=retries[icon]
+                if owner and owner.name and not nativeRetries[owner.name] then nativeRetries[owner.name]=icon end
+            end
+        end
+        return pick,#unresolved==0 and index or nil,index~=nil and #unresolved>0,deadNames,livingNames,nativeRetries
     end
 
     -- Only the bound Smart Target button builds its macro on each physical
@@ -2158,30 +2189,40 @@ do
     end
 
     local krolAlive="[@target,harm,nodead]"
-    local function krolNativeSearch(fallback,free,smart,maxBytes)
+    local function krolNativeSearch(fallback,free,smart,maxBytes,retries,skipPrevious)
         if #fallback==0 then return end
         local limit=smart and 900 or (maxBytes or 200)
         local start=stockBatch<=#fallback and stockBatch or 1
         local body="/stopmacro [combat]\n/cleartarget\n/stopmacro "..krolAlive
         local stop="\n/stopmacro "..krolAlive
         local count=0
-        for offset=0,(smart and #fallback-1 or 0) do
-            local label=fallback[(start+offset-1)%#fallback+1]
+        local slots,previous={},nil
+        for offset=0,#fallback-1 do
+            local slot=(start+offset-1)%#fallback+1
+            local key=fallback[slot]:lower()
+            if retries[key] then table.insert(slots,1,slot)
+            elseif lastPress and lastPress.name==key then previous=slot
+            else slots[#slots+1]=slot end
+        end
+        if previous and not skipPrevious and (smart or #slots==0) then slots[#slots+1]=previous end
+        for _,slot in ipairs(slots) do
+            local label=fallback[slot]
             local key=label:lower()
             local index=free
             for _,owner in pairs(reservations) do
-                if owner.name==key then index=nil;break end
+                if owner.name==key then index=retries[key];break end
             end
             local step="\n/targetexact "..label
                 ..(index and ("\n/tm "..krolAlive.." ~"..index) or "")
-                ..(AT.db.bossMarkPing and (not lastPress or lastPress.name~=key)
+                ..(AT.db.bossMarkPing and (index or not lastPress or lastPress.name~=key)
                    and ("\n/ping "..krolAlive.." Attack") or "")
-                ..("\n/atmob k"..(index or 0)..":"..planFor(key).."f")
+                ..("\n/atmob n"..(index or 0)..":"..planFor(key)..":"..slot)
                 ..clearDead
             local tail=count>0 and stop or ""
             if #body+#tail+#step>limit then break end
             body=body..tail..step
             count=count+1
+            if not smart then break end
         end
         if count==0 then return end
         lastBossMarkNote=("Prepared a native living-target search of %d boss names."):format(count)
@@ -2202,8 +2243,15 @@ do
         end
         local ids,names,fallback=bossIDs(name,id)
         local confirmed=journalDefeated(id,fallback)
-        local pick,free,unreadable,deadNames,livingNames=scan(name,id,preview,ids,names,confirmed)
         enterDeathScope(id)
+        if id==3039 then
+            for icon,owner in pairs(reservations) do
+                if owner.name and (confirmed[owner.name] or defeatedByName[owner.name]) then
+                    reservations[icon]=nil
+                end
+            end
+        end
+        local pick,free,unreadable,deadNames,livingNames,retries=scan(name,id,preview,ids,names,confirmed)
         for key in pairs(deadNames) do if not livingNames[key] then defeatedByName[key]=true end end
         for key in pairs(livingNames) do defeatedByName[key]=nil end
         local kept={}
@@ -2215,17 +2263,20 @@ do
         if id==3039 then
             -- The Forever parser has returned inconsistent exists/noexists
             -- results here. Use only its positive hostile/living test.
-            if not pick then
-                local search=krolNativeSearch(fallback,free,smart,maxBytes)
+            local repeated=pick and not pick.index and lastPress and lastPress.name==pick.label:lower()
+            if not pick or repeated or (not pick.index and next(retries)) then
+                local search=krolNativeSearch(fallback,free,smart,maxBytes,retries,repeated and not smart)
                 if search then return true,search end
-                return true,"/stopmacro [combat]"..clearDead,"No living Krol'dok boss could be verified."
+                if not pick then
+                    return true,"/stopmacro [combat]"..clearDead,"No living Krol'dok boss could be verified."
+                end
             end
             local unit=pick.unit
             local alive="[@"..unit..",harm,nodead]"
             local action="/stopmacro [combat]"
             if unit~="target" then action=action.."\n/target "..alive end
             if pick.index then action=action.."\n/tm "..alive.." ~"..pick.index end
-            if AT.db.bossMarkPing and (not lastPress or lastPress.name~=pick.label:lower()
+            if AT.db.bossMarkPing and (pick.index or not lastPress or lastPress.name~=pick.label:lower()
                 or (lastPress.guid and pick.guid and lastPress.guid~=pick.guid)) then
                 action=action.."\n/ping "..alive.." Attack"
             end
@@ -2407,10 +2458,10 @@ do
         AT.ReserveBossMark(0,plan)
     end
 
-    function AT.AdvanceBossSearch()
+    function AT.AdvanceBossSearch(slot)
         local _,id=context()
         if not id or fallbackCount<1 then return end
-        stockBatch=(stockBatch<=fallbackCount and stockBatch or 1)%fallbackCount+1
+        stockBatch=(slot or (stockBatch<=fallbackCount and stockBatch or 1))%fallbackCount+1
         if C_Timer and C_Timer.After and AT.RefreshBossActionBar then C_Timer.After(0,AT.RefreshBossActionBar) end
     end
 
