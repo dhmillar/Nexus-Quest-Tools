@@ -118,12 +118,6 @@ local function probability(q,item,size)
     return best,mob
 end
 local areaLabels={}
-local function optionalDatabase()
-    local lib=_G.LibQuestieDB
-    local flavor=field(field(lib,"flavor"),"key")
-    if flavor=="Forever" or flavor=="WoWForever" then return field(lib,"Quest") end
-end
-local function questField(db,q,k) return safe(db and db.Get,q,k) end
 local function objectiveType(ty,line)
     if ty=="item" then return 2 end
     if ty=="monster" or ty=="killcredit" then
@@ -138,9 +132,9 @@ local function objectiveType(ty,line)
     end
     return 3
 end
-local function readObjectives(q,data,held,db)
+local function readObjectives(q,data,held)
     local catalog=data and data[10] or {}
-    local out,seen={},{}
+    local out={}
     local byKind={{},{},{}}
     for _,r in ipairs(catalog) do local k=r[1];if byKind[k] then byKind[k][#byKind[k]+1]=r end end
     local live=held and safe(Q and Q.GetQuestObjectives,q)
@@ -170,22 +164,6 @@ local function readObjectives(q,data,held,db)
     end
     for _,r in ipairs(catalog) do
         add(r[1],r[2],r[3],r[3])
-        seen[r[1]..":"..r[2]]=true
-    end
-    if #catalog==0 then
-        local os=questField(db,q,"objectives")
-        for _,idx in ipairs({1,2,3,5,6}) do
-            local list=field(os,idx)
-            local kind=idx==1 and 1 or idx==3 and 2 or 3
-            if type(list)=="table" then for _,o in ipairs(list) do
-                local oid,line=field(o,1),field(o,2)
-                local typ=kind==1 and objectiveType("monster",line) or kind
-                if positive(oid) and not seen[typ..":"..oid] then
-                    seen[typ..":"..oid]=true
-                    add(typ,oid,1,typ==2 and 3 or typ==1 and 5 or 1)
-                end
-            end end
-        end
     end
     return out
 end
@@ -201,7 +179,7 @@ function AT.ScoreLevelGuideQuest(q,data,level,size,info)
     local shared=partyDrops[q]
     local killByMob,collectByMob={},{}
     local slowest,someKills,someItems
-    for _,ob in ipairs(readObjectives(q,data,info.held,info.database)) do
+    for _,ob in ipairs(readObjectives(q,data,info.held)) do
         local kind,item,_,n=unpack(ob)
         if kind==1 then
             someKills=true;kills=kills+n
@@ -305,45 +283,6 @@ end
 local function validPoint(x,y)
     return number(x) and number(y) and x<=1 and y<=1 and (x>0 or y>0)
 end
-local function dungeonGiverFromProvider(q,side,database,categories)
-    if not database then return end
-    local npcs=field(_G.LibQuestieDB,"Npc")
-    local starts=field(questField(database,q,"startedBy"),1)
-    if type(starts)~="table" or not npcs then return end
-    local zoneDB
-    if Questie and Questie.IsForever and Questie.API and Questie.API.isReady and QuestieLoader then
-        zoneDB=safe(QuestieLoader.ImportModule,QuestieLoader,"ZoneDB")
-    end
-    local found,identity,ambiguous
-    for _,npc in ipairs(starts) do
-        if positive(npc) then
-            local f=questField(npcs,npc,"friendlyToFaction")
-            local name=questField(npcs,npc,"name")
-            if validName(name) and (f=="AH" or f=="A" and side==1 or f=="H" and side==2 or f==nil and #starts==1) then
-                if identity and identity.npc~=npc then ambiguous=true end
-                identity=identity or {name=name,npc=npc}
-                local spawns=questField(npcs,npc,"spawns")
-                for area,points in pairs(type(spawns)=="table" and spawns or {}) do
-                    local place=categories[area]
-                    local map=place and place.map or safe(zoneDB and zoneDB.GetUiMapIdByAreaId,zoneDB,area)
-                    if positive(map) and mapInfo(map) and type(points)=="table" then
-                        for _,xy in ipairs(points) do
-                            local x,y=field(xy,1),field(xy,2)
-                            if number(x) and number(y) and validPoint(x/100,y/100) then
-                                x,y=x/100,y/100
-                                if found and (found.npc~=npc or found.map~=map or abs(found.x-x)+abs(found.y-y)>.015) then
-                                    ambiguous=true
-                                else found=found or {map=map,x=x,y=y,name=name,npc=npc} end
-                            end
-                        end
-                    end
-                end
-            end
-        end
-    end
-    if not ambiguous then return found or identity end
-    if identity and #starts==1 then return identity end
-end
 local function journalQuestStart(q,side)
     local journal=field(_G,"ForeverDungeonJournal_NS")
     local row=field(field(journal,"QUEST_START_MAPS"),q)
@@ -386,7 +325,7 @@ local function chooseItemStart(q,p)
     return {item=r[1],map=best and best[1],x=best and best[2],y=best and best[3],radius=best and best[4],areas=areas,
         sourceKind=best and best[5],source=best and best[6],sourceName=best and best[7],sourceArea=best and best[8],pickup=true}
 end
-local function chooseGiver(q,p,side,fallback,database,categories)
+local function chooseGiver(q,p,side,fallback)
     local known
     local ambiguous=false
     local function consider(rows)
@@ -411,23 +350,16 @@ local function chooseGiver(q,p,side,fallback,database,categories)
         if not known then known,ambiguous=prior,wasAmbiguous end
     end
     -- ForeverVerifiedEndpointReferences describes turn-ins, never quest starts.
-    if known and not ambiguous and validName(known.name) then return known end
-    local alternate=p.kind=="dungeon" and dungeonGiverFromProvider(q,side,database,categories) or nil
-    if alternate and validPoint(alternate.x,alternate.y) then return alternate end
-    if known and not ambiguous then
-        if alternate and alternate.npc==known.npc then known.name=alternate.name end
-        return known
-    end
+    if known and not ambiguous then return known end
     local pickup=chooseItemStart(q,p)
     if pickup and positive(pickup.map) and validPoint(pickup.x,pickup.y) then return pickup end
     local journal=p.kind=="dungeon" and journalQuestStart(q,side) or nil
-    if journal and (not alternate or alternate.name==journal.name) then return journal end
+    if journal then return journal end
     -- A native offer has a real pin even if the client leaves the giver anonymous.
     if fallback and positive(fallback.map) and validPoint(fallback.x,fallback.y) then
-        if not validName(fallback.name) and alternate then return {map=fallback.map,x=fallback.x,y=fallback.y,name=alternate.name,npc=alternate.npc} end
         return fallback
     end
-    return alternate or pickup
+    return pickup
 end
 function AT.BuildLevelGuide(playerLevel,size)
     local reported=safe(UnitLevel,"player")
@@ -452,7 +384,6 @@ function AT.BuildLevelGuide(playerLevel,size)
     local data=AT.ForeverLevelGuideQuests or {}
     local places,zones,categories,dungeonAreas,dungeons,current,areaNames,dungeonMaps=mapSet()
     local completed,known,live,held,ready,candidates,nativeStarts={},{},{},{},{},{},{}
-    local database=optionalDatabase()
     local all=safe(Q and Q.GetAllCompletedQuestIDs)
     if type(all)=="table" then for _,qid in ipairs(all) do if positive(qid) then completed[qid]=true end end end
     local function done(q)
@@ -528,43 +459,8 @@ function AT.BuildLevelGuide(playerLevel,size)
         end
     end
     for q in pairs(data) do candidates[q]=true end
-    local ids=safe(database and database.GetAllIds)
-    if type(ids)=="table" then for _,q in ipairs(ids) do if positive(q) then candidates[q]=true end end end
     local function blocked(q)
-        if safe(Q and Q.IsQuestDisabledForSession,q)==true then return true end
-        if not database then return false end
-        local function has(a)
-            return positive(a) and done(a)==true or type(a)=="number" and a<0 and held[-a]~=nil
-        end
-        local before=questField(database,q,"preQuestGroup")
-        for _,a in ipairs(type(before)=="table" and before or {}) do if not has(a) then return true end end
-        local any=questField(database,q,"preQuestSingle")
-        if type(any)=="table" and #any>0 then
-            local met=false
-            for _,a in ipairs(any) do if has(a) then met=true;break end end
-            if not met then return true end
-        end
-        local started=questField(database,q,"availableStartingWith")
-        if positive(started) and not (held[started] or has(started)) then return true end
-        local ended=questField(database,q,"availableUntilCompleted")
-        if positive(ended) and has(ended) then return true end
-        local conflicts=questField(database,q,"exclusiveTo")
-        for _,other in ipairs(type(conflicts)=="table" and conflicts or {}) do
-            if positive(other) and (held[other] or has(other)) then return true end
-        end
-        local skill=questField(database,q,"requiredSkill")
-        local loRep=questField(database,q,"requiredMinRep")
-        local hiRep=questField(database,q,"requiredMaxRep")
-        if positive(field(skill,1)) then return true end
-        for i=1,2 do
-            local rep=i==1 and loRep or hiRep
-            local id,amount=field(rep,1),field(rep,2)
-            if positive(id) and type(amount)=="number" then
-                local actual=field(safe(C_Reputation and C_Reputation.GetFactionDataByID,id),"currentStanding")
-                if type(actual)~="number" or (i==1 and actual<amount or i==2 and actual>amount) then return true end
-            end
-        end
-        return false
+        return safe(Q and Q.IsQuestDisabledForSession,q)==true
     end
     -- When the catalog has no assignable zone, an independently recorded start can place
     -- the quest in the browser. Never infer dungeon membership from a loot location.
@@ -597,15 +493,13 @@ function AT.BuildLevelGuide(playerLevel,size)
     for q in pairs(candidates) do
         local d,h=data[q],held[q]
         local liveStart=live[q]
-        local qLevel=h and h.level or d and d[2] or questField(database,q,"questLevel")
+        local qLevel=h and h.level or d and d[2]
         if not positive(qLevel) and (h or liveStart) then
             qLevel=safe(Q and Q.GetQuestDifficultyLevel,q)
         end
-        local req=questField(database,q,"requiredLevel")
-        local minLevel=positive(req) and req or d and d[1] or 0
+        local minLevel=d and d[1] or 0
         if q==97290 and side==2 then minLevel=15 end
         local area=d and d[3]
-        if not positive(area) then area=questField(database,q,"zoneOrSort") end
         local p,tag
         if d then tag=d[4] end
         local outdoors=safe(AT.IsForeverOutdoorQuest,q)==true
@@ -644,17 +538,14 @@ function AT.BuildLevelGuide(playerLevel,size)
                     p.lo=min(p.lo or qLevel,qLevel);p.hi=max(p.hi or qLevel,qLevel)
                 end
                 local isDone=done(q)
-                local dbRace,dbClass=questField(database,q,"requiredRaces"),questField(database,q,"requiredClasses")
-                local cap=questField(database,q,"requiredMaxLevel")
-                local raceOkay=(not d or canUseRace(d[5],race) and maskHas(d[8],class))
-                    and maskHas(dbRace,race) and maskHas(dbClass,class)
+                local raceOkay=not d or canUseRace(d[5],race) and maskHas(d[8],class)
                 -- Explicit dungeon faction data and the full Forever faction masks
                 -- also work when UnitRace cannot supply a usable bit index.
                 local mask=d and d[5]
                 if (side==1 and mask=="aa2aaaaa4e0ab3b2") or (side==2 and mask=="55155555b1354c4d") then raceOkay=false end
                 local factionRule=dungeonFaction[q]
                 if factionRule and factionRule~="Both" and factionRule~=faction and side>0 then raceOkay=false end
-                local eligible=not (positive(cap) and level>cap) and not blocked(q)
+                local eligible=not blocked(q)
                 local dev=d and lower(d[9])
                 local plausible=not dev or not (dev:match("^test quest") or dev:match("^qa[%s:_]") or dev:match("^unused[:%s]")
                     or dev:match("^deprecated[:%s]") or q<=3)
@@ -662,10 +553,10 @@ function AT.BuildLevelGuide(playerLevel,size)
                     local status=h and ((ready[q] or safe(Q and Q.ReadyForTurnIn,q)==true) and "Turn in" or "In log")
                         or liveStart and "Pick up" or "In range"
                     local qname=h and h.title or liveStart and safe(Q and Q.GetTitleForQuestID,q)
-                    if not validName(qname) then qname=d and d[9] or questField(database,q,"name") or "Quest #"..q end
-                    local score=AT.ScoreLevelGuideQuest(q,d,level,size,{held=h~=nil,status=status,level=qLevel,database=database})
+                    if not validName(qname) then qname=d and d[9] or "Quest #"..q end
+                    local score=AT.ScoreLevelGuideQuest(q,d,level,size,{held=h~=nil,status=status,level=qLevel})
                     score.id=q;score.name=qname;score.status=status;score.min=minLevel
-                    score.giver=chooseGiver(q,p,side,nativeStarts[q] or observedStarts[q],database,categories)
+                    score.giver=chooseGiver(q,p,side,nativeStarts[q] or observedStarts[q])
                     if d then
                         local ids,seen={},{}
                         for _,item in ipairs(d[10] or {}) do
@@ -1270,9 +1161,9 @@ local function rateLine(q)
     return ""
 end
 local requestedItems={}
-local function objectiveItemName(id,lib)
+local function objectiveItemName(id)
     local name=safe(C_Item and C_Item.GetItemNameByID,id) or safe(GetItemInfo,id)
-        or questField(field(lib,"Item"),id,"name")
+        or ((safe(GetLocale)=="enUS" or safe(GetLocale)=="enGB") and AT.ForeverQuestItemNames and AT.ForeverQuestItemNames[id])
     if not name and not requestedItems[id] then
         requestedItems[id]=true;safe(C_Item and C_Item.RequestLoadItemDataByID,id)
     end
@@ -1317,7 +1208,6 @@ function AT.GetLevelGuideObjectiveRows(qid)
     end
     if #lines>0 then return lines,true end
     local row=AT.ForeverLevelGuideQuests and AT.ForeverLevelGuideQuests[qid]
-    local lib=optionalDatabase() and _G.LibQuestieDB
     for _,o in ipairs(row and row[10] or {}) do
         local kind,id,n=unpack(o)
         if (kind==1 or kind==2) and positive(n) then
@@ -1325,9 +1215,9 @@ function AT.GetLevelGuideObjectiveRows(qid)
             if kind==1 and positive(id) then
                 local entry=english and catalog and catalog[id]
                 name=safe(C_CreatureInfo and C_CreatureInfo.GetCreatureName,id)
-                    or questField(field(lib,"Npc"),id,"name") or entry and entry[1]
+                    or entry and entry[1]
             elseif kind==2 and positive(id) then
-                name=objectiveItemName(id,lib)
+                name=objectiveItemName(id)
             end
             local line=("%s: 0/%d"):format(validName(name) and name or kind==1 and "Kills" or "Collect",n)
             lines[#lines+1]=objectiveIcon({text=line,kind=kind==1 and "kill" or "collect",
@@ -1426,8 +1316,7 @@ function AT.GetShareQuestStart(q,origin,dungeon)
     if not positive(q) then return end
     local faction=safe(UnitFactionGroup,"player")
     local side=faction=="Alliance" and 1 or faction=="Horde" and 2 or -1
-    local g=chooseGiver(q,{map=origin,kind=dungeon and "dungeon"},side,nil,
-        dungeon and optionalDatabase() or nil,{})
+    local g=chooseGiver(q,{map=origin,kind=dungeon and "dungeon"},side,nil)
     if not g then return end
     local locale=safe(GetLocale)
     local english=not locale or locale=="enUS" or locale=="enGB"

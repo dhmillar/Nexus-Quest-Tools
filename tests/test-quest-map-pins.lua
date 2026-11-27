@@ -107,7 +107,7 @@ AT.ForeverQuestFacts={[15]={40,42}}
 function UnitLevel()return 20 end
 AT.RefreshQuestMapPins();tick()
 for _,x in ipairs(frames) do assert(not x.atPin or x.atPin.quest~=15,"hide recorded starts below the known minimum level") end
-questie=true;tick();assert(not world.shown)
+questie=true;tick();assert(world.shown,"Questie loaded must not suppress NQT world map pins")
 questie=false;AT.db.showQuestMapPins=false;tick();assert(not world.shown)
 AT.db.showQuestMapPins=true;tick();assert(world.shown)
 WorldMapFrame.shown=false;tick();assert(not world.shown)

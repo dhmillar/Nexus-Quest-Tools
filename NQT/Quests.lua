@@ -164,19 +164,8 @@ local function release()
     save()
 end
 
-local function questieModule(name)
-    if Questie and Questie.IsForever and Questie.API and Questie.API.isReady and QuestieLoader then
-        return call(QuestieLoader.ImportModule, QuestieLoader, name)
-    end
-end
-
-local function questieTracker()
-    local profile = Questie and Questie.db and Questie.db.profile
-    if profile and profile.trackerEnabled then return questieModule("QuestieTracker") end
-end
-
-local function acquire(id, tracker)
-    local added = not watched(id) and not (tracker and call(tracker.IsTrackedByQuestie, id) == true)
+local function acquire(id)
+    local added = not watched(id)
     if added then
         local result = call(Q.AddQuestWatch, id)
         if result ~= true and not watched(id) then
@@ -337,57 +326,6 @@ local function confirmedDeparture(ctx)
     local minTravel = EXIT_YARDS + math.sqrt(lastNear.d2) + 25
     return dx * dx + dy * dy > minTravel * minTravel
 end
--- Optional, read-only Questie 12.13 Forever fallback. Its public API does
--- not expose spawn coordinates; use the existing loaded map data when
--- available, and fall back to native-only behavior if internals change.
-local function questieDistance(id, ctx, visit)
-    if not ctx or not Questie then return end
-    local px, py = mapPlayer(ctx)
-    if not px then return end
-    if not ctx.questieChecked then
-        ctx.questieChecked = true
-        ctx.active = questieModule("ActiveQuests")
-        ctx.zones = questieModule("ZoneDB")
-        ctx.phasing = questieModule("Phasing")
-        ctx.zoneMaps = {}
-    end
-    if not ctx.active or not ctx.zones or not ctx.phasing then return end
-    local acceptance = call(ctx.active.Get, id)
-    local objectives = field(field(acceptance, "quest"), "Objectives")
-    if not isType(objectives, "table") then return end
-    local closest, closestX, closestY
-    for _, objective in pairs(objectives) do
-        local spawnList = field(objective, "spawnList")
-        if not field(objective, "Completed") and isType(spawnList, "table") then
-            for _, source in pairs(spawnList) do
-                local zones = field(source, "Spawns")
-                if isType(zones, "table") then
-                    for areaID, spawns in pairs(zones) do
-                        local mapped = ctx.zoneMaps[areaID]
-                        if mapped == nil then
-                            mapped = call(ctx.zones.GetUiMapIdByAreaId, ctx.zones, areaID) or false
-                            ctx.zoneMaps[areaID] = mapped
-                        end
-                        if mapped == ctx.id and isType(spawns, "table") then
-                            for _, spawn in pairs(spawns) do
-                                local x, y = field(spawn, 1), field(spawn, 2)
-                                if finite(x) and finite(y) and xyValid(x / 100, y / 100) and
-                                    call(ctx.phasing.IsSpawnVisible, field(spawn, 3)) == true then
-                                    if visit then visit(x / 100, y / 100) end
-                                    local dx = (px - x / 100) * ctx.w
-                                    local dy = (py - y / 100) * ctx.h
-                                    local d = dx * dx + dy * dy
-                                    if not closest or d < closest then closest, closestX, closestY = d, x / 100, y / 100 end
-                                end
-                            end
-                        end
-                    end
-                end
-            end
-        end
-    end
-    return closest, closestX, closestY
-end
 local function nativeDistance(id, ctx, poi)
     local d, continent = call(Q.GetDistanceSqToQuest, id)
     local native = finite(d) and d>0 and continent==true and d or nil
@@ -430,12 +368,8 @@ local function nativeDistance(id, ctx, poi)
     return native
 end
 
-local function distance(id, ctx, poi, yards)
-    local d = nativeDistance(id, ctx, poi)
-    if d and d <= (yards or ENTER_YARDS)^2 then return d end
-    local questie = call(questieDistance, id, ctx)
-    if questie and (not d or questie < d) then return questie end
-    return d
+local function distance(id, ctx, poi)
+    return nativeDistance(id, ctx, poi)
 end
 local function proximityContext()
     local ctx=mapContext()
@@ -473,9 +407,9 @@ local function measureProximity(id,ctx,poi,parent,blocked,limit)
     local blob=C_Minimap and call(C_Minimap.IsInsideQuestBlob,id)
     if task==true or blob==true then return 0,"inside" end
     if not blocked then
-        local dist=distance(id,ctx,poi,limit)
+        local dist=distance(id,ctx,poi)
         if parent and (not limit or not dist or dist>limit*limit) then
-            local other=distance(id,parent,parent.points and parent.points[id],limit)
+            local other=distance(id,parent,parent.points and parent.points[id])
             if other and (not dist or other<dist) then dist=other end
         end
         if dist then return dist,limit and dist<=limit*limit and "near" or "outside" end
@@ -584,23 +518,6 @@ local function run()
             if AT.ShouldHideCompletedQuest(id) then call(Q.RemoveQuestWatch, id) end
         end
     end
-    local tracker = call(questieTracker)
-    local questieActive = questieModule("ActiveQuests")
-    local accepted = questieActive and call(questieActive.GetAll)
-    if isType(accepted, "table") then
-        for id in pairs(accepted) do
-            if validID(id) and activeQuest(id, ids) then ids[id] = true end
-        end
-    end
-    if db.hideCompleted and tracker then
-        for id in pairs(ids) do
-            if AT.ShouldHideCompletedQuest(id) and not watched(id) and call(tracker.IsTrackedByQuestie, id) == true then
-                -- Questie's auto mode can display an entry that has no native watch.
-                -- Use its own untrack operation only for this remaining tracked row.
-                call(tracker.UntrackQuestId, tracker, id)
-            end
-        end
-    end
     if focus and (AT.IsQuestExcluded(focus) or (completed(focus) and focus~=manualHUDQuest) or not activeQuest(focus, ids)) then
         -- Leave a qualifying completed watch alone if that option is disabled.
         if not db.hideCompleted and completed(focus) then ownedWatch = nil end
@@ -611,7 +528,7 @@ local function run()
         retiringManual=nil
     end
     if manualHUDQuest then
-        if focus~=manualHUDQuest then acquire(manualHUDQuest,tracker) end
+        if focus~=manualHUDQuest then acquire(manualHUDQuest) end
         if focus==manualHUDQuest then
             if focusFromOrder then focusFromOrder=nil;save() end
             if S and manualFromMap then
@@ -627,7 +544,7 @@ local function run()
     if ordered then
         if focus == ordered then
             if not focusFromOrder then focusFromOrder = true; save() end
-        elseif acquire(ordered, tracker) then
+        elseif acquire(ordered) then
             focusFromOrder = true
             save()
         end
@@ -656,7 +573,7 @@ local function run()
         end
     end
     if best then
-        if best == focus or acquire(best, tracker) then noteNear(best, ctx, bestDist) end
+        if best == focus or acquire(best) then noteNear(best, ctx, bestDist) end
     elseif currentDistance == math.huge or confirmedDeparture(ctx) then
         release()
     end
@@ -846,23 +763,6 @@ local function resolveTurnInPoint(id,viewMap,wantName)
     end
     if m then rememberTurnInMap(id,m) end
     if m and not wantName then return m,x,y end
-    local db,dist,zones=questieModule("QuestieDB"),questieModule("DistanceUtils"),questieModule("ZoneDB")
-    local quest=db and call(db.GetQuest,id)
-    local finisher=field(quest,"Finisher")
-    if isType(finisher,"table") and dist and zones then
-        local spawn,zone,name=call(dist.GetNearestFinisherOrStarter,finisher)
-        local qm=validID(zone) and call(zones.GetUiMapIdByAreaId,zones,zone)
-        local qx,qy=field(spawn,1),field(spawn,2)
-        if validID(qm) and finite(qx) and finite(qy) and xyValid(qx/100,qy/100) then
-            qx,qy=qx/100,qy/100
-            local npcs,objects=field(finisher,"NPC"),field(finisher,"GameObject")
-            local npcOnly=isType(npcs,"table") and next(npcs)~=nil and
-                (not isType(objects,"table") or next(objects)==nil)
-            if not m then return qm,qx,qy,name,npcOnly end
-            -- Do not attach an NPC name to a different possible turn-in pin.
-            if qm==m and math.abs(qx-x)<=.001 and math.abs(qy-y)<=.001 then return m,x,y,name,npcOnly end
-        end
-    end
     local knownMap,kx,ky,label,npcOnly=observedTurnIn(id,m,x,y)
     if knownMap then
         return m or knownMap,x or kx,y or ky,wantName and label or nil,wantName and npcOnly or nil
@@ -937,7 +837,6 @@ function AT.GetFocusedQuestRouteTargets(mapID)
     for _, poi in ipairs(ctx.points or {}) do
         if field(poi, "questID") == id then capture(field(poi, "x"), field(poi, "y")) end
     end
-    call(questieDistance, id, ctx, capture)
     table.sort(targets, function(a,b)
         if a.map~=b.map then
             if a.map==mapID then return true end
@@ -969,8 +868,6 @@ function AT.GetFocusedQuestRoutePoint()
                 if xyValid(x, y) then return focus, ctx.id, x, y end
             end
         end
-        local _, qx, qy = call(questieDistance, focus, ctx)
-        if xyValid(qx, qy) then return focus, ctx.id, qx, qy end
     end
     if validID(waypointMap) and xyValid(waypointX, waypointY) then
         return focus, waypointMap, waypointX, waypointY

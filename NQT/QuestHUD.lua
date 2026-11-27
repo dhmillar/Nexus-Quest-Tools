@@ -17,11 +17,11 @@ local themes={
     { name="Map", map=true, accent={.95,.76,.40}, ink={.90,.83,.64}, row={.20,.13,.067,.40},
       rail={.13,.085,.045,.92}, font="GameFontNormalLarge" },
     { name="Minimal", accent={1,.82,0}, ink={.95,.95,.95}, row={0,0,0,0},
-      rail={0,0,0,.62}, font="GameFontNormal", questie=true },
+      rail={0,0,0,.62}, font="GameFontNormal", minimal=true },
 }
 function AT.NormalizeQuestHUDTheme(db)
     -- In the old six-theme palette, 2 meant Astral and only 6 was Questie.
-    -- Remember migration so a user's new Map/Questie choice survives reload.
+    -- Remember migration so a user's new Map/Minimal choice survives reload.
     if db.questHUDThemeSchema~=2 then
         local old=db.questHUDTheme
         db.questHUDTheme=(type(old)~="number" or old==6) and 2 or 1
@@ -56,43 +56,25 @@ end
 local function mapName(map)
     return field(call(M and M.GetMapInfo,map),"name")
 end
-local function module(name)
-    if Questie and Questie.IsForever and Questie.API and Questie.API.isReady and QuestieLoader then
-        return call(QuestieLoader.ImportModule,QuestieLoader,name)
-    end
-end
-local function questieOrigin(qid,db,zones)
-    if not (db and zones) then return end
-    local quest=call(db.GetQuest,qid)
-    local starts=field(quest,"Starts")
-    if not is(starts,"table") then return end
-    local unique, ambiguous, unresolved
-    local function visit(units,get)
-        if not is(units,"table") then return end
-        for _,key in pairs(units) do
-            if id(key) then
-                local data=call(get,db,key)
-                local spawns=field(data,"spawns") or field(data,"Spawns")
-                local found
-                if is(spawns,"table") then
-                    for area,positions in pairs(spawns) do
-                        if id(area) and is(positions,"table") and next(positions) then
-                            local z=zone(call(zones.GetUiMapIdByAreaId,zones,area))
-                            if z then
-                                found=true
-                                if not unique then unique=z elseif unique~=z then ambiguous=true end
-                            end
-                        end
-                    end
-                end
-                if not found then unresolved=true end
+local function bundledOrigin(qid)
+    local faction=call(UnitFactionGroup,"player")
+    local side=faction=="Alliance" and 1 or faction=="Horde" and 2 or -1
+    local found
+    local verified=AT.LevelGuideQuestGivers and AT.LevelGuideQuestGivers[qid]
+    local extra=AT.LevelGuideMoreOffers and AT.LevelGuideMoreOffers[qid]
+    local function scan(rows)
+        for _,p in ipairs(rows or {}) do
+            if p[4]==0 or p[4]==side then
+                local map=zone(p[1])
+                if not map or found and found~=map then return false end
+                found=map
             end
         end
+        return true
     end
-    visit(field(starts,"NPC"),db.GetNPC)
-    visit(field(starts,"GameObject"),db.GetObject)
-    if is(field(starts,"Item"),"table") and next(starts.Item) then unresolved=true end
-    if not ambiguous and not unresolved then return unique end
+    if not scan(verified) then return end
+    if not found and not scan(extra) then return end
+    return found
 end
 local function nearbyPOIs(zoneID)
     local ids={}
@@ -186,7 +168,7 @@ local function nativeDungeonIndex()
     if next(names) then dungeonIndex[root]=names end
     return names
 end
-local function dungeonFor(row,index,db,zones,poiName,currentName)
+local function dungeonFor(row,index,poiName,currentName)
     if call(AT.IsForeverOutdoorQuest,row.id)==true then return end
     -- Exact Forever quest IDs outrank generic client tags and pickup headers.
     local verified=call(AT.ForeverDungeonForQuest,row.id)
@@ -195,31 +177,12 @@ local function dungeonFor(row,index,db,zones,poiName,currentName)
     local tags=Enum and Enum.QuestTag
     if tags and (tag~=nil and (tag==tags.Raid or tag==tags.Raid10 or tag==tags.Raid25 or tag==tags.HeroicRaid)) then return end
     local function canonical(n) return call(AT.ForeverDungeonName,nil,n) or n end
-    local name
-    if zones then
-        local quest=db and call(db.GetQuest,row.id)
-        local area=field(quest,"zoneOrSort")
-        local function localDungeon(candidate)
-            if id(candidate) and call(zones.IsDungeonZone,candidate)==true then
-                local n=call(zones.GetLocalizedDungeonName,zones,candidate)
-                if is(n,"string") and n~="" then return n end
-            end
-        end
-        if is(row.header,"string") then
-            local header=call(zones.GetAreaIdByName,zones,row.header)
-            name=localDungeon(header)
-        end
-        if not name then name=localDungeon(area) end
-    end
     local known=is(row.header,"string") and index[row.header]
     if known then return canonical(known.name) end
     if currentName and canonical(row.header)==currentName and known~=false then return currentName end
-    if is(row.header,"string") and index[row.header]==false and name==row.header then name=nil end
     local _,destination=nativeDungeon(row.targetMap)
     if destination and index[destination]~=false then return canonical(destination) end
-    if name and index[name]~=false then return canonical(name) end
-    -- A quest on the current native dungeon map is exact point evidence;
-    -- do not turn a generic dungeon tag into a fabricated dungeon name.
+    -- Exact dungeon-map POIs are valid evidence; a generic dungeon tag is not.
     if poiName and index[poiName]~=false then return poiName end
     -- New instances can be absent from the native Dungeon UI-map index.
     -- An exact, known quest-log header still identifies the instance.
@@ -327,7 +290,6 @@ local function nativeZoneNames()
     return names
 end
 
-local starterMemo={}
 local function build(zoneID,zoneName)
     local result={zones={},rows={},dungeons={},current=zoneID,total=0}
     if not Q then return result end
@@ -339,7 +301,6 @@ local function build(zoneID,zoneName)
     end
     for key,value in pairs(nativeZoneNames()) do zonesByName[key]=value end
     local poi=nearbyPOIs(zoneID)
-    local db,zones=module("QuestieDB"),module("ZoneDB")
     local nameIndex=nativeDungeonIndex()
     local rawMap=call(M and M.GetBestMapForUnit,"player")
     local instanceMap,instanceName,insideDungeon=playerDungeon(rawMap)
@@ -400,7 +361,7 @@ local function build(zoneID,zoneName)
                 local target=call(Q.GetNextWaypoint,qid)
                 row.destination=zone(target)
                 row.targetMap=target
-                local instance=dungeonFor(row,nameIndex,db,zones,insidePOI[qid] and instanceName or nil,instanceName)
+                local instance=dungeonFor(row,nameIndex,insidePOI[qid] and instanceName or nil,instanceName)
                 if instance then
                     row.dungeon=instance
                     local bucket=result.dungeons[instance]
@@ -408,11 +369,7 @@ local function build(zoneID,zoneName)
                     bucket.rows[qid]={row=row,kind="dungeon"}
                 end
                 local accepted=origins[qid]
-                local origin=starterMemo[qid]
-                if origin==nil and db and zones then
-                    origin=questieOrigin(qid,db,zones)
-                    starterMemo[qid]=origin or false
-                end
+                local origin=not id(accepted) and bundledOrigin(qid)
                 if id(origin) then row.origin=origin
                 elseif id(accepted) then row.origin=accepted; row.recorded=true end
                 result.rows[qid]=row
@@ -1253,11 +1210,11 @@ end
 local function applyTypography(region,theme,size,template,useRequestedSize)
     if not region or not region.SetFont then return end
     local offset=fontOffset()
-    local style=(theme.questie and "Questie" or template)..":"..size..":"..offset..(useRequestedSize and ":fixed" or "")
+    local style=(theme.minimal and "Minimal" or template)..":"..size..":"..offset..(useRequestedSize and ":fixed" or "")
     if region.autoTrackFontStyle==style then return end
     local file,flags
     local base=_G[template]
-    if theme.questie then file=STANDARD_TEXT_FONT or "Fonts/FRIZQT__.TTF"; flags=""
+    if theme.minimal then file=STANDARD_TEXT_FONT or "Fonts/FRIZQT__.TTF"; flags=""
     elseif base and base.GetFont then
         local name,points,outline=base:GetFont()
         file,flags=name,outline
@@ -1294,32 +1251,6 @@ local function observedDropItem(qid,label)
 end
 
 
--- QuestieDB can run without the Questie tracker UI. Read only this
--- quest's item objectives, and require an exact, unambiguous name match.
-local function standaloneProviderDropItem(qid,wanted)
-    local provider=_G.LibQuestieDB
-    if not provider or field(field(provider,"flavor"),"key")~="Forever" and
-        field(field(provider,"flavor"),"id")~="Forever" and
-        call(C_AddOns and C_AddOns.GetAddOnMetadata,"QuestieDB","X-Flavor")~="Forever" then return end
-    local objectives=call(field(field(provider,"Quest"),"Get"),qid,"objectives")
-    local candidates=field(objectives,3)
-    if not is(candidates,"table") then return end
-    local match
-    for _,entry in pairs(candidates) do
-        local item=field(entry,1)
-        if id(item) then
-            local name=call(C_Item and C_Item.GetItemNameByID,item)
-            if (not is(name,"string") or name=="") and call(GetLocale)=="enUS" then
-                name=call(field(field(provider,"Item"),"Get"),item,"name")
-            end
-            if is(name,"string") and name==wanted then
-                if match and match~=item then return nil,true end
-                match=item
-            end
-        end
-    end
-    return match
-end
 
 local function factDropItem(qid,objective,wanted)
     local facts=AT.ForeverQuestFacts and AT.ForeverQuestFacts[qid]
@@ -1349,7 +1280,7 @@ local function factDropItem(qid,objective,wanted)
     if #facts==3 and not unresolved then return possible end
 end
 
-local function objectiveDropItem(db,qid,objective,label)
+local function objectiveDropItem(qid,objective,label)
     if field(objective,"type")~="item" then return end
     local exact=field(objective,"itemID")
     if not id(exact) then exact=field(objective,"itemId") end
@@ -1361,53 +1292,15 @@ local function objectiveDropItem(db,qid,objective,label)
         linked=item
     end
     if id(linked) then return linked end
-    -- The native objective often only exposes localized text. Never assume
-    -- Questie item ordering matches the quest log; compare exact item names.
+    -- Match localized text against exact item names rather than objective order.
     local wanted=dropName(label)
     if not wanted or wanted=="" then return end
     local fact,uncertain=factDropItem(qid,objective,wanted)
     if uncertain then return end
     if fact then return fact end
-    local objectives=field(db and call(db.GetQuest,qid),"ObjectiveData")
-    if not is(objectives,"table") then
-        local match,ambiguous=standaloneProviderDropItem(qid,wanted)
-        if ambiguous then return end
-        if match then return match end
-        return observedDropItem(qid,wanted) or call(AT.GetKnownQuestDropItem,qid,wanted)
-    end
-    local match
-    for _,entry in pairs(objectives) do
-        local item=field(entry,"Id")
-        if field(entry,"Type")=="item" and id(item) then
-            local name=call(C_Item and C_Item.GetItemNameByID,item)
-            if not is(name,"string") or name=="" then name=field(call(db.GetItem,db,item),"name") end
-            if is(name,"string") and name==wanted then
-                if match and match~=item then return end
-                match=item
-            end
-        end
-    end
-    return match or observedDropItem(qid,wanted) or call(AT.GetKnownQuestDropItem,qid,wanted)
+    return observedDropItem(qid,wanted) or call(AT.GetKnownQuestDropItem,qid,wanted)
 end
 local function fmtDrop(value) return ("%d%%"):format(math.ceil(value-1e-10)) end
-local function questieDropRange(db,item)
-    if not db then return end
-    -- Questie returns {percentage, source}; count only NPC records.
-    local npcDrops=field(call(db.GetItem,db,item),"npcDrops")
-    if not is(npcDrops,"table") then return end
-    local lo,hi,seen=nil,nil,{}
-    for _,npc in pairs(npcDrops) do
-        if id(npc) and not seen[npc] then
-            seen[npc]=true
-            local rate=field(call(db.GetItemDroprate,item,npc),1)
-            if is(rate,"number") and rate>0 and rate<=100 then
-                lo=not lo and rate or math.min(lo,rate)
-                hi=not hi and rate or math.max(hi,rate)
-            end
-        end
-    end
-    return lo,hi
-end
 
 local function observedRecord(item)
     local pack=AT.ObservedQuestDrops
@@ -1422,7 +1315,7 @@ local function observedRecord(item)
     if low then return low,high end
 end
 
-local function objectiveDropSuffix(db,qid,item)
+local function objectiveDropSuffix(qid,item)
     if not id(item) then return "" end
     local grouped=call(IsInGroup)==true
     local pack=AT.ForeverQuestDropSamples
@@ -1476,11 +1369,6 @@ local function objectiveDropSuffix(db,qid,item)
                 return " ("..(grouped and "solo: " or "party: ")..(a==b and a or a.."\226\128\147"..b)..")"
             end
         end
-    end
-    local lo,hi=questieDropRange(db,item)
-    if lo then
-        local a,b=fmtDrop(lo),fmtDrop(hi)
-        return " ("..(a==b and a or a.."\226\128\147"..b)..")"
     end
     local low,high=observedRecord(item)
     if not low then
@@ -1748,21 +1636,20 @@ local function renderObjectives(b,row,width,theme,hasItem,hasDetail)
         for _,member in ipairs(offered) do missingGUIDs[member.guid]=true end
     end
     local function partyLine(line,indent)
-        if theme.questie then add(line,indent,.56,.90,.87)
+        if theme.minimal then add(line,indent,.56,.90,.87)
         else add(line,indent,.12,.35,.32) end
     end
     if is(list,"table") then
-        local db=module("QuestieDB")
         for _,o in ipairs(list) do
             local label=field(o,"text")
             if is(label,"string") and label~="" then
                 local kill=call(AT.GetQuestKillMobName,row.id,o,label)
-                local item=objectiveDropItem(db,row.id,o,label)
+                local item=objectiveDropItem(row.id,o,label)
                 if AT.db.rankQuestDropRates~=false and item then
-                    label=label..objectiveDropSuffix(db,row.id,item)
+                    label=label..objectiveDropSuffix(row.id,item)
                 end
                 local done=field(o,"finished")==true
-                local bullet=done and not theme.questie and "|cff8bd1a2+|r " or ""
+                local bullet=done and not theme.minimal and "|cff8bd1a2+|r " or ""
                 local names=call(AT.GetQuestDropMobNames,item)
                 if kill then addObjectiveWithMobs(bullet..label,{kill},done)
                 elseif names and #names>0 then addObjectiveWithMobs(bullet..label,names,done)
@@ -1790,7 +1677,7 @@ local function renderObjectives(b,row,width,theme,hasItem,hasDetail)
     b.partyShareButtons=b.partyShareButtons or {}
     for i,member in ipairs(missing) do
         local label,lineTop,lineHeight=add(member.name.."  -  Not on quest",0,1,.31,.29)
-        if not theme.questie then label:SetTextColor(.72,.16,.12) end
+        if not theme.minimal then label:SetTextColor(.72,.16,.12) end
         label:SetWordWrap(false)
         local cap=math.max(70,label:GetWidth()-22)
         label:SetWidth(cap)
@@ -1869,7 +1756,7 @@ local function difficulty(row)
 end
 
 local function displayTitle(label,row,theme)
-    local r,g,b=unpack(theme.questie and theme.accent or theme.ink)
+    local r,g,b=unpack(theme.minimal and theme.accent or theme.ink)
     local title=row.title
     if id(row.level) then
         title=("["..row.level.."] ")..title
@@ -2128,7 +2015,7 @@ local function arrange()
     local _,headerPoints=call(hud.zoneName.GetFont,hud.zoneName)
     local searchPoints=is(headerPoints,"number") and headerPoints or 12+fontOffset()
     hud.search:SetHeight(math.max(28,math.ceil(searchPoints)+12))
-    if a.questie then hud.searchHint:SetTextColor(.68,.73,.76)
+    if a.minimal then hud.searchHint:SetTextColor(.68,.73,.76)
     else hud.searchHint:SetTextColor(.79,.70,.54) end
     hud.zoneName:SetTextColor(unpack(a.ink))
 
@@ -2412,7 +2299,7 @@ local function arrange()
             elseif marker and marker.area then
                 color(b.fill,.035,.25,.23,.77)
             else color(b.fill,unpack(a.row)) end
-            b.mark:SetShown(marker~=nil or not a.questie)
+            b.mark:SetShown(marker~=nil or not a.minimal)
             applyTypography(b.title,a,10,"GameFontHighlight")
             applyTypography(b.detail,a,10,"GameFontHighlightSmall")
             displayTitle(b.title,q,a)
@@ -3113,7 +3000,7 @@ function AT.InitQuestHUD()
                 AT.char.zoneQuestOrigins[qid]=z
             end
         elseif (event=="QUEST_REMOVED" or event=="QUEST_TURNED_IN") and id(first) and is(AT.char.zoneQuestOrigins,"table") then
-            AT.char.zoneQuestOrigins[first]=nil;starterMemo[first]=nil
+            AT.char.zoneQuestOrigins[first]=nil
         end
         pushRefresh()
     end)

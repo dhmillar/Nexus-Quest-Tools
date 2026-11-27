@@ -249,7 +249,7 @@ local function buildPanel()
     option(rank, "questPartyProgress", "Quest Party Progress", -30, "Show the party progress Blizzard reports on hover, and keep shared quests visible while a party member still needs objectives.")
     option(rank, "questLeftoverMarks", "Mark leftover quest items in bags", -58, "Shows a trash badge for verified leftovers and an amber badge for items from a quest you dropped. Keep amber items if you plan to retry the quest. Never deletes anything.")
     option(rank, "rankQuestDropRates", "Show item drop rates", -86, "Show estimated percentages next to item objectives. Unknown rates are hidden.")
-    option(rank, "showQuestMapPins", "Show standalone map pins", -114, "Adds quest and service pins to the world map when Questie is off. NQT adds no minimap pins. Recorded starts can still have prerequisites.")
+    option(rank, "showQuestMapPins", "Show standalone map pins", -114, "Adds quest and service pins to the world map. NQT adds no minimap pins. Recorded starts can still have prerequisites.")
     option(rank, "showObservedQuestGivers", "Show observed quest giver locations", -142, "Show known giver locations, even when the associated quest is not currently available.")
     option(rank, "questStartItemAlert", "Quest-starting item popup", -170, "Shows the icon for a newly acquired quest-starting item above your character. Click to open the quest offer, or right-click to dismiss.")
     makeText(rank, "GameFontHighlightSmall", -206, "Right-click a quest to exclude it from automatic tracking.")
@@ -373,7 +373,7 @@ function AT.InitOptions()
             local status,quest,details
             if AT.GetQuestRouteStatus then status,quest,details=AT.GetQuestRouteStatus() end
             local messages={
-                provider_missing="No compatible walking-route provider is loaded for this map. Questie cannot draw paths.",
+                provider_missing="No compatible walking-route provider is loaded for this map.",
                 objective_missing="No usable objective coordinates on this walking map.",
                 interior="Route hidden in an interior or uncertain floor.",
                 position="Waiting for a reliable player position.",

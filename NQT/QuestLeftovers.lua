@@ -17,24 +17,25 @@ local turninLimit=250
 local function enabled()
     return AT.db and AT.db.enabled~=false and AT.db.questLeftoverMarks==true and isa(AT.char,"table")
 end
-local function questieDB()
-    if Questie and Questie.IsForever and Questie.API and Questie.API.isReady and QuestieLoader then
-        return call(QuestieLoader.ImportModule,QuestieLoader,"QuestieDB")
-    end
-end
 local function add(set,v) if id(v) then set[v]=true end end
 local function nativeObjectiveIDs(qid,set)
     local objectives=call(C_QuestLog and C_QuestLog.GetQuestObjectives,qid)
     if not isa(objectives,"table") then return false end
+    local known=true
     for _,o in pairs(objectives) do
-        if isa(o,"table") and field(o,"type")=="item" then
-            add(set,field(o,"itemID"))
+        if not isa(o,"table") or not isa(field(o,"type"),"string") then known=false end
+        if field(o,"type")=="item" then
+            local explicit=field(o,"itemID") or field(o,"itemId")
+            add(set,explicit)
+            local linkedItem=false
             local label=field(o,"text")
             if isa(label,"string") then
-                for linked in label:gmatch("|Hitem:(%d+)") do add(set,tonumber(linked)) end
+                for linked in label:gmatch("|Hitem:(%d+)") do add(set,tonumber(linked)); linkedItem=true end
             end
+            if not id(explicit) and not linkedItem then known=false end
         end
     end
+    return known
 end
 local function eachCustomBagButton(fn)
     local q=_G.EnhanceQoL
@@ -51,70 +52,32 @@ local function eachCustomBagButton(fn)
         end
     end
 end
-local function objectiveIDs(qid,index,db)
+local function objectiveIDs(qid,index)
     local set={}
-    if id(index) then
-        local special=call(GetQuestLogSpecialItemInfo,index)
-        if isa(special,"string") then add(set,tonumber(special:match("|Hitem:(%d+)"))) end
-    end
-    if index~=nil then nativeObjectiveIDs(qid,set) end
-    local q=db and call(db.GetQuest,qid)
-    local objectives=field(q,"ObjectiveData")
-    if not isa(objectives,"table") then return set,false end
-    for _,o in pairs(objectives) do
-        if field(o,"Type")=="item" then add(set,field(o,"Id")) end
-    end
-    local required=field(q,"requiredSourceItems")
-    if required~=nil then
-        if not isa(required,"table") then return set,false end
-        for _,item in pairs(required) do
-            if not id(item) then return set,false end
-            add(set,item)
-        end
-    end
-    add(set,field(q,"sourceItemId"))
-    local source=field(q,"sourceItemId")
-    if source~=nil and not id(source) and source~=0 then return set,false end
-    return set,true
+    local special=call(GetQuestLogSpecialItemInfo,index)
+    if isa(special,"string") then add(set,tonumber(special:match("|Hitem:(%d+)"))) end
+    local known=nativeObjectiveIDs(qid,set)
+    local facts=AT.ForeverQuestFacts and AT.ForeverQuestFacts[qid]
+    for i=3,#(facts or {}) do add(set,facts[i][1]) end
+    return set,known==true
 end
 local function scan()
     active,completeLog,scanned={},false,false
     if not enabled() or not C_QuestLog then pending={};return end
     local shown,total=call(C_QuestLog.GetNumQuestLogEntries)
     if not isa(shown,"number") or shown<0 or shown>1000 or not isa(total,"number") or total<0 or total>1000 then return end
-    local count,covered,db=0,true,questieDB()
-    local seen={}
+    local count,covered=0,true
     local observed={}
     for i=1,shown do
         local row=call(C_QuestLog.GetInfo,i)
         if not isa(row,"table") then covered=false end
         local qid=field(row,"questID")
         if id(qid) and field(row,"isHeader")==false then
-            count=count+1;seen[qid]=true
-            local items,known=objectiveIDs(qid,i,db)
+            count=count+1
+            local items,known=objectiveIDs(qid,i)
             observed[qid]=items
             if not known then covered=false end
             for item in pairs(items) do active[item]=true end
-        end
-    end
-    -- Use only loaded, client-confirmed accepted quests to fill collapsed
-    -- headers without changing anyone's quest-log expansion.
-    if count<total and db and QuestieLoader then
-        local aq=call(QuestieLoader.ImportModule,QuestieLoader,"ActiveQuests")
-        local all=aq and call(aq.GetAll)
-        if isa(all,"table") then
-            for qid in pairs(all) do
-                local on=call(C_QuestLog.IsOnQuest,qid)
-                if id(qid) and not seen[qid] and clean(on) and on==true then
-                    count=count+1;seen[qid]=true
-                    local index=call(C_QuestLog.GetLogIndexForQuestID,qid)
-                    if not id(index) or field(call(C_QuestLog.GetInfo,index),"questID")~=qid then index=false end
-                    local items,known=objectiveIDs(qid,index,db)
-                    observed[qid]=items
-                    if not known then covered=false end
-                    for item in pairs(items) do active[item]=true end
-                end
-            end
         end
     end
     -- Count mismatch includes collapsed/hidden quests. Never expand, guess,
@@ -196,35 +159,8 @@ function AT.GetLeftoverQuestBagHint(bag,slot)
             if not id(quest) or qid<quest then quest=qid end
         elseif done~=false or review~=qid then return end
     end
-    -- Only exact standalone links can supplement incomplete metadata from
-    -- Questie or hidden headers, and only when the bag API says inactive.
+    -- A partial log requires an exact known objective or explicit quest removal.
     if not completeLog and not review and not (direct and next(direct)) then return end
-    local db=questieDB()
-    local data=db and call(db.GetItem,db,item)
-    if isa(data,"table") then
-        local starts=field(data,"startQuest")
-        if starts~=nil and starts~=0 then return end
-        local rewards=field(data,"questRewards")
-        if rewards~=nil and (not isa(rewards,"table") or next(rewards)) then return end
-        local related=field(data,"relatedQuests")
-        if isa(related,"table") then
-            for _,qid in pairs(related) do
-                if not id(qid) then return end
-                local isOn=call(C_QuestLog.IsOnQuest,qid)
-                local repeatable=call(C_QuestLog.IsRepeatableQuest,qid)
-                if not clean(isOn) or isOn~=false or not clean(repeatable)
-                    or repeatable~=false and not (review==qid and repeatable==nil) then return end
-                local ids,known=objectiveIDs(qid,nil,db)
-                local done=call(C_QuestLog.IsQuestFlaggedCompleted,qid)
-                if known and ids[item] then
-                    if not clean(done) then return end
-                    if done==true then
-                        if not id(quest) then quest=qid end
-                    elseif done~=false or review~=qid then return end
-                elseif not known then return end
-            end
-        end
-    end
     local reviewOnly=id(review)
     if reviewOnly then quest=review end
     if not id(quest) then return end
@@ -453,24 +389,6 @@ local function call(fn,...)
     local ok,a,b=pcall(fn,...)
     if ok and clean(a) then return a,clean(b) and b or nil end
 end
-local function questieDB()
-    if Questie and Questie.IsForever and Questie.API and Questie.API.isReady and QuestieLoader then
-        return call(QuestieLoader.ImportModule,QuestieLoader,"QuestieDB")
-    end
-end
-local function matchQuestie(q,item)
-    if field(q,"sourceItemId")==item then return true end
-    local required=field(q,"requiredSourceItems")
-    if kind(required,"table") then
-        for _,v in pairs(required) do if clean(v) and v==item then return true end end
-    end
-    local list=field(q,"ObjectiveData")
-    if kind(list,"table") then
-        for _,obj in pairs(list) do
-            if field(obj,"Type")=="item" and field(obj,"Id")==item then return true end
-        end
-    end
-end
 
 -- Use localized live item/objective labels only when the objective has no
 -- explicit ID or item link. These hints never feed the discard classifier.
@@ -497,7 +415,6 @@ local function associatedQuest(bag,slot)
         or bag>(NUM_BAG_SLOTS or 4) or not id(slot) then return end
     local item=call(C_Container.GetContainerItemID,bag,slot)
     if not id(item) then return end
-    local db=questieDB()
     local matched,seen=nil,{}
     local refs,heldRefs={},{}
     local info=call(C_Container.GetContainerItemQuestInfo,bag,slot)
@@ -521,18 +438,12 @@ local function associatedQuest(bag,slot)
         nativeObjectiveIDs(qid,native)
         if native[item] then register(qid)
         elseif matchesNativeLabel(itemName,qid) then textMatches[qid]=true end
-        if db and matchQuestie(call(db.GetQuest,qid),item) then register(qid) end
     end
     local shown,total=call(C_QuestLog.GetNumQuestLogEntries)
     if not kind(shown,"number") or shown<0 or shown>1000 then shown=0 end
     for i=1,shown do
         local row=call(C_QuestLog.GetInfo,i)
         if field(row,"isHeader")==false and field(row,"isHidden")~=true then inspect(field(row,"questID"),i) end
-    end
-    if db and QuestieLoader then
-        local aq=call(QuestieLoader.ImportModule,QuestieLoader,"ActiveQuests")
-        local loaded=aq and call(aq.GetAll)
-        if kind(loaded,"table") then for qid in pairs(loaded) do inspect(qid) end end
     end
     -- A bag quest ID alone can be an item that starts a quest. Require both
     -- native active-item evidence and a quest actually in the player log.
@@ -547,13 +458,6 @@ local function associatedQuest(bag,slot)
     end
     -- Exact backlinks also let us inspect held quests beneath collapsed headings.
     -- A backlink alone (especially a starter/reward) never authorizes opening.
-    local related=field(db and call(db.GetItem,db,item),"relatedQuests")
-    if kind(related,"table") then
-        for _,qid in pairs(related) do
-            if id(qid) and db and matchQuestie(call(db.GetQuest,qid),item) then refs[qid]=true end
-            inspect(qid)
-        end
-    end
     -- Standalone typed objectives are positive backlinks, including quests
     -- under collapsed headers. They do not authorize any discard marker.
     for qid in pairs(AT.GetForeverObjectiveQuests and AT.GetForeverObjectiveQuests(item) or {}) do

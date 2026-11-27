@@ -99,15 +99,10 @@ local sparseScore=AT.ScoreLevelGuideQuest(115,AT.ForeverLevelGuideQuests[115],20
 assert(sparseScore.kind=="collect" and sparseScore.items==5 and sparseScore.kills==0 and sparseScore.lowRate==.1)
 local shadowScore=AT.ScoreLevelGuideQuest(116,AT.ForeverLevelGuideQuests[116],20,1,{status="Turn in",held=true})
 assert(shadowScore.kind=="kill" and shadowScore.kills==0 and shadowScore.work==2)
--- Optional DB expands the whole catalog, and actual character prerequisites are respected.
-LibQuestieDB={flavor={key="Forever"},Quest={GetAllIds=function() return {119,120} end,Get=function(q,k)
-    if q==119 then return ({name="Extra catalog quest",questLevel=20,requiredLevel=18,zoneOrSort=40,objectives={[1]={{500,"Wild animals slain"}}}})[k] end
-    if q==120 then return ({name="Locked chain",questLevel=20,requiredLevel=18,zoneOrSort=40,preQuestSingle={142}})[k] end
-end}}
-local extra=place(AT.BuildLevelGuide(),"Westfall");assert(extra.total==7 and extra.leadMix.kill==2)
-local projected
-for _,q in ipairs(extra.quests) do if q.id==119 then projected=q end;assert(q.id~=120) end
-assert(projected and projected.status=="In range" and projected.kind=="kill")
+local questieReads=0
+LibQuestieDB=setmetatable({},{__index=function() questieReads=questieReads+1; error("external provider read") end})
+local independent=place(AT.BuildLevelGuide(),"Westfall")
+assert(independent.total==west.total and questieReads==0)
 LibQuestieDB=nil
 for _,q in ipairs(west.quests) do assert(q.id~=104 and q.id~=106) end
 local duo=AT.BuildLevelGuide(20,2)
@@ -510,23 +505,16 @@ local seen={}
 for _,q in ipairs(w.quests) do seen[q.id]=q end
 assert(seen[101] and not seen[121] and seen[122] and seen[123] and not seen[123].fits and not seen[123].availableHere and not seen[124])
 print("PASS giver data, native tracking lifecycle, alternate-level dedup, faction and native gray filtering")
-LibQuestieDB={
- flavor={key="Forever"},
- Quest={Get=function(q,k) if q==117 and k=="startedBy" then return {{711}} end end},
- Npc={Get=function(n,k)
-    if n~=711 then return end
-    return ({name="Stormwind Quest Giver",friendlyToFaction="A",spawns={[1519]={{50,60}}}})[k]
- end}
-}
 names[1453]="Stormwind City"
+local savedGivers=AT.LevelGuideQuestGivers
+AT.LevelGuideQuestGivers={[117]={{1453,.5,.6,1,711,"Stormwind Quest Giver",0}}}
 local stock=place(AT.BuildLevelGuide(24,1),"Stockade")
 assert(stock.quests[1].giver.name=="Stormwind Quest Giver" and stock.quests[1].giver.map==1453)
-LibQuestieDB.Npc.Get=function(n,k)
-    return ({name="Ambiguous Quest Giver",friendlyToFaction="A",spawns={[1519]={{50,60},{20,40}}}})[k]
-end
-local named=place(AT.BuildLevelGuide(24,1),"Stockade").quests[1].giver; assert(named.name=="Ambiguous Quest Giver" and not named.map)
-LibQuestieDB=nil
-print("PASS half-window map, click filters, outdoor dungeon starter waypoint, and provider ambiguity guard")
+AT.LevelGuideQuestGivers[117][2]={1453,.3,.2,1,712,"Different Quest Giver",0}
+local other=place(AT.BuildLevelGuide(24,1),"Stockade").quests[1].giver
+assert(not other or other.name~="Stormwind Quest Giver","ambiguous bundled giver is not chosen")
+AT.LevelGuideQuestGivers=savedGivers
+print("PASS half-window map, click filters, outdoor dungeon starter waypoint, and bundled giver ambiguity guard")
 assert(loadfile("NQT/LevelGuideZoneRanges.lua"))("NQT",real)
 assert(loadfile("NQT/LevelGuideObjectiveText.lua"))("NQT",real)
 local imported=0

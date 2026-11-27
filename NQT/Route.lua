@@ -344,7 +344,7 @@ local function metaFor(quest)
     if AT.GetFocusedQuestRoutePoint then
         local ok,id,map,x,y=pcall(AT.GetFocusedQuestRoutePoint)
         if ok and id==quest and finite(map) and frac(x,y) then
-            if pointOK(map,x,y) then metadata.map,metadata.x,metadata.y,metadata.source=map,x,y,(turnIn and "verified turn-in" or "quest/Questie coordinates") end
+            if pointOK(map,x,y) then metadata.map,metadata.x,metadata.y,metadata.source=map,x,y,(turnIn and "verified turn-in" or "native quest coordinates") end
         end
     end
     if not metadata.map and not turnIn then metadata.map,metadata.x,metadata.y,metadata.source=nativeOrParentPoint(quest) end

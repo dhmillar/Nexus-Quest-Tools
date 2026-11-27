@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.170 - 2026-11-27
+
+- **Questie independence:** Removed all live Questie and QuestieDB calls and load declarations, including spawn scans, tracker hooks, map-pin suppression, menu actions, and database lookups.
+- **Rank Quest and Level Guide:** Use Blizzard's quest APIs and NQT's bundled Forever records. Known drop rates, quest origins, turn-ins, bag links and world-map pins remain available without Questie. Unsupported data remains unknown.
+- **Tests:** Verified the standalone paths offline, including a simulated loaded Questie. This release does not claim to resolve the reported in-game stutter.
+
 ## 1.5.169 - 2026-11-27
 
 - Rank Quest no longer rebuilds the full list on unchanged party snapshots. Background checks are spread across ticks, and party events still refresh live progress.

@@ -109,21 +109,6 @@ local function questLogMenu(owner, root, context)
     if not validID(id) then id = readFrame(owner, "questID") end
     addOption(root, id)
 end
-local hookedQuestie
-local function hookQuestie()
-    if hookedQuestie or not QuestieLoader or not hooksecurefunc then return end
-    local ok, tracker = pcall(QuestieLoader.ImportModule, QuestieLoader, "TrackerMenu")
-    if not ok or type(tracker) ~= "table" or type(tracker.minMaxQuestOption) ~= "function" then return end
-    hookedQuestie = pcall(hooksecurefunc, tracker, "minMaxQuestOption", function(list, quest)
-        local id = readFrame(quest, "Id")
-        if type(list) ~= "table" or not validID(id) or not AT.char then return end
-        list[#list + 1] = { text = textFor(id), func = function() AT.ToggleQuestExcluded(id) end }
-        list[#list + 1] = { text = orderLabel(id), func = function() changeOrder(id) end }
-        if AT.GetTrackingOrderCount() > 0 then
-            list[#list + 1] = { text = "Reset Tracking Order", func = AT.ResetTrackingOrder }
-        end
-    end)
-end
 
 local rows = setmetatable({}, {__mode="k"})
 local attachedScrollBoxes = setmetatable({}, {__mode="k"})
@@ -131,9 +116,6 @@ local function nativeLogID(row)
     if readFrame(row, "Checkbox") then return readFrame(row, "questID") end
 end
 
-local function questieLineID(row)
-    if readFrame(row, "mode") == "quest" then return readFrame(readFrame(row, "Quest"), "Id") end
-end
 
 local function trackerBlockID(block)
     local module = readFrame(block, "parentModule")
@@ -146,9 +128,6 @@ local function nativeLogObjectiveID(row)
     return readFrame(row, "questID")
 end
 
-local function questieObjectiveID(line)
-    if readFrame(line, "mode") == "objective" then return readFrame(readFrame(line, "Quest"), "Id") end
-end
 
 local function redrawInline(row, data, index)
     local label = readFrame(row, data.label)
@@ -447,22 +426,6 @@ local function scanNativeTracker(module)
         observeBlockCircle(pair.owner)
     end
 end
-local function scanQuestie()
-    if not QuestieLoader or not Questie or not Questie.IsForever then return end
-    local ok, pool = pcall(QuestieLoader.ImportModule, QuestieLoader, "TrackerLinePool")
-    if ok and pool and pool.ForEachQuestTitleLine then
-        pool.ForEachQuestTitleLine(function(row)
-            observe(row, questieLineID, "label", true, false, true)
-        end)
-        if type(pool.UpdateObjectiveLines) == "function" then
-            pool.UpdateObjectiveLines(function(row)
-                if validID(questieObjectiveID(row)) then
-                    observe(row, questieObjectiveID, "label", false, false, true)
-                end
-            end)
-        end
-    end
-end
 
 local mapPinHooks=setmetatable({}, {__mode="k"})
 local hookedMapAcquire, hookedNativePOI
@@ -508,13 +471,10 @@ local function scanWorldMapPins()
 end
 
 function AT.RefreshQuestOrderBadges()
-    -- Each integration is independent: an optional incompatible tracker
-    -- must not interfere with the other surfaces or the quest engine.
     pcall(scanLog)
     pcall(scanWorldMapPins)
     pcall(scanNativeTracker, QuestObjectiveTracker)
     pcall(scanNativeTracker, CampaignQuestObjectiveTracker)
-    pcall(scanQuestie)
     for block in pairs(blockCircle) do pcall(drawBlockCircle, block) end
     for row, data in pairs(rows) do
         if data.badge or data.inline then pcall(redraw, row, data) end
@@ -528,20 +488,9 @@ function AT.InitQuestMenus()
         Menu.ModifyMenu("MENU_QUEST_OBJECTIVE_TRACKER", trackerMenu)
         Menu.ModifyMenu("MENU_QUEST_MAP_LOG_TITLE", questLogMenu)
     end
-    hookQuestie()
     AT.RefreshQuestOrderBadges()
     if C_Timer and C_Timer.NewTicker then
         C_Timer.NewTicker(0.4, AT.RefreshQuestOrderBadges)
-    end
-    if not hookedQuestie and CreateFrame then
-        local listener = CreateFrame("Frame")
-        listener:RegisterEvent("ADDON_LOADED")
-        listener:SetScript("OnEvent", function(self, _, addon)
-            if addon == "Questie" then
-                hookQuestie()
-                if hookedQuestie then self:UnregisterEvent("ADDON_LOADED") end
-            end
-        end)
     end
 end
 
@@ -556,8 +505,7 @@ end
 
 
 
--- Rank Quest owns its menu and confirmation. Questie can supply its optional
--- map integrations, but is not required for native quest actions.
+-- Rank Quest owns its menu and confirmation.
 local function menuCall(fn,...)
     if type(fn)~="function" then return end
     local ok,v=pcall(fn,...)
@@ -659,21 +607,6 @@ local function openQuestURL(id)
     StaticPopup_Show(key,nil,nil,"https://www.wowhead.com/forever/quest="..id)
 end
 
-local function questieMenuFor(id)
-    if not QuestieLoader or not Questie or not Questie.API or not Questie.API.isReady then return end
-    local function import(key) return menuCall(QuestieLoader.ImportModule,QuestieLoader,key) end
-    local tracker,data,translate=import("TrackerMenu"),import("TrackerData"),import("l10n")
-    local quest=menuCall(readFrame(data,"GetQuest"),id)
-    if readFrame(quest,"Id")~=id then return end
-    local list=menuCall(readFrame(tracker,"GetMenuForQuest"),tracker,quest)
-    if type(list)~="table" then return end
-    return list,translate
-end
-
-local function cleanLabel(s)
-    if type(s)=="string" and readable(s) then return (s:gsub("|c%x%x%x%x%x%x%x%x",""):gsub("|r",""):lower()) end
-end
-
 function AT.OpenRankQuestMenu(owner,id,controls)
     if not rankEnabled() or not questLogEntry(id) or not MenuUtil or not MenuUtil.CreateContextMenu then return end
     local q=C_QuestLog
@@ -682,46 +615,12 @@ function AT.OpenRankQuestMenu(owner,id,controls)
             if rankEnabled() and questLogEntry(id) then fn() end
         end
     end
-    local function questieAction(fn)
-        return live(function() if not combat() then menuCall(fn) end end)
-    end
-    local list,translate=questieMenuFor(id)
-    local function key(label)
-        local ok,value=pcall(function() return translate and translate(label) end)
-        return cleanLabel(ok and value or label) or cleanLabel(label)
-    end
-    local allowed={}
-    for _,label in ipairs({"Objectives","Show on Map","Hide Icons","Show Icons","Set |cFF54e33bTomTom|r Target","WoWHead URL","Show in Quest Log"}) do
-        allowed[key(label)]=true
-    end
-    local function put(root,entry,depth)
-        local label=readFrame(entry,"text")
-        if not cleanLabel(label) then return end
-        local submenu=readFrame(entry,"menuList")
-        local fn=readFrame(entry,"func")
-        if type(submenu)=="table" and depth<3 then
-            local node=root:CreateButton(label)
-            for _,child in ipairs(submenu) do put(node,child,depth+1) end
-        elseif type(fn)=="function" then
-            root:CreateButton(label,questieAction(fn))
-        end
-    end
     MenuUtil.CreateContextMenu(owner,function(_,root)
         local title=readFrame(questLogEntry(id),"title") or ("Quest #"..id)
-        local shown={}
-        for _,entry in ipairs(list or {}) do
-            if entry.isTitle and cleanLabel(entry.text) then title=entry.text;break end
-        end
         root:CreateTitle(title)
-        for _,entry in ipairs(list or {}) do
-            local label=cleanLabel(entry.text)
-            if not entry.isTitle and allowed[label] and not shown[label] then
-                put(root,entry,0);shown[label]=true
-            end
-        end
-        if not shown[key("Show on Map")] then root:CreateButton("Show on Map",live(function() openDetails(id) end)) end
-        if not shown[key("Show in Quest Log")] then root:CreateButton("Show in Quest Log",live(function() openDetails(id) end)) end
-        if not shown[key("WoWHead URL")] then root:CreateButton("Wowhead URL",live(function() openQuestURL(id) end)) end
+        root:CreateButton("Show on Map",live(function() openDetails(id) end))
+        root:CreateButton("Show in Quest Log",live(function() openDetails(id) end))
+        root:CreateButton("Wowhead URL",live(function() openQuestURL(id) end))
         if IsInGroup and IsInGroup() and menuCall(q.IsPushableQuest,id)==true and (QuestLogPushQuest or q.QuestLogPushQuest) then
             root:CreateButton("Share Quest",live(function()
                 if IsInGroup() and menuCall(q.IsPushableQuest,id)==true then

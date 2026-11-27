@@ -4,16 +4,18 @@ function issecretvalue(v)return v==secret end
 local log={}
 local total
 local owned={100,100,101,102,103,104,105,106,107,108}
-local data={[100]={relatedQuests={1}},[101]={relatedQuests={1},startQuest=9},[102]={relatedQuests={1}},[103]={relatedQuests={1}},[104]={relatedQuests={2}},[105]={relatedQuests={1,7}},[106]={relatedQuests={1},questRewards={1}},[107]={relatedQuests={1}},[108]={relatedQuests={1}}}
-local quests={[1]={ObjectiveData={{Type="item",Id=100},{Type="item",Id=101},{Type="item",Id=105},{Type="item",Id=106},{Type="item",Id=107},{Type="item",Id=108}}},[2]={ObjectiveData={{Type="item",Id=104}}},[7]={ObjectiveData={{Type="item",Id=105}}},[8]={ObjectiveData={{Type="item",Id=100}}}}
-Questie={IsForever=true,API={isReady=true}}
-QuestieLoader={ImportModule=function() return {GetQuest=function(q)return quests[q] end,GetItem=function(_,i)return data[i]end} end}
+AT.ForeverProtectedQuestItems={[101]=true,[106]=true}
+AT.ForeverQuestFacts={[8]={0,0,{100,1}}}
+AT.GetForeverObjectiveQuests=function(item)
+    return ({[100]={[1]=true},[104]={[2]=true},[105]={[1]=true,[7]=true},[107]={[1]=true},[108]={[1]=true}})[item]
+end
 local done={[1]=true,[2]=true}
 C_QuestLog={
     GetNumQuestLogEntries=function() return #log,total or #log end,
     GetInfo=function(index)return {questID=log[index],isHeader=false}end,
     IsOnQuest=function(q) for _,q2 in ipairs(log) do if q==q2 then return true end end return false end,
     IsRepeatableQuest=function(q)return q==2 end,
+    GetQuestObjectives=function(q) if q==8 then return {{type="item",itemID=100}} elseif q==9 then return {} end end,
     IsQuestFlaggedCompleted=function(q)return done[q] or false end
 }
 C_Container={GetContainerItemID=function(_,slot)return owned[slot] end,
@@ -56,10 +58,10 @@ for i=3,10 do assert(not buttons[i].mark,"must not mark unverified or protected 
 tipHook(GameTooltip,0,1);assert(GameTooltip.text:find("future quest",1,true) and tipShows==1 and solid.visible);tipScripts.OnTooltipCleared();assert(not solid.visible)
 GameTooltip.text=nil;tipHook(GameTooltip,0,3);assert(not GameTooltip.text or not GameTooltip.text:find("leftover quest item",1,true))
 log={8};watcher.event(nil,"QUEST_ACCEPTED",8);assert(not buttons[1].mark.shown);deferred();assert(not buttons[1].mark.shown)
-log={};total=2;AT.RefreshQuestLeftovers();assert(not buttons[1].mark.shown,"hidden or collapsed rows block marking")
-total=nil;log={234};AT.RefreshQuestLeftovers();assert(not buttons[1].mark.shown,"unknown active data blocks marking")
+log={};total=2;AT.RefreshQuestLeftovers();assert(buttons[1].mark.shown,"verified inactive exact backlink survives a collapsed log")
+total=nil;log={234};AT.RefreshQuestLeftovers();assert(buttons[1].mark.shown,"exact inactive backlink still resolves if a different row lacks metadata")
 log={};owned[1]=999;watcher.event(nil,"BAG_UPDATE_DELAYED");deferred();assert(not buttons[1].mark.shown and buttons[2].mark.shown)
-Questie=nil;log={9};owned[11]=109;AT.RefreshQuestLeftovers()
+log={9};owned[11]=109;AT.RefreshQuestLeftovers()
 log={};now=101;AT.RefreshQuestLeftovers();done[9]=true;watcher.event(nil,"QUEST_TURNED_IN",9)
 combat=true;deferred();assert(AT.GetLeftoverQuestBagHint(0,11)==9 and not buttons[11].mark)
 combat=false;watcher.event(nil,"PLAYER_REGEN_ENABLED");deferred();assert(buttons[11].mark.shown)

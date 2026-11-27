@@ -41,12 +41,8 @@ local function vec(v)
     if not is(v,"table") and not is(v,"userdata") then return end
     return read(v.GetXY,v)
 end
-local function questieLoaded()
-    return read(C_AddOns and C_AddOns.IsAddOnLoaded or IsAddOnLoaded,"Questie")==true
-        or Questie and Questie.IsForever==true and Questie.API and Questie.API.isReady==true
-end
 local function enabled()
-    return AT.db and AT.db.enabled~=false and AT.db.showQuestMapPins~=false and not questieLoaded()
+    return AT.db and AT.db.enabled~=false and AT.db.showQuestMapPins~=false
 end
 local function title(q)
     local label=read(Q and Q.GetTitleForQuestID,q)

@@ -267,28 +267,11 @@ do
 end
 do
     local getObjectives=C_QuestLog.GetQuestObjectives
-    local modules={
-        QuestieDB={
-            GetQuest=function(q) if q==12 then return {ObjectiveData={
-                {Type="item",Id=70},{Type="item",Id=71},{Type="item",Id=72},{Type="item",Id=73}
-            }} end end,
-            GetItem=function(_,item)
-                local items={[70]={name="Evidence",npcDrops={20,21,21,22}},
-                    [71]={name="Cloth",npcDrops={23}},[72]={name="Duplicate",npcDrops={24}},
-                    [73]={name="Duplicate",npcDrops={25}}}
-                return items[item]
-            end,
-            GetItemDroprate=function(item,npc)
-                local rates={[20]=12.5,[21]=30,[23]=100,[24]=48,[25]=59}
-                return rates[npc] and {rates[npc],"questie"} or nil
-            end,
-        },
-    }
-    Questie={IsForever=true,API={isReady=true}}
-    QuestieLoader={ImportModule=function(_,name) return modules[name] end}
+    local originalPack=AT.ObservedQuestDrops
+    AT.ObservedQuestDrops={items={[70]={{20,1,8},{21,3,10}},[71]={{23,1,1}}}}
     C_QuestLog.GetQuestObjectives=function(q)
         if q==12 then return {
-            {type="item",text="Evidence: 2/5"},
+            {type="item",itemID=70,text="Evidence: 2/5"},
             {type="item",text="Gather |Hitem:71:0|h[Cloth]|h 1/5"},
             {type="item",text="Duplicate: 0/2"},
             {type="monster",text="Evidence: 0/1"},
@@ -309,7 +292,7 @@ do
         AT.db.rankQuestDropRates=true;AT.RefreshQuestHUD()
         assert(row.objectives[1].text:find("%%%)"))
     end
-    Questie=nil;QuestieLoader=nil
+    AT.ObservedQuestDrops=originalPack
     AT.RefreshQuestHUD()
     assert(not find("Acquired in Stranglethorn").objectives[1].text:find("%%%)"))
     assert(loadfile("NQT/EverlootDrops.lua"))("NQT",AT)
@@ -396,24 +379,15 @@ do
     print("PASS Questie-off objective renders observed drop estimates for numeric IDs and exact client names; toggle and unknowns")
     AT.db.rankQuestDropRates=true
     AT.ObservedQuestDrops.items[990002]={{89,2,5,3,2,0}}
-    local locale, provider=GetLocale,LibQuestieDB
-    GetLocale=function() return "enUS" end
-    LibQuestieDB={flavor={key="Forever"},
-        Quest={Get=function(q,k)
-            if q==12 and k=="objectives" then return {[3]={{990002}}} end
-        end},
-        Item={Get=function(i,k) if i==990002 and k=="name" then return "Only Provider Knows" end end}}
+    local reads=0
+    LibQuestieDB=setmetatable({},{__index=function() reads=reads+1; error("QuestieDB read") end})
     C_QuestLog.GetQuestObjectives=function(q)
         if q==12 then return {{type="item",text="Only Provider Knows: 0/1"}} end
         return getObjectives(q)
     end
     AT.RefreshQuestHUD()
-    assert(find("Acquired in Stranglethorn").objectives[1].text:find("(40%)",1,true))
-    LibQuestieDB.flavor.key="Classic"
-    AT.RefreshQuestHUD()
-    assert(not find("Acquired in Stranglethorn").objectives[1].text:find("%%%)"))
-    GetLocale,LibQuestieDB=locale,provider
-    print("PASS optional Forever QuestieDB item resolution without Questie tracker and with a cold cache")
+    assert(not find("Acquired in Stranglethorn").objectives[1].text:find("%%%)") and reads==0)
+    LibQuestieDB=nil
     do
         local packed={}
         assert(loadfile("NQT/ForeverQuestFacts.lua"))("NQT",packed)
@@ -482,7 +456,7 @@ do
     C_QuestLog.GetQuestObjectives=getObjectives
     AT.db.questHUDTheme=1;AT.db.rankQuestDropRates=nil;AT.RefreshQuestHUD()
     local testRow=find("Acquired in Stranglethorn"); for i=#testRow.objectives,3,-1 do testRow.objectives[i]=nil end
-    print("PASS actual Rank Quest rows both themes, current amount kept, optional Questie, range/partial coverage, exact linked item, ambiguous/non-item/absent excluded, toggle")
+    print("PASS actual Rank Quest rows both themes, current amount kept, bundled rates, range/partial coverage, exact linked item, ambiguous/non-item/absent excluded, toggle")
 end
 local hud=objs[1]
 assert(hud.shown and find("Acquired in Stranglethorn") and find("A flight to Duskwood") and not find("Only in Duskwood"))
@@ -687,23 +661,11 @@ do
     menu()["Nexus Quest Tools: Include quest again"].click();assert(not excludedValue)
     AT.db.questHUDTheme=1;AT.RefreshQuestHUD()
 
-    local standard,ignored
-    local l10n=setmetatable({},{__call=function(_,key) return key=="Objectives" and "Ziele" or key end})
-    local tracker={GetMenuForQuest=function(_,record)
-        assert(record.Id==12)
-        return {{isTitle=true,text="Questie heading"},{text="Ziele",menuList={{text="Kills",menuList={{text="Show on Map",func=function() standard=true end}}}}},
-            {text="Hide Icons",func=function() standard=true end},{text="Abandon Quest",func=function() ignored=true end}}
-    end}
-    Questie={API={isReady=true}}
-    QuestieLoader={ImportModule=function(_,key)
-        return ({TrackerData={GetQuest=function() return {Id=12} end},TrackerMenu=tracker,l10n=l10n})[key]
-    end}
     local before=menu()
-    assert(openedMenu.title=="Questie heading" and before["Hide Icons"] and not before["Abandon Quest"])
-    before.Ziele.entries.Kills.entries["Show on Map"].click();assert(standard and not ignored)
-    standard=nil
+    assert(before["Show on Map"] and before["Wowhead URL"] and not before["Hide Icons"])
+    local openedBefore=opened
     C_QuestLog.IsOnQuest=function() return false end
-    before["Hide Icons"].click();assert(not standard,"stale menu cannot act on a removed quest")
+    before["Show on Map"].click();assert(opened==openedBefore,"stale menu cannot act on a removed quest")
     row.partyOnly=true;openedMenu=nil
     row.scripts.OnClick(row,"RightButton");assert(not openedMenu)
     row.partyOnly=false
@@ -718,7 +680,7 @@ do
     InCombatLockdown=nil;IsInGroup=nil;QuestLogPushQuest=nil;ChatFrame_OpenChat=nil
     MenuUtil=nil;Questie=nil;QuestieLoader=nil
     AT.RefreshQuestHUD(); row=find("Acquired in Stranglethorn")
-    print("PASS Rank Quest right-click: native actions, localized Questie submenu, ordering, explicit confirmation, stale target, combat and party-only safety")
+    print("PASS Rank Quest right-click: native actions, ordering, explicit confirmation, stale target, combat and party-only safety")
 end
 
 local function openZones()
@@ -1401,16 +1363,7 @@ print("PASS actual status toggle in Map/Minimal, selected zones/count, preserves
 clickButton("Completed")
 gameComplete[11]=nil
 distances[15]=10000
-Questie={IsForever=true,API={isReady=true}}
-local starterDB={}
-function starterDB.GetQuest(q)
-    if q==11 or q==15 then return {Starts={NPC={77}}} end
-end
-function starterDB:GetNPC() return {spawns={[99]={{50,50}}}} end
-local zoneDB={GetUiMapIdByAreaId=function(_,area) return area==99 and 1 or nil end}
-QuestieLoader={ImportModule=function(_,name)
-    if name=="QuestieDB" then return starterDB elseif name=="ZoneDB" then return zoneDB end
-end}
+AT.LevelGuideQuestGivers={[11]={{1,.50,.50,0,77,"Starter",0}},[15]={{1,.50,.50,0,77,"Starter",0}}}
 AT.db.questHUDTheme=1;AT.db.questHUDFontOffset=0
 AT.RefreshQuestHUD()
 for _,theme in ipairs({"Map","Minimal"}) do
@@ -1540,17 +1493,11 @@ do
 end
 showFinisher=false
 local _,unknown=AT.GetFocusedQuestRoutePoint();assert(not unknown,"without a known finisher do not reuse objective")
-local finisher={NPC={12345}}
-local modules={
-    QuestieDB={GetQuest=function(qid) if qid==15 then return {Finisher=finisher} end end},
-    DistanceUtils={GetNearestFinisherOrStarter=function(f) assert(f==finisher);return {76,58},101,"Finishing NPC" end},
-    ZoneDB={GetUiMapIdByAreaId=function(_,area) assert(area==101);return 1 end},
-}
-local oldQuestie,oldLoader=Questie,QuestieLoader
-Questie={IsForever=true,API={isReady=true}}
-QuestieLoader={ImportModule=function(_,key) return modules[key] end}
-local finisherMap,tx,ty,name=AT.GetQuestTurnInPoint(15)
-assert(finisherMap==1 and tx==.76 and ty==.58 and name=="Finishing NPC","confirmed Questie finisher fallback")
+local originalTurnIns,originalLocale=AT.ObservedQuestTurnIns,GetLocale
+GetLocale=function() return "enUS" end
+AT.ObservedQuestTurnIns={[15]={{1,.76,.58,1,12345,0,"Finishing NPC"}}}
+local finisherMap,tx,ty=AT.GetQuestTurnInPoint(15)
+assert(finisherMap==1 and tx==.76 and ty==.58,"confirmed bundled finisher fallback")
 do
     clickButton("In Progress")
     local savedMacroBuilder=AT.GetRankQuestNPCMacro
@@ -1578,7 +1525,7 @@ do
     AT.GetRankQuestNPCMacro=savedMacroBuilder
     print("PASS named finisher uses dedicated click hitbox and quest title still opens map")
 end
-Questie,QuestieLoader=oldQuestie,oldLoader
+AT.ObservedQuestTurnIns,GetLocale=originalTurnIns,originalLocale
 do
     local function hasTurnInLine(row,value)
         for _,label in ipairs(row.objectives) do
@@ -1652,7 +1599,7 @@ C_QuestLog.IsOnQuest=savedOnQuest
 C_QuestLog.GetMapForQuestPOIs=savedPOIMap
 print("PASS stock-focused ready quest resolves exact turn-in on the loaded POI map")
 C_QuestLog.GetQuestsOnMap=native;C_QuestLog.GetNextWaypoint=prevDest
-print("PASS sticky manual completed tracking both themes, finished native POI, Questie finisher, no guessed location, queue preserved, turn-in clears")
+print("PASS sticky manual completed tracking both themes, finished native POI, bundled finisher, no guessed location, queue preserved, turn-in clears")
 clickButton("Completed")
 ready[15]=nil
 local baseMap=C_Map.GetMapInfo
