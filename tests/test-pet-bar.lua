@@ -16,6 +16,29 @@ C_NamePlate={
     GetNamePlates=function()return listed end,
 }
 function UnitIsUnit(a,b)return a=="pet" and b==ownership end
+local cv={nameplateShowFriendlyPlayerPets="0",nameplateShowFriendlyPlayers="0",nameplateShowFriendlyNpcs="0",nameplateShowFriends="0"}
+local writes={}
+C_CVar={
+    GetCVar=function(k)return cv[k] end,
+    SetCVar=function(k,v) writes[#writes+1]=k;cv[k]=v end,
+}
+local combat,instance=false,false
+function InCombatLockdown()return combat end
+function IsInInstance()return instance end
+function UnitGUID(u)
+    if u=="pet" or u==ownership then return "Pet-0-0-0-0-19-FF" end
+    if u=="nameplate9" or u=="nameplate10" then return "Pet-0-0-0-0-20-AA" end
+    return "Creature-0-0-0-0-21-AB"
+end
+function UnitIsFriend(_,u)return u~="nameplate10" end
+local function stock(alpha,forbidden)
+    return {a=alpha,IsForbidden=function()return forbidden==true end,
+        GetAlpha=function(self)return self.a end,SetAlpha=function(self,v)self.a=v end}
+end
+mine.UnitFrame,other.UnitFrame=stock(1),stock(.72)
+local npc,enemy,protected=plate("nameplate11"),plate("nameplate10"),plate("nameplate12")
+npc.UnitFrame,enemy.UnitFrame,protected.UnitFrame=stock(.8),stock(.9),stock(1,true)
+listed={mine,other,npc,enemy,protected}
 function UnitExists(unit) assert(unit=="pet");return sample.present end
 function UnitHealth(unit) assert(unit=="pet");reads=reads+1;return sample.health end
 function UnitHealthMax(unit) assert(unit=="pet");return sample.maximum end
@@ -53,11 +76,14 @@ function CreateFrame(kind)
 end
 assert(loadfile("NQT/PetBar.lua"))("NQT",AT)
 AT.InitPetBar()
-assert(not bar and reads==0 and not next(watcher.events),"default off, no polling")
+assert(not bar and reads==0 and not next(watcher.events) and #writes==0,"default off, no polling")
 AT.db.petBarEnabled=true
 AT.RefreshPetBar()
 assert(bar.shown and bar.value==100 and bar.label.text=="100%" and bar.green==1 and not bar.red)
 assert(bar.parent==mine and bar.point[1]=="BOTTOM" and bar.point[3]=="TOP" and bar.point[5]>0)
+assert(cv.nameplateShowFriendlyPlayerPets=="1" and cv.nameplateShowFriendlyPlayers=="0"
+    and cv.nameplateShowFriendlyNpcs=="0" and cv.nameplateShowFriends=="0")
+assert(other.UnitFrame.a==0 and mine.UnitFrame.a==0 and npc.UnitFrame.a==.8 and enemy.UnitFrame.a==.9 and protected.UnitFrame.a==1)
 assert(bar.height==8 and not bar.interactive and bar.range[1]==0 and bar.range[2]==100)
 assert(watcher.events.UNIT_HEALTH=="pet" and watcher.events.UNIT_PET=="player")
 local function health(n,unit)
@@ -71,7 +97,7 @@ health(0);assert(bar.value==0 and bar.red and bar.label.text=="0%")
 sample.maximum=50;sample.health=30
 watcher.onEvent(watcher,"UNIT_MAXHEALTH","pet");assert(bar.value==60 and not bar.red)
 sample.present=false
-watcher.onEvent(watcher,"UNIT_PET","player");assert(not bar.shown)
+watcher.onEvent(watcher,"UNIT_PET","player");assert(not bar.shown and cv.nameplateShowFriendlyPlayerPets=="0" and other.UnitFrame.a==.72)
 sample.present=true
 watcher.onEvent(watcher,"UNIT_PET","player");assert(bar.shown and created==2)
 watcher.onEvent(watcher,"NAME_PLATE_UNIT_REMOVED","nameplate7")
@@ -92,8 +118,22 @@ local secret=123
 issecretvalue=function(v)return v==secret end
 health(secret);assert(not bar.shown,"do not expose restricted data")
 issecretvalue=nil
+combat=true
 AT.db.petBarEnabled=false
-AT.RefreshPetBar();assert(not bar.shown and not next(watcher.events))
+AT.RefreshPetBar();assert(not bar.shown and watcher.events.PLAYER_REGEN_ENABLED and cv.nameplateShowFriendlyPlayerPets=="1")
+combat=false
+watcher.onEvent(watcher,"PLAYER_REGEN_ENABLED")
+assert(not next(watcher.events) and cv.nameplateShowFriendlyPlayerPets=="0","defer and restore the exact owned category")
 AT.db.petBarEnabled=true;AT.db.enabled=false
 AT.RefreshPetBar();assert(not bar.shown and not next(watcher.events))
-print("PASS Pet Bar default off, exact red/green boundary, 0–100, pet changes, safe hide, event-only updates")
+AT.db.enabled=true;AT.db.petBarEnabled=true
+cv.nameplateShowFriendlyPlayerPets="1"
+AT.RefreshPetBar()
+AT.db.petBarEnabled=false;AT.RefreshPetBar()
+assert(cv.nameplateShowFriendlyPlayerPets=="1","do not restore a setting we didn't change")
+cv.nameplateShowFriendlyPlayerPets="0"
+AT.db.petBarEnabled=true;AT.RefreshPetBar()
+instance=true;watcher.onEvent(watcher,"PLAYER_ENTERING_WORLD")
+assert(cv.nameplateShowFriendlyPlayerPets=="0","never force exposure in instances")
+for _,key in ipairs(writes) do assert(key=="nameplateShowFriendlyPlayerPets") end
+print("PASS Pet Bar: bright green and red threshold, exact pet anchor, pet-only category lease and restoration, confirmed friendly pet filtering and instance guards")

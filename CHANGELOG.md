@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.196 - 2026-11-27
+
+- Pet Bar requests only the friendly-pet nameplate category outdoors, leaving the friendly-player and NPC settings untouched. Stock graphics are hidden only on confirmed friendly pet nameplates. The game still controls nameplate availability and instance restrictions. The previous pet category setting is restored when NQT no longer needs it.
+
 ## 1.5.195 - 2026-11-27
 
 - Pet Bar now follows the active pet’s visible nameplate instead of floating below screen center. The slim bar shows only the health percentage, bright green at 50% or higher and red below. Enable friendly/minion nameplates if the game is not showing the pet’s plate.
