@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.175 - 2026-11-27
+
+- **Nearby turn-ins:** A ready quest now joins automatic nearest-quest selection within 100 yards of its verified hand-in location. It can also highlight and sort as nearby in Rank Quest's Completed view.
+- Uses the hand-in point for GPS, not the old objective. Manual tracking and the tracking order still take priority. No completed watch is added to the stock tracker by this feature.
+
 ## 1.5.174 - 2026-11-27
 
 - **Rank Quest loot data:** Added verified party loot observations for Bloody Bone Necklaces, War on the Woodpaw, and Power Stones. Percentages are labeled as party samples with the number of loot windows. Observations were not pooled across builds or carried over to other quests.

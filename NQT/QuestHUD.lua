@@ -691,7 +691,7 @@ local function refreshHighlights(inspectProgress)
     -- Zone assignment describes where the quest was picked up or grouped,
     -- not necessarily where the player can work on its current objective.
     for qid,row in pairs(model.rows) do
-        if not row.complete and not row.partyOnly and call(AT.IsQuestExcluded,qid)~=true then
+        if not row.partyOnly and call(AT.IsQuestExcluded,qid)~=true then
             ids[qid]=true
         end
     end
@@ -716,8 +716,10 @@ local function refreshHighlights(inspectProgress)
         local area=areas[qid]
         local watch=old and old.progress
         local missed
-        if not row or row.complete or row.partyOnly or call(AT.IsQuestExcluded,qid)==true then
+        if not row or row.partyOnly or call(AT.IsQuestExcluded,qid)==true then
             area,watch=nil,nil
+        elseif row.complete then
+            area,watch=area=="near" and "near" or nil,nil
         elseif area=="inside" or area=="near" then
             if progress[qid] then watch=zone or true end
         elseif area=="outside" then
@@ -2293,7 +2295,7 @@ local function arrange()
             b.badge:SetShown(statusTag~="")
             b.detail:ClearAllPoints();b.detail:SetPoint("TOPLEFT",12,-(29+offset));b.detail:SetWidth(width-(link and 62 or 24))
             applyTypography(b.badge,a,10,"GameFontNormalSmall")
-            local marker=not q.complete and highlights[q.id]
+            local marker=not q.partyOnly and highlights[q.id]
             if marker and marker.progress then
                 color(b.fill,.26,.16,.035,.85)
             elseif marker and marker.area then

@@ -71,3 +71,34 @@ instance=false;cont[14]=true; measured[14]=440;expect(14)
 AT.SetQuestExcluded(14,true);expect(12)
 cont[12]=false;expect(nil)
 print("PASS closest eligible quest follows movement inside and beyond highlight range; ties, exclusions, distances and manual completion work")
+-- Ready quests use the real hand-in pin (not last objective/blobs).
+AT.SetQuestExcluded(14,false);cont[14]=true;measured[14]=250
+ready[11]=true;inside[11]=true
+pois[1]={{questID=11,x=.6,y=.5,isQuestStart=false,inProgress=false}}
+expect(11)
+assert(AT.IsQuestTurnInNavigation(11) and select(2,AT.GetQuestNavigationID())=="nearby-turn-in")
+local current,m,x,y=AT.GetFocusedQuestRoutePoint()
+assert(current==11 and m==1 and x==.6 and y==.5)
+assert(not watch[11],"auto turn-in supertracks without bypassing hide-completed watches")
+assert(AT.SampleQuestAreas({[11]=true},{})[11]=="near","inclusive 100-yard hand-in boundary")
+measured[14]=50;expect(14)
+measured[14]=250
+pois[1][1].x=.601;expect(14)
+assert(AT.SampleQuestAreas({[11]=true},{[11]="near"})[11]=="outside")
+pois[1][1].x=.51;pois[1][1].inProgress=true;expect(14)
+assert(AT.SampleQuestAreas({[11]=true},{[11]="near"})[11]==nil,"stale objective pins and blobs cannot locate turn-in")
+pois[1][1].inProgress=false;map=2;expect(11);map=1
+assert(AT.ToggleQuestHUDManualFocus(14));expect(14)
+assert(AT.ToggleQuestHUDManualFocus(14));expect(11)
+AT.ToggleQuestTrackingOrder(14);expect(14)
+AT.ResetTrackingOrder();expect(11)
+AT.SetQuestExcluded(11,true);expect(14)
+AT.SetQuestExcluded(11,false);expect(11)
+table.remove(ids,1);expect(14)
+ids[#ids+1]=11;pois[1]=nil
+AT.ObservedQuestTurnIns={[11]={{1,.55,.5,1,123,0,"Finisher"}}}
+expect(11)
+assert(select(3,AT.GetFocusedQuestRoutePoint())==.55)
+AT.ObservedQuestTurnIns={[11]={{1,.55,.5,1,123,0,"Finisher"},{1,.52,.5,1,124,0,"Alternate"}}}
+expect(14)
+print("PASS true turn-in distance, 100-yard boundary, nearest comparison, GPS, exclusions, manual/queue priority, and completed watch safety")

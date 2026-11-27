@@ -3,6 +3,7 @@ local Q, M, S = C_QuestLog, C_Map, C_SuperTrack
 local ENTER_YARDS, EXIT_YARDS, ORDER_LIMIT = 100, 125, 10
 local focus, ownedWatch, ownedSuper, lastNear, focusFromOrder, running, queued, initialized
 local manualHUDQuest, manualWasReady, retiringManual, manualFromMap
+local focusTurnIn, observedTurnIn
 
 local function ordinary(v)
     return not issecretvalue or not issecretvalue(v)
@@ -69,7 +70,7 @@ AT.IsQuestReadyForTurnIn = completed
 
 function AT.ShouldHideCompletedQuest(id)
     local db=AT.db
-    return db and db.enabled and db.hideCompleted and not AT.IsQuestExcluded(id) and manualHUDQuest~=id and completed(id) or false
+    return db and db.enabled and db.hideCompleted and not AT.IsQuestExcluded(id) and manualHUDQuest~=id and not (focus==id and focusTurnIn) and completed(id) or false
 end
 
 local function trackingOrder()
@@ -160,12 +161,12 @@ local function release()
     if ownedWatch == id and watched(id) then
         call(Q.RemoveQuestWatch, id)
     end
-    focus, ownedWatch, ownedSuper, lastNear, focusFromOrder = nil, nil, nil, nil, nil
+    focus, ownedWatch, ownedSuper, lastNear, focusFromOrder, focusTurnIn = nil, nil, nil, nil, nil, nil
     save()
 end
 
-local function acquire(id)
-    local added = not watched(id)
+local function acquire(id,turnIn)
+    local added = not watched(id) and not turnIn
     if added then
         local result = call(Q.AddQuestWatch, id)
         if result ~= true and not watched(id) then
@@ -192,7 +193,7 @@ local function acquire(id)
         end
     end
     release()
-    focus = id
+    focus, focusTurnIn = id, turnIn
     ownedWatch = added and id or nil
     if S then
         local before = getSuper()
@@ -402,6 +403,39 @@ local function proximityContext()
     return ctx,points,parent,blocked
 end
 
+local function turnInDistance(id,ctx,poi,parent,blocked)
+    if not ctx then return end
+    local function pointDistance(map,x,y,knownContext)
+        if not xyValid(x,y) then return end
+        local px,py
+        if knownContext then px,py=mapPlayer(knownContext) end
+        if px then
+            local dx,dy=(px-x)*knownContext.w,(py-y)*knownContext.h
+            return dx*dx+dy*dy,{map,x,y}
+        end
+        if blocked then return end
+        local world,wx,wy=worldPosition(map,x,y)
+        local playerWorld,playerX,playerY=getPlayerWorld(ctx)
+        if world==nil or world~=playerWorld then return end
+        local dx,dy=wx-playerX,wy-playerY
+        return dx*dx+dy*dy,{map,x,y}
+    end
+    local function nativePoint(c,p)
+        if c and field(p,"isQuestStart")==false and field(p,"inProgress")==false then
+            return pointDistance(c.id,field(p,"x"),field(p,"y"),c)
+        end
+    end
+    local d,point=nativePoint(ctx,poi)
+    if d then return d,point end
+    d,point=nativePoint(parent,parent and parent.points and parent.points[id])
+    if d then return d,point end
+    -- Generic objective waypoints, blobs and reference-only coordinates
+    -- cannot establish that a completed quest is near its actual finisher.
+    local map,x,y=observedTurnIn(id,nil,nil,nil,false,true)
+    if not map or blocked and map~=ctx.id then return end
+    return pointDistance(map,x,y,map==ctx.id and ctx or parent and map==parent.id and parent or nil)
+end
+
 local function measureProximity(id,ctx,poi,parent,blocked,limit)
     local task=call(GetTaskInfo,id)
     local blob=C_Minimap and call(C_Minimap.IsInsideQuestBlob,id)
@@ -424,10 +458,15 @@ function AT.SampleQuestAreas(ids,previous)
     if not Q then return result end
     local ctx,points,parent,blocked=proximityContext()
     for id in pairs(ids) do
-        if validID(id) and not completed(id) then
-            local limit=previous[id] and EXIT_YARDS or ENTER_YARDS
-            local _,area=measureProximity(id,ctx,points[id],parent,blocked,limit)
-            if area~="possible_exit" or previous[id]=="inside" then result[id]=area end
+        if validID(id) then
+            if completed(id) then
+                local d=turnInDistance(id,ctx,points[id],parent,blocked)
+                if d then result[id]=d<=ENTER_YARDS^2+1e-6 and "near" or "outside" end
+            else
+                local limit=previous[id] and EXIT_YARDS or ENTER_YARDS
+                local _,area=measureProximity(id,ctx,points[id],parent,blocked,limit)
+                if area~="possible_exit" or previous[id]=="inside" then result[id]=area end
+            end
         end
     end
     return result
@@ -518,7 +557,7 @@ local function run()
             if AT.ShouldHideCompletedQuest(id) then call(Q.RemoveQuestWatch, id) end
         end
     end
-    if focus and (AT.IsQuestExcluded(focus) or (completed(focus) and focus~=manualHUDQuest) or not activeQuest(focus, ids)) then
+    if focus and (AT.IsQuestExcluded(focus) or (completed(focus) and focus~=manualHUDQuest and not focusTurnIn) or not activeQuest(focus, ids)) then
         -- Leave a qualifying completed watch alone if that option is disabled.
         if not db.hideCompleted and completed(focus) then ownedWatch = nil end
         release()
@@ -530,6 +569,7 @@ local function run()
     if manualHUDQuest then
         if focus~=manualHUDQuest then acquire(manualHUDQuest) end
         if focus==manualHUDQuest then
+            focusTurnIn=nil
             if focusFromOrder then focusFromOrder=nil;save() end
             if S and manualFromMap then
                 if getSuper()~=focus then call(S.SetSuperTrackedQuestID,focus) end
@@ -559,22 +599,32 @@ local function run()
     for id in pairs(poiByID) do
         if activeQuest(id,ids) then ids[id]=true end
     end
-    local best, bestDist, currentDistance
+    local best,bestDist,bestTurnIn,currentDistance
     for id in pairs(ids) do
-        if not AT.IsQuestExcluded(id) and not completed(id) then
-            local d = measureProximity(id,ctx,poiByID[id],parent,blocked)
+        if not AT.IsQuestExcluded(id) then
+            local d,turnIn
+            if completed(id) then
+                if activeQuest(id,ids) then d,turnIn=turnInDistance(id,ctx,poiByID[id],parent,blocked) end
+                if d and d>ENTER_YARDS^2+1e-6 then d,turnIn=nil,nil end
+            else
+                d=measureProximity(id,ctx,poiByID[id],parent,blocked)
+            end
             if id==focus then currentDistance=d end
-            -- No yardage cutoff for focus; highlights still use 100/125 yd.
-            -- Keep the current quest on exact ties, including overlapping blobs.
-            if finite(d) and d >= 0 and (not bestDist or d < bestDist
-                or (d == bestDist and (id == focus or best ~= focus and id < best))) then
-                best, bestDist = id, d
+            -- In-progress quests still qualify outside the highlight range;
+            -- turn-ins enter the same nearest-first comparison at 100 yd.
+            if finite(d) and d>=0 and (not bestDist or d<bestDist
+                or d==bestDist and (id==focus or best~=focus and id<best)) then
+                best,bestDist,bestTurnIn=id,d,turnIn
             end
         end
     end
+    if focusTurnIn and best~=focus then release() end
     if best then
-        if best == focus or acquire(best) then noteNear(best, ctx, bestDist) end
-    elseif currentDistance == math.huge or confirmedDeparture(ctx) then
+        if best==focus or acquire(best,bestTurnIn) then
+            focusTurnIn=bestTurnIn
+            noteNear(best,ctx,bestDist)
+        end
+    elseif currentDistance==math.huge or confirmedDeparture(ctx) then
         release()
     end
 end
@@ -595,6 +645,8 @@ function AT.GetQuestNavigationID()
         if validID(id) and not AT.IsQuestExcluded(id) and not completed(id)
             and call(Q.IsOnQuest,id) ~= false then return id,"order" end
     end
+    if AT.db.autoFocus and focusTurnIn and completed(focus) and not AT.IsQuestExcluded(focus)
+        and call(Q.IsOnQuest,focus)~=false then return focus,"nearby-turn-in" end
     -- Explicitly selecting a quest in the stock UI also drives the HUD;
     -- it is not necessary to have Auto Track's nearest-focus mode enabled.
     local selected = S and call(S.GetSuperTrackedQuestID)
@@ -618,7 +670,7 @@ end
 function AT.IsQuestTurnInNavigation(id)
     if not validID(id) or not completed(id) then return false end
     local active,source=AT.GetQuestNavigationID()
-    return active==id and (source=="hud" or source=="turn-in")
+    return active==id and (source=="hud" or source=="turn-in" or source=="nearby-turn-in")
 end
 
 local function nativeTurnIn(id,map)
@@ -673,7 +725,7 @@ local referenceTurnIns={
     [161]={{1437,.5014,.1827,1,1073,1,"Ashlan Stonesmirk"}},
     [623]={{1445,.688,.532,1,2616,1,"Privateer Groy"}},
 }
-local function observedTurnIn(id,map,x,y,reference)
+observedTurnIn=function(id,map,x,y,reference,skipName)
     local source
     if reference then
         source=referenceTurnIns[id] or (AT.ForeverQuestNPCReferences and AT.ForeverQuestNPCReferences[id])
@@ -697,6 +749,7 @@ local function observedTurnIn(id,map,x,y,reference)
     end
     if not found then return end
     local m,px,py,kind,entity,_,name=unpack(found)
+    if skipName then return m,px,py end
     if kind==1 then
         local locale=call(GetLocale)
         if locale~="enUS" and locale~="enGB" then name=nil end
@@ -776,6 +829,7 @@ end
 
 function AT.GetQuestTurnInPoint(id,viewMap)
     if not AT.IsQuestTurnInNavigation(id) then return end
+    if focus==id and focusTurnIn and not AT.GetQuestHUDManualFocus() then return unpack(focusTurnIn) end
     return resolveTurnInPoint(id,viewMap,false)
 end
 
