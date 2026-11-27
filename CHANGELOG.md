@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.234
+
+- Krol'dok boss targeting checks nameplates reported by the game and party targets, uses known boss IDs when names are hidden, and picks the next living, unmarked boss without searching for corpses by name.
+
 ## 1.5.233
 
 - Krol'dok boss targeting uses only a currently verified living boss and no longer does a blind exact-name search or emits existence predicates. Other dungeon paths are unchanged.

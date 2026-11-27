@@ -1745,6 +1745,7 @@ do
         {1663,"Dextren Ward"},{1716,"Bazil Thredd"},{1720,"Bruegal Ironknuckle"}}
     local stockBatch=1
     local fallbackCount=0
+    local visibleBossPlates={}
     local tokens={"target","mouseover","focus","targettarget","player","pet"}
     for i=1,5 do tokens[#tokens+1]="boss"..i end
     for i=1,4 do
@@ -1900,8 +1901,17 @@ do
         if usable(plates,"table") then
             for _,plate in ipairs(plates) do
                 local unit=plate.namePlateUnitToken
+                if id==3039 and not allowedToken(unit) then unit=plate.unitToken end
                 if allowedToken(unit) then units[#units+1]=unit end
             end
+        end
+        -- Some Forever plates only expose a usable token in the added event.
+        -- Store tokens, never identity or living status; verify both each scan.
+        if id==3039 then
+            local eventTokens={}
+            for unit in pairs(visibleBossPlates) do eventTokens[#eventTokens+1]=unit end
+            table.sort(eventTokens)
+            for _,unit in ipairs(eventTokens) do units[#units+1]=unit end
         end
         local unknowns={}
         local deadNames,livingNames,rosterName={},{},{}
@@ -1910,9 +1920,10 @@ do
             if names[key] then rosterName[entry[1]]=key end
         end
         local directOwner
-        local candidateGUIDs={}
+        local candidateGUIDs,scanned={},{}
         for _,unit in ipairs(units) do
-            local exists=safe(UnitExists,unit)
+            local exists=not scanned[unit] and safe(UnitExists,unit)
+            scanned[unit]=true
             if ordinary(exists) and exists==true then
                 local guid=safe(UnitGUID,unit)
                 if not usable(guid,"string") then guid=nil end
@@ -1931,6 +1942,11 @@ do
                 if not usable(label,"string") then label=nil end
                 local proof={mark=mark,dead=dead,readable=readable,knownDead=knownDead,guid=guid}
                 byToken[unit]=proof
+                if id==3039 and rosterName[npc] and (not label or label=="") then
+                    for _,entry in ipairs(factRoster(id)) do
+                        if entry[1]==npc then label=entry[2];break end
+                    end
+                end
                 local nameKey=label and label:lower() or (unit=="target" and lastTargetLabel or nil)
                 if unit=="target" then directOwner={guid=guid,name=nameKey,unit=unit} end
                 if guid and (not seen[guid] or readable or dead==true) then seen[guid]=proof end
@@ -1946,8 +1962,14 @@ do
                 end
                 local reachable=unit=="target" or unit=="mouseover" or allowedToken(unit) or unit:match("^boss%d$")
                 local classification=safe(UnitClassification,unit)
-                local boss=(npc and ids[npc]) or (not npc and label and names[label:lower()])
-                    or (usable(classification,"string") and classification=="worldboss") or unit:match("^boss%d$")
+                local rosterBoss=(npc and ids[npc]) or (not npc and label and names[label:lower()])
+                local boss
+                if id==3039 then
+                    reachable=reachable or unit=="focus" or unit:match("^party%dtarget$") or unit:match("^raid%d+target$")
+                    boss=rosterBoss
+                else
+                    boss=rosterBoss or (usable(classification,"string") and classification=="worldboss") or unit:match("^boss%d$")
+                end
                 if boss and knownDead then
                     local evidence=dead==true and deadNames or (dead==false and livingNames or nil)
                     if evidence and nameKey then evidence[nameKey]=true end
@@ -2357,7 +2379,7 @@ do
         end
         local watcher=CreateFrame("Frame")
         for _,event in ipairs({"PLAYER_ENTERING_WORLD","PLAYER_REGEN_ENABLED","NAME_PLATE_UNIT_ADDED",
-            "NAME_PLATE_UNIT_REMOVED","PLAYER_TARGET_CHANGED","UPDATE_MOUSEOVER_UNIT",
+            "NAME_PLATE_UNIT_REMOVED","PLAYER_TARGET_CHANGED","UPDATE_MOUSEOVER_UNIT","UNIT_TARGET",
             "RAID_TARGET_UPDATE","INSTANCE_ENCOUNTER_ENGAGE_UNIT","GROUP_ROSTER_UPDATE","UNIT_FLAGS","UNIT_HEALTH","ENCOUNTER_END","BOSS_KILL","PARTY_KILL","UNIT_DIED","UI_ERROR_MESSAGE"}) do
             pcall(watcher.RegisterEvent,watcher,event)
         end
@@ -2380,6 +2402,7 @@ do
                 if dungeon then safe(observeReadableBossTarget,dungeon,id) end
             end
             if event=="PLAYER_ENTERING_WORLD" then
+                visibleBossPlates={}
                 local _,id,kind=instance()
                 enterDeathScope((kind=="party" or kind=="raid") and id or nil)
                 if id~=lastInstance or (kind~="party" and kind~="raid") then
@@ -2387,9 +2410,17 @@ do
                     plans,planIDs,lastTargetLabel={},{},nil
                 end
             end
+            if event=="NAME_PLATE_UNIT_ADDED" or event=="NAME_PLATE_UNIT_REMOVED" then
+                if allowedToken(arg1) then
+                    visibleBossPlates[arg1]=event=="NAME_PLATE_UNIT_ADDED" and true or nil
+                end
+            end
             if not AT.db or not AT.db.bossAutoMark then return end
-            if event=="NAME_PLATE_UNIT_REMOVED" or event=="PLAYER_TARGET_CHANGED" then
+            if event=="NAME_PLATE_UNIT_REMOVED" or event=="NAME_PLATE_UNIT_ADDED"
+                or event=="PLAYER_TARGET_CHANGED" or event=="UNIT_TARGET" then
                 local _,id=context()
+                if event=="UNIT_TARGET" and (id~=3039 or not usable(arg1,"string")
+                    or not (arg1:match("^party%d$") or arg1:match("^raid%d+$"))) then return end
                 if id==3039 and safe(InCombatLockdown)~=true and AT.RefreshBossActionBar then
                     AT.RefreshBossActionBar()
                 end

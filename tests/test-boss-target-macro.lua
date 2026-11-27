@@ -685,3 +685,45 @@ do
     ForeverDungeonJournal_NS=old
 end
 print("PASS Krol'dok: both buttons target and act only on a verified living unit, skip missing/hidden/dead and then reject a stale cached boss that died")
+
+-- A client can expose a plate only through its event or alternate public
+-- frame field. A party target can identify a boss without a readable name.
+for _,smart in ipairs({false,true}) do
+    units={};kind="none";ui[1].scripts.OnEvent(ui[1],"PLAYER_ENTERING_WORLD")
+    kind="party";current=3039;ui[1].scripts.OnEvent(ui[1],"PLAYER_ENTERING_WORLD")
+    local grox=mob(258966,9601,"Slavecrusher Grox");grox.dead=true
+    local mugg=mob(258968,9602,"Overlord Mugg");mugg.dist=400
+    local z=mob(258972,9603,secret);z.dist=625
+    local ashka=mob(259281,9604,"War Handler Ashka");ashka.dist=900
+    local trash=mob(999,9605,"Trash");trash.dist=1
+    local original=C_NamePlate.GetNamePlates
+    C_NamePlate.GetNamePlates=function()return {{unitToken="nameplate8"}} end
+    units.target=grox;units.boss1=trash;units.nameplate5=mugg
+    units.party1target=z;units.nameplate8=ashka
+    ui[1].scripts.OnEvent(ui[1],"NAME_PLATE_UNIT_ADDED","nameplate5")
+    actual={};pings={}
+    assert(AT.RefreshBossActionBar())
+    local first=smart and press() or body
+    assert(first:find("/target [@nameplate5,harm,nodead]",1,true),first)
+    native(first,{},false)
+    assert(units.target==mugg and actual[mugg]==8 and pings[1]==mugg)
+    mugg.mark=8
+    ui[1].scripts.OnEvent(ui[1],"RAID_TARGET_UPDATE")
+    local second=smart and press() or body
+    assert(second:find("/target [@party1target,harm,nodead]",1,true),second)
+    native(second,{},false)
+    assert(units.target==z and actual[z]==7 and pings[2]==z and not actual[grox] and not actual[trash])
+    z.mark=7
+    ui[1].scripts.OnEvent(ui[1],"RAID_TARGET_UPDATE")
+    local third=smart and press() or body
+    assert(third:find("/target [@nameplate8,harm,nodead]",1,true),third)
+    native(third,{},false)
+    assert(units.target==ashka and actual[ashka]==4 and pings[3]==ashka)
+    units.target=grox;units.nameplate5=trash;units.party1target=nil;units.nameplate8=nil
+    ui[1].scripts.OnEvent(ui[1],"NAME_PLATE_UNIT_REMOVED","nameplate5")
+    local gone=smart and press() or body
+    native(gone,{},false)
+    assert(units.target==nil and #pings==3 and not actual[trash])
+    C_NamePlate.GetNamePlates=original
+end
+print("PASS Krol'dok dynamic event plates, alternate frame field, name-masked party targets, three unique markers, and corpse/recycled-token removal")
