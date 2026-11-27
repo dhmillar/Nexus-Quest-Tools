@@ -624,11 +624,17 @@ do
     local initialSide,initialLocale=UnitFactionGroup,GetLocale
     GetLocale=function() return "enUS" end
     UnitFactionGroup=function() return "Alliance" end
+    assert(real.GetShareQuestStart(98423,3065):find("Reliquary of Kings",1,true))
+    assert(real.GetShareQuestStart(909,nil):find("Moonshrine Ruins",1,true))
+    assert(real.LevelGuideItemStarts[98423][2][1][1]==0 and real.LevelGuideItemStarts[98423][2][1][5]==2)
+    assert(not real.TrackLevelGuideGiver({id=98423,giver={pickup=true,map=0,x=0,y=0}}))
     assert(real.GetShareQuestStart(637,1417):find("Waterlogged Letter",1,true))
     assert(real.GetShareQuestStart(95816,1433):find("Tamelyn Aldridge",1,true))
     assert(not real.GetShareQuestStart(95819,1413):find("Gishah",1,true))
     assert(real.GetShareQuestStart(178,1433):find("Near Stonewatch Keep",1,true))
     UnitFactionGroup=function() return "Horde" end
+    assert(real.GetShareQuestStart(6922,nil):find("Moonshrine Ruins",1,true))
+    assert(not real.GetShareQuestStart(98423,3065):find("Reliquary of Kings",1,true))
     assert(real.GetShareQuestStart(781,1412):find("Brambleblade Ravine",1,true))
     assert(real.GetShareQuestStart(95819,1413):find("Gishah",1,true))
     assert(not real.GetShareQuestStart(178,1433):find("Shadowhide",1,true))

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.186 - 2026-11-27
+
+- **Dungeon quest pickups:** Level Guide and Share Verify now identify the vault in the Reliquary of Kings for The Treaty of Understanding, and the underwater Moonshrine Ruins for both Baron Aquanis quest variants. Room directions don't create guessed map pins.
+- **Turn-in:** Rank Quest now has an Alliance fallback for King Magni Bronzebeard in Ironforge for The Treaty of Understanding when no live pin is available. The reference doesn't create a GPS route.
+
 ## 1.5.185 - 2026-11-27
 
 - **Level Guide:** Added three quest-giver pins for follow-ups in the profession-sign chains: Rotgath Stonebeard in the Great Forge, Jornah in The Barrens, and Karolek in Orgrimmar. The guide keeps the two A Quick Craft quests separate by faction.

@@ -2162,7 +2162,7 @@ AT.LevelGuideItemStarts={
  [897]={5138,{}},
  [902]={5054,{}},
  [906]={5072,{{1413,0.4027,0.8061,0.036,1,3435,"Lok Orcbane"}}},
- [909]={16782,{{0,0,0,0,1,12876,"Baron Aquanis"}}},
+ [909]={16782,{{0,0,0,0,1,12876,"Baron Aquanis","Blackfathom Deeps, underwater by the Moonshrine Ruins"}}}, -- https://www.wowhead.com/forever/quest=6922/baron-aquanis
  [921]={5185,{}},
  [922]={5168,{{1438,0.6067,0.6601,0.036,1,2022,""}}},
  [927]={5179,{}},
@@ -2724,7 +2724,7 @@ AT.LevelGuideItemStarts={
  [6662]={17118,{}},
  [6681]={17125,{}},
  [6844]={17346,{}},
- [6922]={16782,{{0,0,0,0,1,12876,"Baron Aquanis"}}},
+ [6922]={16782,{{0,0,0,0,1,12876,"Baron Aquanis","Blackfathom Deeps, underwater by the Moonshrine Ruins"}}}, -- https://www.wowhead.com/forever/quest=6922/baron-aquanis
  [6981]={10441,{{0,0,0,0,1,3654,"Mutanus the Devourer"}}},
  [7001]={17626,{}},
  [7003]={18904,{}},
@@ -3229,7 +3229,7 @@ AT.LevelGuideItemStarts={
  [98310]={280394,{}},
  [98313]={280403,{}},
  [98323]={280430,{}},
- [98423]={281030,{}},
+ [98423]={281030,{{0,0,0,0,2,nil,"vault tablet","Hall of Thanes, Reliquary of Kings",1}}}, -- https://www.wowhead.com/forever/quest=98423/the-treaty-of-understanding ; Forever 71139 StartQuestID
  [98435]={281139,{}},
  [98459]={281240,{}},
  [98461]={281243,{}},

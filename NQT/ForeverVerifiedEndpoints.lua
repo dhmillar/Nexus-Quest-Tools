@@ -6,6 +6,7 @@
 -- Observed interactions: Efficient Games (https://efficient.games), CC BY 4.0.
 local _,AT=...
 AT.ForeverVerifiedEndpointReferences={
+ [98423]={{1455,.3944,.5601,1,2784,1,"King Magni Bronzebeard"}}, -- https://www.wowhead.com/forever/quest=98423/the-treaty-of-understanding ; EG Link 70862 (NPC observed on 96393)
  [95817]={{1455,.524,.425,1,10276,1,"Rotgath Stonebeard"}}, -- https://www.wowhead.com/forever/quest=95817/rotgath-stonebeard ; https://guided.news/en/guides/wow-forever-profession-sign-ironforge-quest-route-materials/
  [95818]={{1455,.524,.425,1,10276,1,"Rotgath Stonebeard"}}, -- https://www.wowhead.com/forever/quest=95818/a-quick-craft ; same walkthrough
  [95819]={{1413,.4991,.2935,1,256388,2,"Jornah"}}, -- https://foreverquestlog.com/quests/95819/ ; EG Link observed NPC 1.60.1.70938
