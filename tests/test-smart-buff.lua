@@ -172,5 +172,32 @@ do
     click.scripts.PostClick(click,"RightButton");assert(not opened,"stale slot must not open for the wrong player")
     click.scripts.PostClick(click,"RightButton");assert(menu.title=="Blessing for Arden Wren")
     print("PASS direct reminder menu, full names, reset, left-click cast, lockdown and recycled slots")
+    class="HUNTER"
+    spells[13165],spells[13163],spells[5118],spells[13159]="Aspect of the Hawk","Aspect of the Monkey","Aspect of the Cheetah","Aspect of the Pack"
+    knowns={[13165]=true,[13163]=true,[5118]=true,[13159]=true};auras.player={13165}
+    assert(AT.PickupSmartBuffMacro())
+    local travel=edits[#edits][1]
+    assert(#("# NQT:smart-buff:v1\n"..travel)<=255 and edits[#edits][2])
+    assert(travel:find("[combat,mod:shift,@player] !Aspect of the Monkey",1,true))
+    assert(travel:find("[combat,@player] !Aspect of the Hawk; [nocombat,group,@player] !Aspect of the Pack; [nocombat,@player] !Aspect of the Cheetah",1,true))
+    for _,aspect in ipairs({5118,13159}) do
+        auras.player={aspect}
+        frames[2].scripts.OnEvent(frames[2],"UNIT_AURA","player")
+        local next=edits[#edits][1]
+        assert(next:find("[nocombat,@player] !Aspect of the Hawk",1,true))
+        assert(not next:find("Cheetah",1,true) and not next:find("Pack",1,true))
+    end
+    auras.player={13165};knowns[13159]=nil;AT.RefreshSmartBuff()
+    assert(not edits[#edits][1]:find("Pack",1,true) and edits[#edits][1]:find("Cheetah",1,true))
+    local count=#edits
+    locked=true;AT.RefreshSmartBuff();assert(#edits==count,"never edit the macro during combat")
+    function UnitAffectingCombat() return true end
+    function UnitIsUnit(u,v)return u=="targettarget" and v=="player" end
+    function UnitCanAttack(_,u)return u=="target" end
+    function C_Spell.IsSpellInRange(id,u) return id==2973 and u=="target" end
+    AT.RefreshSmartBuff()
+    assert(f.visible and #edits==count,"confirmed melee threat shows advice, not a protected write")
+    auras.player={13163};AT.RefreshSmartBuff();assert(not f.visible)
+    print("PASS Hunter travel toggle, group clause, combat Hawk/Shift-Monkey, learned-spell guard, and melee advice")
     print("PASS movable reminder scale, icon-only edit mode, reset and hide when covered")
 end

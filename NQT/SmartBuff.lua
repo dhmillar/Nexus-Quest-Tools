@@ -13,7 +13,10 @@ local catalog={
     shout={mode="group",r={6673,5242,6192,11549,11550,11551,25289}},
     earth={mode="group",r={8075,8160,8161,10442,25361},totem=2},
     shield={mode="self",r={324,325,905,945,8134,10431,10432},alias={24398,33736,974}},
-    hawk={mode="self",r={13165,14318,14319,14320,14321,14322},alias={13163,5118,13159,13161,20043,20190,13164}},
+    hawk={mode="self",r={13165,14318,14319,14320,14321,14322,25296},alias={13163,5118,13159,13161,20043,20190,13164}},
+    monkey={mode="self",r={13163}},
+    cheetah={mode="self",r={5118}},
+    pack={mode="self",r={13159}},
     trueshot={mode="group",r={19506,20905,20906}},
     demon={mode="self",r={687,696,706,1086,11733,11734,11735},alias={28176}},
     mageArmor={mode="self",r={6117,22782,22783},alias={168,7300,7301,7302,7320,10219,10220}},
@@ -439,20 +442,72 @@ local function createReminderClicker()
     end)
     return b
 end
-local function body(entry)
+local function hunterMacro()
+    local hawk,monkey,cheetah,pack=spellFor("hawk"),spellFor("monkey"),spellFor("cheetah"),spellFor("pack")
+    local clauses={}
+    local function add(condition,spell)
+        if spell then clauses[#clauses+1]="["..condition..",@player] !"..spell.name end
+    end
+    add("combat,mod:shift",monkey)
+    add("combat",hawk)
+    local snapshot=auraSnapshot("player")
+    local travel=snapshot and (snapshot.ids[5118] or snapshot.ids[13159]
+        or snapshot.names[spellName(5118) or ""] or snapshot.names[spellName(13159) or ""])
+    if travel then
+        add("nocombat",hawk)
+    elseif snapshot then
+        add("nocombat,group",pack)
+        add("nocombat",cheetah or hawk)
+    else
+        -- Do not guess whether it is time to switch to a travel aspect.
+        add("nocombat",hawk)
+    end
+    local command="#showtooltip\n/cast "..table.concat(clauses,"; ")
+    if #clauses==0 then return "#showtooltip" end
+    if #command>236 then
+        -- Keep one action per press even with long localized spell names.
+        -- The 19-byte owned macro header and newline count toward WoW's limit.
+        return hawk and ("#showtooltip\n/cast [@player] !"..hawk.name) or "#showtooltip"
+    end
+    return command
+end
+local function hunterMeleeReminder()
+    if call(UnitAffectingCombat,"player")~=true or call(UnitAffectingCombat,"target")~=true
+        or call(UnitIsUnit,"targettarget","player")~=true or call(UnitCanAttack,"player","target")~=true
+        or call(UnitIsDeadOrGhost,"target")~=false then return end
+    local function range(id)
+        local v=call(C_Spell and C_Spell.IsSpellInRange,id,"target")
+        if v==nil then
+            local name=spellName(id)
+            if name then v=call(IsSpellInRange,name,"target") end
+        end
+        return v==true or v==1
+    end
+    if not range(2973) and not range(2974) then return end
+    local monkey=spellFor("monkey")
+    if monkey and hasAura(auraSnapshot("player"),monkey)==false then
+        monkey.who="Shift + Smart Buff"
+        return monkey
+    end
+end
+local function body(entry,class,enabled)
+    if enabled and class=="HUNTER" then return hunterMacro() end
     if not entry or not entry.unit then return "#showtooltip" end
     return "#showtooltip\n/cast [@"..entry.unit..",help,nodead,nocombat] "..entry.name
 end
 function AT.RefreshSmartBuff()
     if not AT.db or not AT.char then return end
     local enabled=AT.db.enabled~=false and AT.db.smartBuffEnabled==true
-    local plan=enabled and makePlan(shortClass()) or nil
+    local class=shortClass()
+    local plan=enabled and makePlan(class) or nil
+    local melee=enabled and class=="HUNTER" and hunterMeleeReminder()
+    if melee then plan={melee} end
     nextAction=plan and plan[1]
     draw(plan)
     if call(InCombatLockdown)==true then return end
     if overlay and not clicker then clicker=createReminderClicker() end
     updateReminderClick(nextAction)
-    local command=body(nextAction)
+    local command=body(nextAction,class,enabled)
     if AT.SyncSmartBuffAction and syncedBody~=command then
         if AT.SyncSmartBuffAction(command,false) then syncedBody=command end
     end
@@ -462,7 +517,7 @@ function AT.PickupSmartBuffMacro()
     if shortClass()=="ROGUE" then return false,"Rogue poison reminders do not apply or choose poisons for you." end
     if not plans[shortClass()] then return false,"No supported buff spells for this class." end
     AT.RefreshSmartBuff()
-    if AT.SyncSmartBuffAction then return AT.SyncSmartBuffAction(body(nextAction),true) end
+    if AT.SyncSmartBuffAction then return AT.SyncSmartBuffAction(body(nextAction,shortClass(),true),true) end
     return false,"WoW's macro editor is unavailable."
 end
 function AT.IsSmartBuffPreview() return preview==true end
@@ -577,13 +632,18 @@ function AT.InitSmartBuff()
     overlay=createOverlay()
     watcher=CreateFrame("Frame")
     for _,event in ipairs({"PLAYER_ENTERING_WORLD","GROUP_ROSTER_UPDATE","SPELLS_CHANGED",
-        "UNIT_AURA","UNIT_SPELLCAST_SUCCEEDED","UNIT_CONNECTION","PLAYER_REGEN_DISABLED","PLAYER_REGEN_ENABLED","UPDATE_INVENTORY_ALERTS","UNIT_INVENTORY_CHANGED"}) do
+        "PLAYER_TARGET_CHANGED","UNIT_TARGET","UNIT_AURA","UNIT_SPELLCAST_SUCCEEDED","UNIT_CONNECTION","PLAYER_REGEN_DISABLED","PLAYER_REGEN_ENABLED","UPDATE_INVENTORY_ALERTS","UNIT_INVENTORY_CHANGED"}) do
         pcall(watcher.RegisterEvent,watcher,event)
     end
     watcher:SetScript("OnEvent",function(_,event,unit)
         if event=="UNIT_SPELLCAST_SUCCEEDED" and unit~="player" then return end
         if event=="UNIT_AURA" and (type(unit)~="string" or not (unit=="player" or unit:match("^party%d+$") or unit:match("^raid%d+$"))) then return end
         if event=="PLAYER_REGEN_ENABLED" or event=="GROUP_ROSTER_UPDATE" then AT.RefreshSmartBuff();return end
+        if AT.db.smartBuffEnabled and shortClass()=="HUNTER" and
+            (event=="UNIT_AURA" and unit=="player" or event=="PLAYER_TARGET_CHANGED" or event=="UNIT_TARGET" and unit=="target") then
+            AT.RefreshSmartBuff();return
+        end
+        if event=="PLAYER_TARGET_CHANGED" or event=="UNIT_TARGET" then return end
         if not AT.db.smartBuffEnabled or queued or not (C_Timer and C_Timer.After) then return end
         queued=true
         C_Timer.After(.3,function() queued=nil;AT.RefreshSmartBuff() end)

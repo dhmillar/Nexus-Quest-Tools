@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.211
+
+- Hunter Smart Buff now switches between Hawk and Cheetah when solo or Pack when grouped out of combat. In combat it casts Hawk by default or Monkey with Shift. The reminder can flag a melee threat without changing any protected action in combat.
+
 ## 1.5.210
 
 - Rank Quest compares ready turn-ins using actual hand-in locations on a common yard scale when available. Known NPC endpoints participate in ranking; old objective distance cannot outrank a measured hand-in.

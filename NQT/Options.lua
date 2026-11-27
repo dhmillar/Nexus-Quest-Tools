@@ -317,7 +317,7 @@ local function buildPanel()
     option(classes, "petBarEnabled", "Pet Bar", -294,
         "Shows only your active pet’s overhead health where supported. Uses the pet category without changing friendly player or NPC settings. Bright green at 50% and above, red below 50%.")
     option(classes, "smartBuffEnabled", "Smart Buff reminders", -2,
-        "Shows missing buffs for your class. Your action-bar button casts one recommended spell per press outside combat.")
+        "Shows missing buffs for your class. Hunters use their action-bar macro for Hawk in combat, Pack or Cheetah out of combat, and Shift for Monkey in combat.")
     buffPreviewButton = setupButton(classes,"Preview / Move",158,397,-3,function()
         if AT.SetSmartBuffPreview then AT.SetSmartBuffPreview(not AT.IsSmartBuffPreview());refreshPanel() end
     end)
@@ -333,7 +333,7 @@ local function buildPanel()
             if not ok and why then AT.Say(why) end
         end)
     end
-    makeText(classes,"GameFontHighlightSmall",-79,"Shows the next missing buff. Press once per cast outside combat.")
+    makeText(classes,"GameFontHighlightSmall",-79,"One cast per press. Hunters: Shift + macro for Monkey in combat.")
     makeText(classes,"GameFontDisableSmall",-325,"A slim overhead bar shows the health of your active pet.")
     status = makeText(general, "GameFontHighlightSmall", -125, "")
     status:SetTextColor(.86,.72,.46)
