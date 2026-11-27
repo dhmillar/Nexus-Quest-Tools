@@ -35,15 +35,49 @@ local questVendors={
         [271654]={260560,"Krikshank",0},
     },
 }
+local function allowedVendor(v)
+    return v[3]==0 or UnitFactionGroup and UnitFactionGroup("player")== (v[3]==1 and "Alliance" or "Horde")
+end
 function AT.GetQuestObjectiveVendor(qid,item)
     local locale=GetLocale and GetLocale()
     if locale~="enUS" and locale~="enGB" or not pos(qid) or not pos(item) then return end
     local vendors=questVendors[qid]
     local v=vendors and vendors[item]
-    if not v then return end
-    if v[3]~=0 and (not UnitFactionGroup or UnitFactionGroup("player")~=(v[3]==1 and "Alliance" or "Horde")) then return end
+    if not v or not allowedVendor(v) then return end
     local npc=mob(v[1])
     return v[2],v[1],npc and npc[5]
+end
+-- Read just the quests for this merchant, not the whole player's log.
+function AT.GetNeededQuestVendorItems(merchantID)
+    local needed={}
+    if not pos(merchantID) or not C_QuestLog then return needed end
+    local function value(fn,...)
+        if type(fn)~="function" then return end
+        local ok,v=pcall(fn,...)
+        if ok and (not issecretvalue or not issecretvalue(v)) then return v end
+    end
+    for qid,items in pairs(questVendors) do
+        local matchesVendor
+        for _,v in pairs(items) do if v[1]==merchantID then matchesVendor=true;break end end
+        if matchesVendor and value(C_QuestLog.IsOnQuest,qid)==true and value(C_QuestLog.ReadyForTurnIn,qid)~=true then
+            local list=value(C_QuestLog.GetQuestObjectives,qid)
+            for _,o in ipairs(public(list,"table") and list or {}) do
+                if public(o,"table") and public(o.type,"string") and o.type=="item"
+                    and public(o.finished,"boolean") and not o.finished then
+                    local item=public(o.itemID,"number") and o.itemID or public(o.itemId,"number") and o.itemId
+                    if not pos(item) and public(o.text,"string") then
+                        item=value(AT.ResolveRankQuestObjectiveItem,qid,o,o.text)
+                    end
+                    if pos(item) and items[item] then
+                        -- Use the same exact item/merchant and faction rule as the quest row.
+                        local vendor=items[item]
+                        if vendor[1]==merchantID and allowedVendor(vendor) then needed[item]=true end
+                    end
+                end
+            end
+        end
+    end
+    return needed
 end
 local function killSubject(label)
     for _,verb in ipairs({"kill","slay","defeat","destroy"}) do

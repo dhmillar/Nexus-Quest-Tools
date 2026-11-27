@@ -128,8 +128,28 @@ AT.SetRankQuestItemTargets=function(rows,scroll,verification)
     end
 end
 local areaTick
-C_Timer={NewTicker=function(_,fn) areaTick=fn end}
+local boot={}
+C_Timer={NewTicker=function(_,fn) areaTick=fn end,After=function(delay,fn)
+    boot[#boot+1]={delay,fn}
+end}
 AT.InitQuestHUD()
+local startupWatcher
+for _,f in ipairs(objs) do if f.scripts.OnEvent then startupWatcher=f end end
+assert(startupWatcher and not objs[1]:IsShown() and #boot==1)
+startupWatcher.scripts.OnEvent(startupWatcher,"PLAYER_ENTERING_WORLD")
+startupWatcher.scripts.OnEvent(startupWatcher,"QUEST_LOG_UPDATE")
+AT.RefreshQuestHUD()
+assert(not objs[1]:IsShown() and #boot==1,"login calls must not show partial layout or add redundant redraws")
+local first=table.remove(boot,1)
+first[2]()
+assert(objs[1]:IsShown() and #boot==0,"one initial publication, no delayed repeat flashes")
+startupWatcher.scripts.OnEvent(startupWatcher,"QUEST_DATA_LOAD_RESULT")
+assert(#boot==1)
+local later=table.remove(boot,1)
+later[2]()
+assert(objs[1]:IsShown() and #boot==0,"late data still refreshes")
+C_Timer.After=nil
+print("PASS startup events coalesce into one laid-out HUD, late quest data still refreshes")
 do
     local initialEntries=entries
     local initialNavigation,initialSample=AT.GetQuestNavigationID,AT.SampleQuestAreas

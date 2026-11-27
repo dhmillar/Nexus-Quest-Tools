@@ -209,9 +209,106 @@ function AT.SetRankQuestItemTargets(rows,scroll,callback)
     end
     AT.SyncRankQuestItemButtons()
 end
+
+-- Stock merchant UI only. These are passive art regions, never click targets.
+local merchantArt={}
+local merchantHook,merchantBuybackHook,merchantFrameHook
+local function clearMerchantArt()
+    for _,regions in pairs(merchantArt) do
+        for _,r in ipairs(regions) do r:Hide() end
+    end
+end
+local function drawMerchantBox(button)
+    local art=merchantArt[button]
+    if not art then
+        art={}
+        local function edge(a,b,dimension)
+            local t=button:CreateTexture(nil,"OVERLAY",nil,6)
+            t:SetColorTexture(1,.75,.21,1)
+            t:SetPoint(a,button,a)
+            t:SetPoint(b,button,b)
+            if dimension=="height" then t:SetHeight(2) else t:SetWidth(2) end
+            art[#art+1]=t
+        end
+        edge("TOPLEFT","TOPRIGHT","height")
+        edge("BOTTOMLEFT","BOTTOMRIGHT","height")
+        edge("TOPLEFT","BOTTOMLEFT","width")
+        edge("TOPRIGHT","BOTTOMRIGHT","width")
+        local bg=button:CreateTexture(nil,"OVERLAY",nil,6)
+        bg:SetColorTexture(.17,.11,.035,1)
+        bg:SetPoint("BOTTOMRIGHT",button,"BOTTOMRIGHT",-1,1)
+        bg:SetSize(12,15);art[#art+1]=bg
+        local bang=button:CreateFontString(nil,"OVERLAY","GameFontNormal")
+        bang:SetDrawLayer("OVERLAY",7)
+        bang:SetPoint("CENTER",bg,"CENTER",0,0)
+        bang:SetTextColor(1,.83,.27)
+        bang:SetText("!");art[#art+1]=bang
+        merchantArt[button]=art
+    end
+    for _,r in ipairs(art) do r:Show() end
+end
+local function refreshMerchantArt()
+    clearMerchantArt()
+    local frame=_G.MerchantFrame
+    if not frame or not call(frame.IsShown,frame) or frame.selectedTab~=1
+        or not AT.db or AT.db.enabled==false then return end
+    local guid=call(UnitGUID,"npc")
+    local npc=readable(guid,"string") and tonumber(guid:match("^Creature%-%d+%-%d+%-%d+%-%d+%-(%d+)%-"))
+    if not npc then return end
+    local needed=call(AT.GetNeededQuestVendorItems,npc)
+    if not needed or not next(needed) then return end
+    local count=call(GetMerchantNumItems)
+    if not finite(count) or count<1 then return end
+    local perPage=MERCHANT_ITEMS_PER_PAGE
+    if not finite(perPage) or perPage<1 or perPage>50 then return end
+    for slot=1,perPage do
+        local button=_G["MerchantItem"..slot.."ItemButton"]
+        local index=button and call(button.GetID,button)
+        if finite(index) and index>=1 and index<=count and call(button.IsShown,button) then
+            local item=call(GetMerchantItemID,index)
+            if not finite(item) or item<=0 then
+                local token=itemToken(call(GetMerchantItemLink,index))
+                item=token and tonumber(token:match("%d+"))
+            end
+            if item and needed[item] then drawMerchantBox(button) end
+        end
+    end
+end
+local function bindMerchantArt()
+    if not merchantHook and type(_G.MerchantFrame_UpdateMerchantInfo)=="function" then
+        hooksecurefunc("MerchantFrame_UpdateMerchantInfo",refreshMerchantArt)
+        merchantHook=true
+    end
+    if not merchantBuybackHook and type(_G.MerchantFrame_UpdateBuybackInfo)=="function" then
+        hooksecurefunc("MerchantFrame_UpdateBuybackInfo",clearMerchantArt)
+        merchantBuybackHook=true
+    end
+    if not merchantFrameHook and _G.MerchantFrame then
+        _G.MerchantFrame:HookScript("OnHide",clearMerchantArt)
+        merchantFrameHook=true
+    end
+end
+function AT.InitRankQuestMerchantHighlights()
+    if type(CreateFrame)~="function" or type(hooksecurefunc)~="function" then return end
+    local events=CreateFrame("Frame")
+    for _,event in ipairs({"MERCHANT_SHOW","MERCHANT_CLOSED","MERCHANT_UPDATE",
+        "QUEST_LOG_UPDATE","BAG_UPDATE_DELAYED","GET_ITEM_INFO_RECEIVED"}) do events:RegisterEvent(event) end
+    local pending
+    events:SetScript("OnEvent",function(_,event)
+        if event=="MERCHANT_CLOSED" then clearMerchantArt();return end
+        if event=="MERCHANT_SHOW" then bindMerchantArt() end
+        if not _G.MerchantFrame or not call(_G.MerchantFrame.IsShown,_G.MerchantFrame) or pending then return end
+        if C_Timer and C_Timer.After then
+            pending=true
+            C_Timer.After(0,function() pending=false;refreshMerchantArt() end)
+        else refreshMerchantArt() end
+    end)
+end
+
 function AT.InitRankQuestItems()
     if observer or not CreateFrame then return end
     observer=CreateFrame("Frame")
+    AT.InitRankQuestMerchantHighlights()
     observer:SetScript("OnUpdate",function(_,dt)
         if #targets==0 then return end
         elapsed=elapsed+dt

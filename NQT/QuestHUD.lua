@@ -1,6 +1,7 @@
 local _, AT = ...
 local Q,M=C_QuestLog,C_Map
 local hud, refreshPending, currentZone, currentDungeon, viewedZone, model
+local initialPaintPending
 local ALL_ZONES,ALL_DUNGEONS={},{}
 local popupOpen,completedView,toolbarOpen=false,false,false
 local preferredCompleted,resolveStatusOnSelection=false,false
@@ -919,7 +920,7 @@ end
 local function pushRefresh()
     if refreshPending then return end
     refreshPending=true
-    local function run() refreshPending=nil; AT.RefreshQuestHUD() end
+    local function run() refreshPending,initialPaintPending=nil,nil; AT.RefreshQuestHUD() end
     if C_Timer and C_Timer.After then C_Timer.After(.12,run) else run() end
 end
 local function noteRemoval(qid)
@@ -1305,6 +1306,7 @@ local function objectiveDropItem(qid,objective,label)
     if fact then return fact end
     return observedDropItem(qid,wanted) or call(AT.GetKnownQuestDropItem,qid,wanted)
 end
+AT.ResolveRankQuestObjectiveItem=objectiveDropItem
 local function fmtDrop(value) return ("%d%%"):format(math.ceil(value-1e-10)) end
 
 local function observedRecord(item)
@@ -2575,13 +2577,14 @@ local function pollPartyChanges()
 end
 
 function AT.RefreshQuestHUD()
+    if initialPaintPending then return end
     if not hud then return end
     if not AT.db or not AT.db.enabled or not AT.db.questHUDEnabled then
         if AT.SetRankQuestItemTargets then AT.SetRankQuestItemTargets() end
         hud.search:ClearFocus()
         popupOpen,toolbarOpen,shareOpen=false,false,false; stopSharing(); if Share.window then Share.window:Hide() end; selectedDungeon=nil; hud:Hide(); observedObjectives,highlights,partyRetained,partyTurnedIn={},{},{},{}; stopQuestHover(); AT.SyncBlizzardQuestHUD(); return
     end
-    hud:Show()
+    local wasShown=hud:IsShown()
     local pos,name=playerZone()
     local _,dungeon,insideDungeon=playerDungeon(call(M and M.GetBestMapForUnit,"player"))
     local instanceKey=insideDungeon and (dungeon or true)
@@ -2605,6 +2608,10 @@ function AT.RefreshQuestHUD()
     if not AT.db.questHUDCollapsed then arrange() else
         if AT.SetRankQuestItemTargets then AT.SetRankQuestItemTargets() end
         popupOpen,toolbarOpen,shareOpen=false,false,false;stopQuestHover()
+    end
+    if not wasShown then
+        hud:Show()
+        if AT.SyncRankQuestItemButtons then AT.SyncRankQuestItemButtons() end
     end
     AT.SyncBlizzardQuestHUD()
     if perf then AT.PerfEnd("Rank Quest redraw",perf) end
@@ -3070,12 +3077,9 @@ function AT.InitQuestHUD()
             elseif not AT.db.questHUDCollapsed and refreshHighlights(false) then arrange() end
         end)
     end
-    if C_Timer and C_Timer.After then
-        for _,delay in ipairs({.4,1.3,3.5}) do
-            C_Timer.After(delay,function()
-                if AT.db and AT.db.questHUDEnabled then AT.RefreshQuestHUD() end
-            end)
-        end
-    end
-    AT.RefreshQuestHUD()
+    -- Coalesce the initial layout with the login event burst instead of
+    -- repeatedly repainting partially loaded data on unconditional timers.
+    initialPaintPending=true
+    AT.SyncBlizzardQuestHUD()
+    pushRefresh()
 end

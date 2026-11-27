@@ -111,5 +111,84 @@ do
     assert(not button.shown and not button:GetAttribute("macrotext1"),"ready turn-ins cannot use an old buy objective")
     ready=false;locked=true;AT.SetRankQuestItemTargets({vr},viewport);assert(not button.shown)
     locked=false;AT.SyncRankQuestItemButtons();assert(button.shown)
-    print("PASS exact vendor links, full-line hardware action, friendly-only marker/ping, stale row and combat guards")
+    print("PASS exact vendor links, full-line hardware action, non-hostile marker/ping, stale row and combat guards")
+end
+
+do
+    AT.db={enabled=true}
+    local open,merchant,owns,complete,finished=true,260487,true,false,false
+    UnitGUID=function(unit)
+        assert(unit=="npc","do not infer the merchant from the selected target")
+        return "Creature-0-1-2-3-"..merchant.."-00"
+    end
+    C_QuestLog={
+        IsOnQuest=function(q) return owns and q==95988 end,
+        ReadyForTurnIn=function() return complete end,
+        GetQuestObjectives=function()
+            return {{type="item",itemID=271657,finished=finished},
+                {type="item",itemID=271653,finished=false},
+                {type="item",itemID=271650,finished=false}}
+        end,
+    }
+    local hooks={}
+    function hooksecurefunc(key,fn) hooks[key]=fn end
+    MerchantFrame={IsShown=function() return open end,selectedTab=1,HookScript=function(_,k,fn) hooks[k]=fn end}
+    MerchantFrame_UpdateMerchantInfo=function() end
+    MerchantFrame_UpdateBuybackInfo=function() end
+    MERCHANT_ITEMS_PER_PAGE=2
+    GetMerchantNumItems=function() return 3 end
+    local stock={271657,271653,271650}
+    GetMerchantItemID=function(index) if index~=1 then return stock[index] end end
+    GetMerchantItemLink=function(index) return "item:"..stock[index] end
+    local function slot(index)
+        local o={index=index,regions={}}
+        function o:GetID() return self.index end
+        function o:IsShown() return true end
+        function o:art()
+            local r={shown=false}
+            for _,k in ipairs({"SetColorTexture","SetHeight","SetWidth","SetSize","SetDrawLayer","SetTextColor"}) do r[k]=function()end end
+            function r:Show() self.shown=true end
+            function r:Hide() self.shown=false end
+            function r:SetPoint(...) self.anchor={...} end
+            function r:SetText(s) self.text=s end
+            self.regions[#self.regions+1]=r
+            return r
+        end
+        o.CreateTexture=o.art
+        o.CreateFontString=o.art
+        return o
+    end
+    MerchantItem1ItemButton,MerchantItem2ItemButton=slot(1),slot(2)
+    local originalFrame=CreateFrame
+    CreateFrame=function(...)
+        local f=originalFrame(...); f.RegisterEvent=function() end; return f
+    end
+    local pending={}
+    C_Timer={After=function(_,fn) pending[#pending+1]=fn end}
+    AT.InitRankQuestMerchantHighlights()
+    local events=created[#created]
+    local function event(e) events.scripts.OnEvent(events,e) end
+    local function flush()
+        while #pending>0 do table.remove(pending,1)() end
+    end
+    local a,b=MerchantItem1ItemButton,MerchantItem2ItemButton
+    event("MERCHANT_SHOW");event("MERCHANT_UPDATE");assert(#pending==1);flush()
+    assert(#a.regions==6 and a.regions[1].shown and #b.regions==0)
+    assert(a.regions[5].anchor[1]=="BOTTOMRIGHT" and a.regions[6].text=="!")
+    finished=true;event("BAG_UPDATE_DELAYED");flush()
+    assert(not a.regions[1].shown,"already purchased")
+    finished=false;a.index=3;hooks.MerchantFrame_UpdateMerchantInfo()
+    assert(not a.regions[1].shown,"recycled page slot")
+    a.index=1;hooks.MerchantFrame_UpdateMerchantInfo()
+    assert(a.regions[1].shown and #a.regions==6,"reuses art across pages")
+    MerchantFrame.selectedTab=2;hooks.MerchantFrame_UpdateBuybackInfo()
+    assert(not a.regions[1].shown,"never highlight buyback")
+    MerchantFrame.selectedTab=1;merchant=260565;event("MERCHANT_SHOW");flush()
+    assert(not a.regions[1].shown and b.regions[1].shown,"matches current merchant id, not other vendor")
+    complete=true;event("QUEST_LOG_UPDATE");flush()
+    assert(not b.regions[1].shown,"ready quests no longer need items")
+    complete=false;owns=false;event("QUEST_LOG_UPDATE");flush();assert(not b.regions[1].shown)
+    owns=true;event("MERCHANT_UPDATE");flush();assert(b.regions[1].shown)
+    open=false;hooks.OnHide();event("MERCHANT_CLOSED");assert(not b.regions[1].shown)
+    print("PASS passive vendor box and bottom-right bang, exact live needs, paging, buyback, progress and close")
 end

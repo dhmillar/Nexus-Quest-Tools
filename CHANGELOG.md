@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.192 - 2026-11-27
+
+- Highlights outstanding quest purchases at their verified merchants with a gold box and a bottom-right exclamation mark. The highlight clears on completion, paging, buyback, and close as appropriate. Nothing is purchased automatically.
+- Coalesces Rank Quest startup refreshes and lays out the tracker before showing it to reduce reload flicker.
+
 ## 1.5.191 - 2026-11-27
 
 - Fixed vendor objective clicks that selected a neutral merchant but skipped the diamond and Assist ping. The same click now requests both for a living, non-hostile target. It still leaves Auto Macro unchanged.
