@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.224
+
+- Pet Bar stays visible in instances. If WoW hides your pet's overhead nameplate, the same health bar appears below screen center and returns to the pet when its nameplate is available.
+
 ## 1.5.223
 
 - Boss targeting no longer gates the first exact-name search on a selected target. Later candidates use an explicit target check; dead bosses are still cleared and living bosses can be marked and pinged.

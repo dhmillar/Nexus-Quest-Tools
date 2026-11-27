@@ -1,5 +1,5 @@
 local _,AT=...
-local bar,events,listening,anchoredPlate,anchoredToken
+local bar,events,listening,anchoredPlate,anchoredToken,instanceFallback
 local tokenHint,removedPlate,recheck,bootstrapGeneration
 local healthColorCurve,renderStatus,followElapsed
 local masked={}
@@ -152,11 +152,11 @@ local function detach()
     restorePetLabels()
     if not bar then return end
     bar:Hide()
-    if anchoredPlate then
+    if anchoredPlate or instanceFallback then
         bar:ClearAllPoints()
         events:SetScript("OnUpdate",nil)
     end
-    anchoredPlate,anchoredToken=nil,nil
+    anchoredPlate,anchoredToken,instanceFallback=nil,nil,nil
 end
 local function createBar()
     local bar=CreateFrame("StatusBar",nil,UIParent)
@@ -218,8 +218,8 @@ local function bindToPlate(plate,token)
         followElapsed=0
         local currentToken=usable(plate) and plateToken(plate)
         if not usable(plate) or (currentToken and not ownsUnit(currentToken)) then
-            bar:Hide()
-            restorePetLabels()
+            if not outdoor() then AT.RefreshPetBar()
+            else bar:Hide();restorePetLabels() end
         elseif not followsCoordinates or screenAnchor(plate) then bar:Show()
         else bar:Hide() end
     end)
@@ -287,6 +287,7 @@ local function petEvent(_,event,unit)
         if unit==anchoredToken or unit==tokenHint or ownsUnit(unit) then
             removedPlate,tokenHint=anchoredPlate,nil
             detach()
+            if not outdoor() then AT.RefreshPetBar() end
         end
     elseif event=="PLAYER_ENTERING_WORLD" or event=="UNIT_PET" and unit=="player" then
         tokenHint,removedPlate=nil,nil
@@ -330,7 +331,7 @@ function AT.RefreshPetBar()
         return
     end
     local plate,token=petPlate()
-    if not plate then detach();return end
+    if not plate and outdoor() then detach();return end
     local health=read(UnitHealth,"pet","number")
     local maximum=read(UnitHealthMax,"pet","number")
     if not bar then
@@ -338,7 +339,15 @@ function AT.RefreshPetBar()
         if not ok then renderStatus="could not create the bar";return end
         bar=made
     end
-    if not bindToPlate(plate,token) then renderStatus="could not position the bar";return end
+    if plate then
+        if not bindToPlate(plate,token) then renderStatus="could not position the bar";return end
+    elseif not instanceFallback then
+        -- WoW can withhold friendly nameplates in instances. Keep the same
+        -- pet-only health display without anchoring to a protected frame.
+        detach()
+        bar:SetPoint("CENTER",UIParent,"CENTER",0,-110)
+        instanceFallback=true
+    end
     if finite(health) and finite(maximum) and maximum>0 then
         local percent=100*(math.max(0,math.min(maximum,health))/maximum)
         local low=percent<50
@@ -363,7 +372,7 @@ end
 local function statusText()
     if not AT.db or AT.db.enabled==false or AT.db.petBarEnabled~=true then return "off in General" end
     if read(UnitExists,"pet","boolean")~=true then return "no active pet" end
-    if not outdoor() then return "instance: WoW may restrict friendly plates" end
+    if instanceFallback then return "visible: fixed dungeon bar; pet nameplate unavailable" end
     local category=getPetCVar(modernPetCVar) or getPetCVar(legacyPetCVar)
     local plate=petPlate()
     if not plate then
