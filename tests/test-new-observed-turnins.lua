@@ -183,3 +183,25 @@ locale="deDE"; assert(select(4,AT.GetReadyQuestTurnInPoint(98325))==nil)
 held=false; assert(not AT.GetReadyQuestTurnInPoint(98325))
 faction,held,locale=beforeF,beforeHeld,beforeLocale
 print("PASS all 2343 QuestieDB gap imports resolve without the addon, guard factions, prefer native pins and do not create speculative GPS")
+
+-- A tracked completed quest can now use a unique, faction-safe NPC record
+-- on an actual outdoor zone when WoW provides no compatible hand-in pin.
+faction="Horde";locale="enUS";held=true;ready=true
+function C_Map.GetMapInfo(id)
+    if id==row[1] then return {mapType=3,parentMapID=1415} end
+end
+pins[row[1]]={decoy}
+local dst,dx,dy,origin=AT.GetQuestTurnInPoint(98325)
+assert(dst==row[1] and dx==row[2] and dy==row[3] and origin=="recorded NPC location",
+    "ready quest GPS must use the known NPC, not an objective pin falsely marked as finished")
+local nav,m,rX,rY,source=AT.GetFocusedQuestRoutePoint()
+assert(nav==98325 and m==dst and rX==dx and rY==dy and source==origin,"shared route uses the recorded NPC")
+faction="Alliance";pins={}
+assert(not AT.GetQuestTurnInPoint(98325),"wrong faction cannot route to a fallback NPC")
+faction="Horde"
+function IsInInstance()return true,"party" end
+assert(not AT.GetQuestTurnInPoint(98325),"no outdoor fallback route while inside a dungeon")
+function IsInInstance()return false,"none" end
+AT.ForeverSupplementalTurnInReferences[98325]={{row[1],row[2],row[3],2,row[5],row[6],row[7]}}
+assert(not AT.GetQuestTurnInPoint(98325),"no speculative route to an object reference")
+print("PASS recorded ready turn-ins route to the exact NPC across both route consumers; decoy, faction, object and instance protection")

@@ -3,7 +3,7 @@ local Q, M, S = C_QuestLog, C_Map, C_SuperTrack
 local ENTER_YARDS, EXIT_YARDS, ORDER_LIMIT = 100, 125, 10
 local focus, ownedWatch, ownedSuper, lastNear, focusFromOrder, running, queued, initialized
 local manualHUDQuest, manualWasReady, retiringManual, manualFromMap
-local focusTurnIn, observedTurnIn, resolveTurnInPoint
+local focusTurnIn, observedTurnIn, resolveTurnInPoint, recordedTurnInPoint
 
 local function ordinary(v)
     return not issecretvalue or not issecretvalue(v)
@@ -819,9 +819,7 @@ function AT.GetQuestNavigationID()
             if completed(id) then
                 if held==true and zone then
                     local m=resolveTurnInPoint(id,ctx.id,false)
-                    if not m and not (AT.ObservedQuestTurnIns and AT.ObservedQuestTurnIns[id]) then
-                        m=observedTurnIn(id,nil,nil,nil,"verified",true)
-                    end
+                    if not m then m=recordedTurnInPoint(id) end
                     if zoneID(m)==zone then return id,"turn-in" end
                 end
             elseif held~=false and progressInZone(id,ctx,poiByID[id],parent,zone) then
@@ -994,17 +992,31 @@ resolveTurnInPoint=function(id,viewMap,wantName,lookup)
     return m,x,y
 end
 
+recordedTurnInPoint=function(id)
+    -- Never paper over a conflicting observation, or route to a
+    -- floor placeholder, a quest giver, or a previous objective.
+    if call(Q.IsOnQuest,id)~=true or (AT.ObservedQuestTurnIns and AT.ObservedQuestTurnIns[id]) then return end
+    local inside,kind=call(IsInInstance)
+    if inside==true and kind~="none" then return end
+    local m,x,y=observedTurnIn(id,nil,nil,nil,"verified",true)
+    if m and zoneID(m)==m then return m,x,y,"verified turn-in" end
+    local rows=AT.ForeverSupplementalTurnInReferences and AT.ForeverSupplementalTurnInReferences[id]
+    if not isType(rows,"table") or #rows~=1 then return end
+    local r=rows[1]
+    local faction=call(UnitFactionGroup,"player")
+    local side=faction=="Alliance" and 1 or faction=="Horde" and 2 or -1
+    if r[4]==1 and validID(r[5]) and isType(r[7],"string") and r[7]~=""
+        and (r[6]==0 or r[6]==side) and xyValid(r[2],r[3]) and validID(r[1]) and zoneID(r[1])==r[1] then
+        return r[1],r[2],r[3],"recorded NPC location"
+    end
+end
+
 function AT.GetQuestTurnInPoint(id,viewMap)
     if not AT.IsQuestTurnInNavigation(id) then return end
     if focus==id and focusTurnIn and focusTurnIn[1] and not AT.GetQuestHUDManualFocus() then return unpack(focusTurnIn) end
     local m,x,y=resolveTurnInPoint(id,viewMap,false)
     if m then return m,x,y end
-    -- Only the explicitly cross-checked pack is eligible as a fallback,
-    -- not broad label-only references or the last objective waypoint.
-    -- Conflicting live observations should not be masked by a fixed pin.
-    if AT.ObservedQuestTurnIns and AT.ObservedQuestTurnIns[id] then return end
-    m,x,y=observedTurnIn(id,nil,nil,nil,"verified",true)
-    if m and zoneID(m)==m then return m,x,y end
+    return recordedTurnInPoint(id)
 end
 
 -- Displaying a destination should never select the quest, watch it, or change GPS.

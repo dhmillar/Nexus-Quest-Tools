@@ -161,10 +161,10 @@ end
 
 local function objective(quest,id)
     if AT.IsQuestTurnInNavigation and AT.IsQuestTurnInNavigation(quest) then
-        local m,x,y=call(AT.GetQuestTurnInPoint,quest,id)
+        local m,x,y,provenance=call(AT.GetQuestTurnInPoint,quest,id)
         if finite(m) and fraction(x,y) then
             local px,py=project(m,x,y,id,false)
-            if finite(px) and finite(py) and (stitch or mapWise or fraction(px,py)) then return px,py,m end
+            if finite(px) and finite(py) and (stitch or mapWise or fraction(px,py)) then return px,py,m,provenance end
         end
         return
     end
@@ -303,6 +303,10 @@ function AT.RenderWorldQuestRoute(status,quest,snapshot)
         end
         if used>0 then
             text=(status=="road" and "ROAD-AWARE WALK" or "WALKING ROUTE")
+            if turnIn then
+                local _,_,_,provenance=call(AT.GetQuestRouteDisplayPoint,quest)
+                if provenance=="recorded NPC location" then text=text.."  |  RECORDED NPC" end
+            end
             if snapshot.selected then
                 local p=snapshot.selected
                 x,y=project(p.map,p.x,p.y,id,false)
@@ -316,10 +320,10 @@ function AT.RenderWorldQuestRoute(status,quest,snapshot)
     end
     local real=used>0
     if not real then
-        local source
-        x,y,source=objective(quest,id)
+        local source,provenance
+        x,y,source,provenance=objective(quest,id)
         if x then
-            text=(turnIn and "TURN-IN LOCATION" or "QUEST OBJECTIVE") .. "  |  NO WALKING LINE ON THIS MAP"
+            text=(turnIn and (provenance=="recorded NPC location" and "RECORDED TURN-IN NPC" or "TURN-IN LOCATION") or "QUEST OBJECTIVE") .. "  |  NO WALKING LINE ON THIS MAP"
             local player=call(C_Map.GetBestMapForUnit,"player")
             local comparable=player==source
             -- A cross-zone turn-in may be visible on a shared parent map.
@@ -338,7 +342,7 @@ function AT.RenderWorldQuestRoute(status,quest,snapshot)
                     if finite(px) and finite(py) then
                         if line(1,w,h,px,py,x,y,false,turnIn,artScale) then
                             used=1
-                            text="ESTIMATED DIRECTION  |  NOT A WALKING ROUTE"
+                            text=provenance=="recorded NPC location" and "DIRECTION TO RECORDED NPC  |  NOT A WALKING ROUTE" or "ESTIMATED DIRECTION  |  NOT A WALKING ROUTE"
                         end
                     end
                 end

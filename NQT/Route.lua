@@ -349,9 +349,9 @@ local function metaFor(quest)
         and (not turnIn or metadata.map) then return metadata end
     metadata={quest=quest,when=now,turnIn=turnIn}
     if AT.GetFocusedQuestRoutePoint then
-        local ok,id,map,x,y=pcall(AT.GetFocusedQuestRoutePoint)
+        local ok,id,map,x,y,source=pcall(AT.GetFocusedQuestRoutePoint)
         if ok and id==quest and finite(map) and frac(x,y) then
-            if pointOK(map,x,y) then metadata.map,metadata.x,metadata.y,metadata.source=map,x,y,(turnIn and "verified turn-in" or "native quest coordinates") end
+            if pointOK(map,x,y) then metadata.map,metadata.x,metadata.y,metadata.source=map,x,y,(turnIn and (source or "verified turn-in") or "native quest coordinates") end
         end
     end
     if not metadata.map and not turnIn then metadata.map,metadata.x,metadata.y,metadata.source=nativeOrParentPoint(quest) end
@@ -361,7 +361,7 @@ end
 function AT.GetQuestRouteDisplayPoint(quest)
     if not finite(quest) or quest<=0 then return end
     local m=metaFor(quest)
-    return m.map,m.x,m.y
+    return m.map,m.x,m.y,m.source
 end
 
 local function yardEstimate(meta)

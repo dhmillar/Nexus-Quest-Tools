@@ -288,7 +288,7 @@ AT.ForeverTurnInAreaReferences={
 
 -- Independently normalized missing endpoint facts; QuestieDB Forever 1.1.6 cross-reference.
 -- Matched against bundled build 70888–71139 Forever quest IDs/titles (https://efficient.games, CC BY 4.0).
--- Lower priority than the client and curated data; coordinates do not set automatic waypoints.
+-- Lower priority than consistent client pins and curated data; not a native quest pin.
 AT.ForeverSupplementalTurnInReferences={
  [17]={{1432,0.3707,0.4938,1,1470,1,"Ghak Healtouch"}},
  [49]={{1436,0.4462,0.8025,1,239,1,"Grimbooze Thunderbrew"}},

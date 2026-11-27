@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.241
+
+- Tracked ready quests can route to a unique recorded outdoor turn-in NPC when the client omits the hand-in pin. Both maps use that same destination; the world map labels it as recorded. Missing, ambiguous, wrong-faction, indoor placeholders and mismatched objective pins are not used as fallbacks.
+
 ## 1.5.240
 
 - Pet Bar now reads the active pet's health for a fixed upper-left HUD. It works with friendly nameplates disabled, including in dungeons, and no longer moves or changes nameplates. Existing Pet Bar settings are retained.
