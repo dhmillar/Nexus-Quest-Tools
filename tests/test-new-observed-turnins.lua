@@ -102,11 +102,11 @@ assert(camp=="Three Corners trading camp, Redridge Mountains" and elaine=="Elain
 assert(not AT.GetReadyQuestTurnInPoint(95816))
 faction="Horde"
 assert(not AT.GetReadyQuestTurnInArea(95816))
-for _,id in ipairs({95817,95818,95819,95820,95821}) do
+for _,id in ipairs({95817,95818,95819,95820,95821,94892,94907,94926,94982,94984,94992,95315,95912,96009,96081,96082,84400}) do
     local ref=assert(AT.ForeverVerifiedEndpointReferences[id])[1]
     faction=ref[6]==1 and "Alliance" or "Horde"
     local m,px,py,npc,clickable,estimated=AT.GetReadyQuestTurnInPoint(id)
-    assert(m==ref[1] and px==ref[2] and py==ref[3] and npc==ref[7] and clickable and estimated)
+    assert(m==ref[1] and px==ref[2] and py==ref[3] and npc==ref[7] and clickable and estimated, "fallback mismatch "..id.." ("..tostring(m)..","..tostring(px)..","..tostring(py)..","..tostring(npc)..","..tostring(estimated)..")")
     assert(AT.ToggleQuestHUDManualFocus(id) and not AT.GetQuestTurnInPoint(id))
     faction=faction=="Alliance" and "Horde" or "Alliance"
     assert(not AT.GetReadyQuestTurnInPoint(id))
@@ -115,4 +115,6 @@ faction="Horde"
 pins[1454]={{questID=95821,isQuestStart=false,inProgress=false,x=.630,y=.445}}
 map,x,y,name,click,approx=AT.GetReadyQuestTurnInPoint(95821)
 assert(map==1454 and x==.630 and y==.445 and name=="Karolek" and click and not approx)
+local beach,chest,targetable=AT.GetReadyQuestTurnInArea(2882)
+assert(beach=="Land's End Beach, Tanaris" and chest=="Pirate's Treasure!" and not targetable and not AT.GetReadyQuestTurnInPoint(2882))
 print("PASS Forever turn-in observations: standalone display, factions, locale, live pin precedence, no guess and no reference GPS")

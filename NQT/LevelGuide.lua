@@ -1303,6 +1303,7 @@ startDescription=function(g)
         local what=validName(item) and item or ("item #"..g.item)
         if not mapName and validName(g.sourceArea) and (not GetLocale or GetLocale()=="enUS" or GetLocale()=="enGB") then mapName=g.sourceArea end
         if validName(g.sourceName) then
+            if g.sourceKind==4 then return "Combine "..g.sourceName.." to make "..what..(mapName and ("  |  "..mapName) or "") end
             return (g.sourceKind==3 and "Buy " or g.sourceKind==2 and "Loot " or "Drop: ")..what.." from "..g.sourceName..(mapName and ("  |  "..mapName) or "")
         end
         return g.source and ("Drop: "..what)..(mapName and ("  |  "..mapName) or "") or ("Starts with "..what)
@@ -1334,6 +1335,7 @@ function AT.GetShareQuestStart(q,origin,dungeon)
         local detail=what..(source and (" from "..source) or "")
         if place then detail=detail.."  |  "..place end
         if validName(area) then detail=detail.."  |  "..area end
+        if g.sourceKind==4 and source then return "Combine "..source.." to make "..what..(place and ("  |  "..place) or "") end
         return "Pickup: "..detail
     end
     local name=english and validName(g.name) and g.name

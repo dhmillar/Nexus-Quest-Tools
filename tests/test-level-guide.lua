@@ -629,6 +629,13 @@ do
     for q,npc in pairs({[94888]="Sergeant Riftan",[94889]="Sergeant Riftan",[96015]="Sergeant Riftan",[95957]="Innkeeper Zizplink",[95975]="Gray Dawnbright"}) do
         assert(real.GetShareQuestStart(q,2548):find(npc,1,true))
     end
+    for _,q in ipairs({94891,94893,94894,94998,96082}) do assert(not real.LevelGuideItemStarts[q],"provided item "..q) end
+    assert(real.GetShareQuestStart(94982,2548,true):find("Demar Brant",1,true))
+    assert(real.GetShareQuestStart(94984,2548,true):find("Ashe Amberhall",1,true))
+    assert(real.GetShareQuestStart(96082,2548):find("Brother Lowley",1,true))
+    assert(real.LevelGuideQuestGivers[84398][1][7]==1 and real.LevelGuideQuestGivers[84400][1][7]==1)
+    assert(real.GetShareQuestStart(2882,1446):find("Combine three map fragments",1,true))
+    assert(real.GetShareQuestStart(2882,1446):find("Lost Rigger Cove",1,true))
     assert(not real.LevelGuideItemStarts[5384],"provided Blood of Innocents is not a quest starter")
     assert(not real.LevelGuideQuestGivers[5383],"do not conflate the unused bag quest with 5515")
     for _,q in ipairs({5382,5515,5384}) do assert(real.GetShareQuestStart(q,1422):find("Eva Sarkhoff",1,true)) end

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.189 - 2026-11-27
+
+- Added nine Riverglades quest pickups and eleven fallback turn-ins, including Eye of Mugg and Tome of Twilight. Corrected five supplied items that were misidentified as quest starters.
+- Added two outdoor library book pickups in Eastern Plaguelands and the observed Horde return for The Knight and the Lady.
+- Cuergo's Gold identifies the crafted map and the Tanaris pickup and turn-in areas without pretending the chest has only one spawn.
+
 ## 1.5.188 - 2026-11-27
 
 - **Scholomance:** Added Eva Sarkhoff’s pickup and return directions for Doctor Theolen Krastinov, Krastinov's Bag of Horrors, and Kirtonos the Herald. Blood of Innocents remains the summon item, not the quest starter. Fallback hand-ins do not replace live game pins.

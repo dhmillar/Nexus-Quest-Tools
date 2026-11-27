@@ -8,6 +8,18 @@ local _,AT=...
 -- https://www.wowhead.com/forever/quest=96084/somethings-in-the-water
 -- https://foreverquestlog.com/quests/96084/
 AT.LevelGuideQuestGivers={
+ -- QuestieDB 1.1.6 identity; cross-checked Forever Quest Log and independently observed EG position.
+ [94890]={{2548,0.3066,0.4902,1,258023,"Sergeant Riftan"}},
+ [94891]={{2548,0.3066,0.4902,1,258023,"Sergeant Riftan"}},
+ [94893]={{2548,0.6658,0.81,1,257558,"Demar Brant"}},
+ [94894]={{2548,0.6658,0.81,1,257558,"Demar Brant"}},
+ [94982]={{2548,0.6658,0.81,1,257558,"Demar Brant"}},
+ [94984]={{2548,0.6672,0.8108,1,257591,"Ashe Amberhall"}},
+ [94998]={{2548,0.6672,0.8108,1,257591,"Ashe Amberhall"}},
+ [96082]={{2548,0.6551,0.79,1,263613,"Brother Lowley"}},
+ [96083]={{2548,0.6551,0.79,1,263613,"Brother Lowley"}},
+ [84398]={{1423,0.718,0.482,0,463207,"Book",1}}, -- Wowhead Forever Library Books field observations
+ [84400]={{1423,0.473,0.423,0,463208,"Book",1}}, -- Wowhead Forever Library Books field observations
  -- Forever observations: https://github.com/JIVESCORP/eg-link-output-wowf/blob/c1bf99bc2835bbe1b2dad82fb99f994c0cfffe33/data/wowf/1.60.1.71139/npcs.json
  -- Eva's follow-ups: https://foreverquestlog.com/quests/5515/ ; https://foreverquestlog.com/quests/5384/
  [5382]={{1422,.7019,.7383,0,11216,"Eva Sarkhoff"}},
@@ -1957,6 +1969,7 @@ AT.LevelGuideQuestGivers={
 -- (Brambleblade coordinates from the Forever UrGameTips walkthrough); Forever Quest Log item 270888 vendor table.
 -- Pickup kind 3 is vendor; optional field 9 gates an individual pickup spot by faction.
 AT.LevelGuideItemStarts={
+ [2882]={9254,{{0,0,0,0,4,11438,"three map fragments from Pirate's Footlockers","Lost Rigger Cove, Tanaris"}}}, -- Forever client item starter and observed source
  [2]={16305,{{1440,0.7549,0.6746,0.0461,1,12676,"Sharptalon"}}},
  [8]={7628,{}},
  [23]={16303,{{1440,0.4185,0.6773,0.036,1,12678,"Ursangous"}}},
@@ -3075,10 +3088,7 @@ AT.LevelGuideItemStarts={
  [94873]={257685,{}},
  [94884]={266426,{}},
  [94887]={267256,{}},
- [94891]={265837,{{2548,0.2643,0.4388,0.036,1,256881,"Overlord Kilgar"}}},
  [94892]={266428,{}},
- [94893]={266428,{}},
- [94894]={265837,{{2548,0.2643,0.4388,0.036,1,256881,"Overlord Kilgar"}}},
  [94895]={276067,{}},
  [94907]={268646,{}},
  [94928]={267263,{}},
@@ -3089,7 +3099,6 @@ AT.LevelGuideItemStarts={
  [94979]={267298,{}},
  [94980]={267138,{{0,0,0,0,1,259256,"Tunk","Krol'dok Stronghold, blacksmith area"}}},
  [94997]={268035,{}},
- [94998]={268036,{}},
  [94999]={267244,{}},
  [95062]={276066,{}},
  [95066]={274981,{}},
@@ -3151,7 +3160,6 @@ AT.LevelGuideItemStarts={
  [96018]={271882,{}},
  [96060]={271992,{}},
  [96077]={273799,{}},
- [96082]={272126,{}},
  [96084]={281229,{}},
  [96103]={271777,{}},
  [96105]={271779,{}},

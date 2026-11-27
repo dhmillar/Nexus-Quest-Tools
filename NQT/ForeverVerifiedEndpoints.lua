@@ -6,6 +6,19 @@
 -- Observed interactions: Efficient Games (https://efficient.games), CC BY 4.0.
 local _,AT=...
 AT.ForeverVerifiedEndpointReferences={
+ -- QuestieDB 1.1.6 identity; cross-checked Forever Quest Log and independently observed EG position.
+ [94892]={{2548,0.6658,0.81,1,257558,1,"Demar Brant"}},
+ [94907]={{2548,0.6672,0.8108,1,257591,1,"Ashe Amberhall"}},
+ [94926]={{2548,0.6658,0.81,1,257558,1,"Demar Brant"}},
+ [94982]={{2548,0.6658,0.81,1,257558,1,"Demar Brant"}},
+ [94984]={{2548,0.6672,0.8108,1,257591,1,"Ashe Amberhall"}},
+ [94992]={{2548,0.5487,0.7312,1,258317,1,"Benjy Wheeler"}},
+ [95315]={{2548,0.6658,0.81,1,257558,1,"Demar Brant"}},
+ [95912]={{2548,0.6612,0.7958,1,260080,1,"Ember Bladewhisper"}},
+ [96009]={{2548,0.6331,0.8068,1,260070,1,"Bertrand Ironbrow"}},
+ [96081]={{2548,0.6551,0.79,1,263613,1,"Brother Lowley"}},
+ [96082]={{2548,0.6551,0.79,1,263613,1,"Brother Lowley"}},
+ [84400]={{1458,.7338,.3303,1,7825,2,"Oran Snakewrithe"}}, -- verified Horde hand-in, no inferred Alliance recipient
  -- Eva's observed location on 5382: https://github.com/JIVESCORP/eg-link-output-wowf/blob/c1bf99bc2835bbe1b2dad82fb99f994c0cfffe33/data/wowf/1.60.1.71139/npcs.json
  -- Exact end identities: https://foreverquestlog.com/quests/5382/ ; https://foreverquestlog.com/quests/5515/ ; https://foreverquestlog.com/quests/5384/
  [5382]={{1422,.7019,.7383,1,11216,0,"Eva Sarkhoff"}},
@@ -198,6 +211,7 @@ AT.ForeverVerifiedEndpointReferences={
 -- Only the actual recipient is listed, never the quest giver as a proxy.
 -- Original source attribution above; cross-checks: https://www.wowhead.com/forever/
 AT.ForeverTurnInAreaReferences={
+ [2882]={"Land's End Beach, Tanaris","Pirate's Treasure!",false,0}, -- several valid chest spawns; never invent a single waypoint
  [95816]={"Three Corners trading camp, Redridge Mountains","Elaine Compton",true,1}, -- https://foreverquestlog.com/quests/95816/ ; coordinates disagree across sources
  [1098]={"Shadowfang Keep","Deathstalker Vincent",true,2}, -- wiki rev 6956883
  [1144]={"Razorfen Kraul","Willix the Importer",true,0}, -- Forever quest 1144; escort NPC, not his cage
