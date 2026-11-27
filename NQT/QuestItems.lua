@@ -121,7 +121,7 @@ local function npcMacro(name,vendor)
     -- Clear first so an unsuccessful lookup cannot mark the previous target.
     -- Let WoW enforce its own targeting, distance, and marker permissions.
     if vendor then
-        -- Neutral merchants may be neither assistable nor attackable. Test
+        -- Neutral NPCs may be neither assistable nor attackable. Test
         -- that the new target exists, is alive, and is not hostile.
         local condition="[@target,exists,noharm,nodead]"
         return "/cleartarget\n/targetexact "..name.."\n/tm "..condition.." !3\n/ping "..condition.." Assist\n/targetlasttarget [noexists][harm]"
@@ -138,6 +138,16 @@ local function validate(b)
                 or call(C_QuestLog.ReadyForTurnIn,b.qid)==true or b.tile.questId~=b.qid
                 or b.tile.vendorItem~=b.vendorItem or b.tile.npcID~=b.npcID or b.tile.mobName~=b.name then return false end
             local name,npc=call(AT.GetQuestObjectiveVendor,b.qid,b.vendorItem)
+            return npc==b.npcID and npcMacro(name,true)==b.token
+        end
+        if b.npcObjective then
+            if not C_QuestLog or call(C_QuestLog.IsOnQuest,b.qid)~=true
+                or call(C_QuestLog.ReadyForTurnIn,b.qid)==true or b.tile.questId~=b.qid
+                or b.tile.npcObjective~=b.npcObjective or b.tile.npcID~=b.npcID or b.tile.mobName~=b.name then return false end
+            local objectives=call(C_QuestLog.GetQuestObjectives,b.qid)
+            local o=readable(objectives,"table") and objectives[b.npcObjective]
+            if not readable(o,"table") or not readable(o.finished,"boolean") or o.finished then return false end
+            local name,npc=call(AT.GetQuestObjectiveNPC,b.qid,o,o.text)
             return npc==b.npcID and npcMacro(name,true)==b.token
         end
         if b.row.turnInLabel~=b.tile or b.row.turnInName~=b.name
@@ -237,18 +247,18 @@ function AT.SetRankQuestItemTargets(rows,scroll,callback)
             end
         end
         if not row.partyOnly and row.qid then
-            local function vendorTargets(buttons)
+            local function npcTargets(buttons)
                 for _,tile in ipairs(buttons or {}) do
-                    if tile.questId==row.qid and tile.vendorItem then
+                    if tile.questId==row.qid and (tile.vendorItem or tile.npcObjective) then
                         local token=npcMacro(tile.mobName,true)
                         if token then
                             targets[#targets+1]={row=row,tile=tile,token=token,kind="macro",
-                                name=tile.mobName,qid=row.qid,vendorItem=tile.vendorItem,npcID=tile.npcID}
+                                name=tile.mobName,qid=row.qid,vendorItem=tile.vendorItem,npcObjective=tile.npcObjective,npcID=tile.npcID}
                         end
                     end
                 end
             end
-            vendorTargets(row.objectiveMobHits)
+            npcTargets(row.objectiveMobHits)
         end
         if not row.partyOnly and row.qid and row.turnInLabel then
             local token=npcMacro(row.turnInName)

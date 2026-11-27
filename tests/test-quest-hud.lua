@@ -536,7 +536,7 @@ do
     assert(view.objectives[1].text:match("^Quest item"),"no leading objective dash")
     assert(view.objectives[2].text:find("Test Raptors slain",1,true))
     local hits=view.objectiveMobHits
-    assert(hits[1].mobName=="Second Named Mob" and hits[2].mobName=="Test Raptor" and not hits[3])
+    assert(hits[1].mobName=="Second Named Mob" and hits[2].mobName=="Test Raptor" and hits[3].npcObjective==3 and hits[3].npcID==10)
     local itemColor=table.concat(view.objectives[1].textColor,",")
     local killColor=table.concat(view.objectives[2].textColor,",")
     assert(hits[1].anchor[4]==view.objectives[1].anchor[2] and hits[1].anchor[5]==view.objectives[1].anchor[3])
@@ -582,7 +582,7 @@ do
     SetPortraitTextureFromCreatureDisplayID=nativePortrait
     icons[1].scripts.OnClick(icons[1],"LeftButton")
     assert(chosen=="Second Named Mob" and opened==beforeOpen)
-    assert(icons[3].mobName=="Test Raptor" and icons[3]:GetWidth()==18 and view.objectives[2].anchor[2]-(icons[3].anchor[4]+18)>=7);icons[3].scripts.OnClick(icons[3]);assert(chosen=="Test Raptor" and opened==beforeOpen);assert(not icons[4],"rescue and unknown objectives must have no icon")
+    assert(icons[3].mobName=="Test Raptor" and icons[3]:GetWidth()==18 and view.objectives[2].anchor[2]-(icons[3].anchor[4]+18)>=7);icons[3].scripts.OnClick(icons[3]);assert(chosen=="Test Raptor" and opened==beforeOpen);assert(icons[4].mobName=="Test Raptor" and icons[4].npcObjective==3 and not icons[5],"known rescue NPC gets a portrait; unknown kill does not"); chosen=nil; icons[4].scripts.OnClick(icons[4]); hits[3].scripts.OnClick(hits[3],"LeftButton"); assert(not chosen,"NPC actions must not change Auto Macro")
     do
         local oldObjectives,oldVendor=C_QuestLog.GetQuestObjectives,AT.GetQuestObjectiveVendor
         AT.GetQuestObjectiveVendor=function(q,item) if q==12 and item==9001 then return "Known Vendor",77,123 end end

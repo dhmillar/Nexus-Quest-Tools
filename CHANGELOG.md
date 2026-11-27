@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.207
+
+- Added clickable portraits and objective lines for identifiable quest NPCs in Rank Quest, including Saving Marshal Ryan. Click to target, mark with a diamond, and ping out of combat without changing Auto Macro.
+
 ## 1.5.206
 
 - Paladins can right-click the Smart Buff reminder and pick a named character's blessing directly, without opening Settings. Left-click still casts the suggested buff out of combat.

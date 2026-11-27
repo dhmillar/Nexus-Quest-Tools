@@ -236,3 +236,24 @@ do
     open=false;hooks.OnHide();event("MERCHANT_CLOSED");assert(not b.regions[1].shown)
     print("PASS passive vendor box and bottom-right bang, exact live needs, paging, buyback, progress and close")
 end
+
+do
+    GetLocale=function() return "enUS" end
+    local o={type="monster",text="Marshal Ryan found: 0/1",finished=false}
+    C_QuestLog={IsOnQuest=function(q)return q==94887 end, ReadyForTurnIn=function()return false end,
+        GetQuestObjectives=function()return {o} end}
+    local tile=frame(30)
+    tile.questId,tile.npcObjective,tile.npcID,tile.mobName=94887,1,257250,"Marshal Ryan"
+    local r={qid=94887,itemTiles={},objectiveMobHits={tile}}
+    AT.SetRankQuestItemTargets({r},viewport)
+    local b=created[1]
+    local macro=b:GetAttribute("macrotext1")
+    assert(b.shown and macro and macro:find("/targetexact Marshal Ryan",1,true)
+        and macro:find("/tm [@target,exists,noharm,nodead] !3",1,true)
+        and macro:find("/ping [@target,exists,noharm,nodead] Assist",1,true))
+    b.scripts.PreClick(b);assert(b.shown)
+    o.finished=true;b.scripts.PreClick(b);assert(not b.shown and not b:GetAttribute("macrotext1"))
+    o.finished=false;AT.SetRankQuestItemTargets({r},viewport);assert(b.shown)
+    o.text="Quest objective changed";b.scripts.PreClick(b);assert(not b.shown)
+    print("PASS full-line Marshal Ryan secure target, diamond and ping; completed and recycled objective guards")
+end

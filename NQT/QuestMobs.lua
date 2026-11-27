@@ -114,6 +114,55 @@ local function indexed(wanted)
     end
     return nameIndex[wanted] or nil
 end
+-- Only explicit interaction objectives whose subject resolves to a creature.
+-- Do not use giver/turn-in names or zone text to infer an objective NPC.
+local npcObjectiveOverrides={[94887]={["marshal ryan"]=257250}}
+local npcObjectiveKinds={monster=true,event=true,interact=true,npc=true,talk=true,escort=true,object=true,area=true,progressbar=true}
+local npcPrefixes={"find","found","locate","located","seek out","meet","speak to","speak with","talk to","talk with","report to","return to","rescue","free","escort","protect","aid","help","interact with","check on"}
+local npcSuffixes={"found","located","met","spoken to","talked to","reported to","rescued","freed","escorted","protected","helped","aided","interacted with","checked on"}
+function AT.GetQuestObjectiveNPC(qid,objective,label)
+    local locale=GetLocale and GetLocale()
+    if (locale~="enUS" and locale~="enGB") or not pos(qid) or not public(objective,"table") then return end
+    local kind=objective.type
+    if not public(kind,"string") or not npcObjectiveKinds[kind] then return end
+    local line=cleanObjective(label)
+    if not line or line=="" then return end
+    line=line:gsub("[%.!]+$","")
+    local subject
+    for _,verb in ipairs(npcSuffixes) do
+        subject=line:match("^(.+) +"..verb.."$")
+        if subject then break end
+    end
+    if not subject then
+        for _,verb in ipairs(npcPrefixes) do
+            subject=line:match("^"..verb.." +(.+)$")
+            if subject then break end
+        end
+    end
+    if not subject then return end
+    local explicit
+    for _,field in ipairs({"npcID","creatureID","monsterID"}) do
+        local v=objective[field]
+        if pos(v) then explicit=v;break end
+    end
+    local function resolve(wanted)
+        local override=npcObjectiveOverrides[qid]
+        local exact=override and override[wanted]
+        local id=explicit or exact or indexed(wanted)
+        if exact and explicit and exact~=explicit then return end
+        local row=id and mob(id)
+        if row and normalize(row[1])==wanted then return row[1],id,row[5] end
+    end
+    local name,id,display=resolve(subject)
+    if name then return name,id,display end
+    for _,prep in ipairs({" within "," at "," in "," near "," to "}) do
+        local bare=subject:match("^(.+)"..prep..".+$")
+        if bare then
+            local n,i,d=resolve(bare)
+            if n then return n,i,d end
+        end
+    end
+end
 function AT.GetQuestKillMobName(qid,objective,label)
     if not english() or not pos(qid) or not public(objective,"table") then return end
     local kind=objective.type

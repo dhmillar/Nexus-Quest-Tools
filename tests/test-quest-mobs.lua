@@ -75,3 +75,21 @@ AT.ObservedQuestDrops=prior
 GetLocale=function() return "deDE" end
 assert(not AT.GetQuestDropMobNames(item) and not AT.GetQuestMobProfile("Saltseer Manhunter"))
 print("PASS real Forever Shady Saltseers quest, four known droppers, exact item and NPC IDs, nonkill and object exclusions")
+
+do
+    GetLocale=function() return "enUS" end
+    local name,npc,display=AT.GetQuestObjectiveNPC(94887,{type="monster"},"Marshal Ryan found: 0/1")
+    assert(name=="Marshal Ryan" and npc==257250 and display==139994)
+    assert(AT.GetQuestObjectiveNPC(94887,{type="event"},"Find Marshal Ryan within the Twilight's Shroud.")=="Marshal Ryan")
+    for _,s in ipairs({"Solstice found: 0/1","Whisperfur found: 0/1","Brie found: 0/1"}) do
+        assert(AT.GetQuestObjectiveNPC(93615,{type="monster"},s))
+    end
+    for _,s in ipairs({"Speak to Marshal Ryan","Escort Marshal Ryan to safety","Rescue Marshal Ryan","Found Marshal Ryan"}) do
+        assert(AT.GetQuestObjectiveNPC(94887,{type="monster"},s)=="Marshal Ryan")
+    end
+    assert(not AT.GetQuestObjectiveNPC(94887,{type="monster",npcID=255685},"Marshal Ryan found"))
+    assert(not AT.GetQuestObjectiveNPC(94887,{type="item"},"Marshal Ryan found"))
+    assert(not AT.GetQuestObjectiveNPC(94887,{type="monster"},"Marshal Ryan slain"))
+    assert(not AT.GetQuestObjectiveNPC(94887,{type="event"},"Find Twilight's Shroud"))
+    print("PASS exact NPC objective IDs and portraits for find, talk, rescue and escort; reject items, areas and mismatches")
+end
