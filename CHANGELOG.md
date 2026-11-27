@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.225
+
+- Restored the pre-regression dungeon boss macro conditions for targeting, marking and pinging. Kept the elite-click and dungeon Pet Bar fixes.
+
 ## 1.5.224
 
 - Pet Bar stays visible in instances. If WoW hides your pet's overhead nameplate, the same health bar appears below screen center and returns to the pet when its nameplate is available.

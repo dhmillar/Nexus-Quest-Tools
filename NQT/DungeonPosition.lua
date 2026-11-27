@@ -1969,8 +1969,8 @@ do
 
     local function reacquireTail(label,ping)
         if not label then return "" end
-        return "\n/stopmacro [harm,nodead]\n/cleartarget\n/stopmacro [harm]"
-            .."\n/targetexact "..label.."\n/atmob k0:"..planFor(label:lower())..ping..clearDead
+        return "\n/stopmacro [harm,nodead]\n/cleartarget\n/stopmacro [exists]"
+            .."\n/targetexact [noexists] "..label.."\n/atmob k0:"..planFor(label:lower())..ping..clearDead
     end
 
     local function smartSearch(fallback,free)
@@ -1992,7 +1992,7 @@ do
         end
         if #freeNames==0 then return end
         searchSlots,searchHit={},nil
-        local body="/stopmacro [combat]\n/cleartarget\n/stopmacro [harm]"
+        local body="/stopmacro [combat]\n/cleartarget\n/stopmacro [exists]"
         local ping=AT.db.bossMarkPing and "\n/ping [@target,harm,nodead] Attack" or ""
         local recover=recent and reacquireTail(recent,ping) or clearDead
         local mark=free and ("\n/tm [harm,nodead] ~"..free) or ""
@@ -2000,7 +2000,7 @@ do
         for _,entry in ipairs(freeNames) do
             local name,slot=entry[1],entry[2]
             local plan=planFor(name:lower())
-            local line="\n/targetexact "..(count and "[@target,noexists][dead] " or "")..name
+            local line="\n/targetexact [noexists][dead] "..name
             local nextTail=mark.."\n/atmob j"..(free or 0)..":"..slot..ping
             local compiled=body..(lastProbe or "")..line
             -- SecureActionButton macrotext uses RunMacroText, not a
@@ -2075,9 +2075,9 @@ do
             or "No available icon for this boss.")
         -- Select the boss by exact name, not a recycled nameplate token. A
         -- failed selection performs no mark or ping.
-        local body="/stopmacro [combat]\n/cleartarget\n/stopmacro [harm]"
+        local body="/stopmacro [combat]\n/cleartarget\n/stopmacro [exists]"
         for i,label in ipairs(labels) do
-            body=body.."\n/targetexact "..(i==1 and "" or "[@target,noexists][dead] ")..label
+            body=body.."\n/targetexact [noexists] "..label
 
         end
         local ping=AT.db.bossMarkPing and "\n/ping [@target,harm,nodead] Attack" or ""
@@ -2096,13 +2096,23 @@ do
                         return not maxBytes or #core+#tail+#ping+#clearDead<=maxBytes
                     end
                     if fits(body,recover) then body=body..recover
-                    elseif fits(body,probe) then body=body..probe end
+                    else
+                        local shorter=body:gsub("/targetexact %[noexists%] ","/targetexact ",1)
+                        if fits(shorter,recover) then body=shorter..recover
+                        -- This is already the last successful name; reporting
+                        -- it again is optional when macro space is tight.
+                        elseif fits(shorter,probe) then body=shorter..probe end
+                    end
                 end
             end
         end
         -- Exact-name targeting can pick a corpse, even if the scan saw
         -- a live boss when this macro was prepared. Guard marks and pings
         -- natively, then clear the corpse after all acquisition paths.
+        if maxBytes and #body+#ping+#clearDead>maxBytes then
+            -- There is already a no-target guard immediately before the first probe.
+            body=body:gsub("/targetexact %[noexists%] ","/targetexact ",1)
+        end
         if maxBytes and #body+#ping+#clearDead>maxBytes then ping="" end
         body=body..ping..clearDead
         if maxBytes and #body>maxBytes then return true,nil,"That boss name does not fit in the action-bar macro." end
