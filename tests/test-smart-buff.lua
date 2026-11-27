@@ -232,6 +232,7 @@ do
     local active="#showtooltip\n/cast [@party1,help,nodead,nocombat] Arcane Intellect"
     local header="# NQT:smart-buff:v1\n"
     locked=false
+    class="PALADIN"
     native[1]={name="Foreign",icon=134400,body=header..idle}
     native[121]={name="NQT Smart Buff",icon=134400,body=header..idle}
     assert(nqt.SyncSmartBuffAction(idle,false))
@@ -249,5 +250,23 @@ do
     native[121]=nil
     assert(nqt.SyncSmartBuffAction(idle,false) and creates==0)
     assert(nqt.SyncSmartBuffAction(idle,true) and creates==1 and picked==121 and native[121].icon==135987)
+    class="HUNTER"
+    native[121].icon=135987 -- The icon saved by 1.5.214, not a question mark.
+    local hunter="#showtooltip\n/cast [combat,@player] !Aspect of the Hawk; [nocombat,@player] !Aspect of the Cheetah"
+    native[121].body=header..hunter
+    assert(nqt.SyncSmartBuffAction(hunter,false) and native[121].icon==136076 and native[121].body==header..hunter)
+    local unchanged=writes
+    assert(nqt.SyncSmartBuffAction(hunter,false) and writes==unchanged)
+    assert(nqt.SyncSmartBuffAction(idle,false) and native[121].icon==136076)
+    class="MAGE"
+    function C_Spell.GetSpellTexture(id) if id==1459 then return 135932 end end
+    native[121].icon=135987
+    assert(nqt.SyncSmartBuffAction(idle,false) and native[121].icon==135932)
+    class="PRIEST"
+    function C_Spell.GetSpellTexture(id) if id==1243 then return 135987 end end
+    native[121].icon=135987
+    unchanged=writes
+    assert(nqt.SyncSmartBuffAction(idle,false) and writes==unchanged,"preserve a correct class icon")
+    print("PASS Hunter Hawk icon, in-place legacy migration and class-specific buff icons")
     print("PASS Smart Buff native action-bar icon migration, no-action state, custom icon and combat guard")
 end

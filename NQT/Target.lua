@@ -244,16 +244,16 @@ local function findNativeMacro(header, labels)
     end
 end
 
-local function syncNative(header, labels, asset, command, create, migrateQuestionIcon)
+local function syncNative(header, labels, asset, command, create, replaceLegacyIcon)
     if not (GetMacroInfo and CreateMacro and EditMacro) then return false, "WoW's macro editor is unavailable." end
     local id, name, previous, texture = findNativeMacro(header, labels)
     if not id and not create then return true end
     if not name then return false, "Both names for this Auto Track macro are already in use." end
     local body = header .. "\n" .. command
     -- Keep a real icon when Smart Buff intentionally has no spell to cast.
-    -- Only replace the old automatic question mark, not a custom icon.
-    local replaceIcon = id and migrateQuestionIcon and not private(texture) and
-        (texture == nil or texture == 134400 or (type(texture) == "string" and
+    -- Migrate the old question mark or generic buff icon, not a custom icon.
+    local replaceIcon = id and replaceLegacyIcon and not private(texture) and texture ~= asset and
+        (texture == nil or texture == 134400 or texture == 135987 or (type(texture) == "string" and
             texture:lower():find("inv_misc_questionmark", 1, true) ~= nil))
     if previous ~= body or replaceIcon then
         if id then pcall(EditMacro, id, name, replaceIcon and asset or nil, body)
@@ -281,9 +281,29 @@ local function pickupNative(header, labels, asset, command, migrateQuestionIcon)
 end
 
 local buffHeader, buffLabels = "# NQT:smart-buff:v1", {"NQT Smart Buff","NQT Buff"}
-local buffIcon = 135987
+local legacyBuffIcon = 135987
+local classBuffSpells = {
+    DRUID=1126, HUNTER=13165, MAGE=1459, PALADIN=20217, PRIEST=1243,
+    SHAMAN=324, WARLOCK=687, WARRIOR=6673,
+}
+local function smartBuffMacroIcon()
+    local ok, _, class
+    if UnitClass then ok, _, class = pcall(UnitClass, "player") end
+    if not ok or private(class) then return legacyBuffIcon end
+    local spell = classBuffSpells[class]
+    if class == "HUNTER" then return 136076 end -- Aspect of the Hawk, even before its first rank is learned.
+    local getTexture = C_Spell and C_Spell.GetSpellTexture or GetSpellTexture
+    if spell and getTexture then
+        local got, texture = pcall(getTexture, spell)
+        if got and not private(texture) and type(texture) == "number" and texture > 0 and texture ~= 134400 then
+            return texture
+        end
+    end
+    return legacyBuffIcon
+end
 function AT.SyncSmartBuffAction(command,pickup)
     if InCombatLockdown and InCombatLockdown() then return false,"Leave combat before setting up Smart Buff." end
+    local buffIcon = smartBuffMacroIcon()
     if pickup then return pickupNative(buffHeader,buffLabels,buffIcon,command,true) end
     return syncNative(buffHeader,buffLabels,buffIcon,command,false,true)
 end

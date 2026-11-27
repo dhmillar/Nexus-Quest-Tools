@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.215
+
+- Smart Buff uses the class's own buff icon, including Aspect of the Hawk for Hunters. Replaces the previous generic buff icon on existing macros without changing casting.
+
 ## 1.5.214
 
 - Smart Buff keeps its buff icon on the action bar when nobody needs an eligible buff. Existing question-mark icons migrate in place without changing the cast or replacing custom icons.
