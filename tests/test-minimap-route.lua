@@ -55,3 +55,18 @@ refreshes=0
 for i=1,20 do observer:OnUpdate(.1) end
 assert(refreshes==0,"disabled GPS does no periodic refresh work")
 print("PASS minimap quest panel removed; yard count, direction line, arrival and world-map callbacks preserved")
+
+-- A verified hand-in only 6 yards away geographically may still be down a
+-- longer path around a wall. When a real walk exists, it decides arrival.
+AT.db.showQuestRoute=true
+active=true;t=t+1;x=.55
+function AT.IsQuestTurnInNavigation() return true end
+function AT.GetFocusedQuestRoutePoint() return 981,20,.556,.5 end
+function AT.GetFocusedQuestWalkingPath()
+    return {waypoints={{map=20,x=.55,y=.5},{map=20,x=.55,y=.55},
+        {map=20,x=.556,y=.55},{map=20,x=.556,y=.5}},yards=106},
+        {map=20,x=.556,y=.5},"routed"
+end
+AT.RefreshQuestRoute()
+assert(AT.worldStatus=="routed","follow the actual turn-in walk rather than declaring arrival across the wall")
+print("PASS ready-quest route can continue around an obstacle beside the hand-in")

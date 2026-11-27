@@ -570,7 +570,7 @@ local function draw()
         hide(); return
     end
     if arrival and (arrival.quest~=d.quest or arrival.map~=d.origin.map) then arrival=nil end
-    if turnIn then
+    if turnIn and not d.path then
         local meta=metaFor(quest)
         if meta.map==d.origin.map then
             local distance=yardEstimate(meta)

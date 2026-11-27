@@ -700,7 +700,7 @@ local function run()
     for id in pairs(poiByID) do
         if activeQuest(id,ids) then ids[id]=true end
     end
-    local best,bestDist,bestTurnIn,currentDistance
+    local best,bestDist,bestTurnIn,currentDistance,areaFallback
     local mapLists,remaining={},24
     if ctx then mapLists[ctx.id]=ctx.points or false end
     if parent then mapLists[parent.id]=parent.list or false end
@@ -732,7 +732,14 @@ local function run()
                     end
                 end
             else
-                consider(id,(measureProximity(id,ctx,poiByID[id],parent,blocked,nil,true)))
+                local dist,how=measureProximity(id,ctx,poiByID[id],parent,blocked,nil,true)
+                if how=="inside" then
+                    -- Being inside a broad objective area is not a measured
+                    -- zero-yard route and must not outrank a measured hand-in.
+                    if not areaFallback or id==focus or areaFallback~=focus and id<areaFallback then areaFallback=id end
+                else
+                    consider(id,dist)
+                end
             end
         end
     end
@@ -741,6 +748,7 @@ local function run()
     if not measuredTurnIn then
         for _,candidate in ipairs(estimatedTurnIns) do consider(unpack(candidate)) end
     end
+    best=best or areaFallback
     if best then
         if best==focus or acquire(best,bestTurnIn) then
             focusTurnIn=bestTurnIn
@@ -785,8 +793,12 @@ function AT.GetQuestNavigationID()
     -- it is unambiguous which quest the player has asked to track.
     if call(Q.GetNumQuestWatches)==1 then
         local id = call(Q.GetQuestIDForQuestWatchIndex,1)
-        if validID(id) and not completed(id) and not AT.IsQuestExcluded(id)
-            and call(Q.IsOnQuest,id)~=false then return id,"watched" end
+        if validID(id) and not AT.IsQuestExcluded(id) then
+            local held=call(Q.IsOnQuest,id)
+            if completed(id) then
+                if held==true then return id,"turn-in" end
+            elseif held~=false then return id,"watched" end
+        end
     end
 end
 function AT.IsQuestTurnInNavigation(id)
@@ -955,7 +967,14 @@ end
 function AT.GetQuestTurnInPoint(id,viewMap)
     if not AT.IsQuestTurnInNavigation(id) then return end
     if focus==id and focusTurnIn and focusTurnIn[1] and not AT.GetQuestHUDManualFocus() then return unpack(focusTurnIn) end
-    return resolveTurnInPoint(id,viewMap,false)
+    local m,x,y=resolveTurnInPoint(id,viewMap,false)
+    if m then return m,x,y end
+    -- Only the explicitly cross-checked pack is eligible as a fallback,
+    -- not broad label-only references or the last objective waypoint.
+    -- Conflicting live observations should not be masked by a fixed pin.
+    if AT.ObservedQuestTurnIns and AT.ObservedQuestTurnIns[id] then return end
+    m,x,y=observedTurnIn(id,nil,nil,nil,"verified",true)
+    if m and zoneID(m)==m then return m,x,y end
 end
 
 -- Displaying a destination should never select the quest, watch it, or change GPS.

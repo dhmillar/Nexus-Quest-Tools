@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.219
+
+- Ready quests on both maps can route to a verified outdoor hand-in even if the game omits the native pin. A single watched ready quest can supply the destination. Being inside an unmeasured objective area no longer beats an actual measured hand-in, and ambiguous or wrong-faction recipients are not guessed.
+
 ## 1.5.218
 
 - Quest navigation prefers the installed Shortest Path Forever walking solver and shares the result between both maps. The world map draws the full visible route through the destination without stopping after 512 segments, even when minimap rotation cannot be resolved.

@@ -271,5 +271,37 @@ do
     C_QuestLog.GetTitleForQuestID=function(id) return id==96084 and "Something's in the Water" end
     AT.ReportRankQuestTurnIns()
     assert(lines[2]:find("#96084",1,true) and lines[2]:find(" yd",1,true) and selected==96084)
+    local targetID,targets=AT.GetFocusedQuestRouteTargets(2548)
+    assert(targetID==96084 and #targets==1 and targets[1].x==.6178 and targets[1].y==.8318,
+        "route to the cross-checked Sister Rowland hand-in without a native pin")
+    local _,m,x,y=AT.GetFocusedQuestRoutePoint()
+    assert(m==2548 and x==.6178 and y==.8318)
+    inside[77]=true;measured[77]=nil
+    expect(96084)
+    assert(AT.SampleQuestAreas({[77]=true},{})[77]=="inside","area fallback still highlights but does not beat the measured hand-in")
+    assert(AT.ToggleQuestHUDManualFocus(96084))
+    targetID,targets=AT.GetFocusedQuestRouteTargets(2548)
+    assert(targetID==96084 and #targets==1 and targets[1].x==.6178)
+    -- Old kill-zone points never become completed-quest routing destinations.
+    C_QuestLog.GetNextWaypoint=function() return 2548,.2,.2 end
+    pois[2548]={{questID=96084,x=.2,y=.2,isQuestStart=false,inProgress=true}}
+    assert(select(3,AT.GetFocusedQuestRoutePoint())==.6178)
+    pois[2548][1].inProgress=false
+    assert(select(3,AT.GetFocusedQuestRoutePoint())==.2,"client hand-in pin is always preferred")
+    pois[2548]=nil
+    function UnitFactionGroup() return "Horde" end
+    assert(select(2,AT.GetFocusedQuestRoutePoint())==nil,"don't route to another faction's finisher")
+    function UnitFactionGroup() return "Alliance" end
+    AT.ObservedQuestTurnIns={[96084]={{2548,.6178,.8318,1,262031,1,"Sister Rowland"},
+        {2548,.4,.3,1,1,1,"Conflicting finisher"}}}
+    assert(select(2,AT.GetFocusedQuestRoutePoint())==nil,"do not paper over conflicting observed hand-ins")
+    AT.ObservedQuestTurnIns=nil
+    assert(AT.ToggleQuestHUDManualFocus(96084))
+    AT.db.autoFocus=false;selected=0
+    C_QuestLog.GetNumQuestWatches=function() return 1 end
+    C_QuestLog.GetQuestIDForQuestWatchIndex=function() return 96084 end
+    assert(AT.GetQuestNavigationID()==96084 and AT.IsQuestTurnInNavigation(96084))
+    assert(select(3,AT.GetFocusedQuestRoutePoint())==.6178)
+    print("PASS ready-quest GPS: auto, manual and single watch; verified coordinates; stale pin, faction and conflicting evidence guards")
     print("PASS Farholde screenshot coordinates, exact hand-in fallback, closer unfinished quest, and manual completion reset")
 end

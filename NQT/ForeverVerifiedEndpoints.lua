@@ -2,7 +2,7 @@
 -- Adapted from wow-completionist-data by Daniel Bates and contributors, and Warcraft Wiki contributors.
 -- Pinned source: https://github.com/danielalanbates/wow-completionist-data/tree/64feae0e472c5b615e72e682ce470df03d485056
 -- Selected endpoint identities cross-checked against live Forever quest metadata and normalized nearby observed
--- interactions or version-checked coordinates. Not native GPS. Sources for each selected row below.
+-- interactions or version-checked coordinates. Selected unambiguous outdoor hand-ins can back up missing native GPS. Sources below.
 -- Observed interactions: Efficient Games (https://efficient.games), CC BY 4.0.
 local _,AT=...
 AT.ForeverVerifiedEndpointReferences={
