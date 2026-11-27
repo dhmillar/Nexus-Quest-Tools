@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.236
+
+- When WoW withholds Krol'dok boss names and IDs from addons, use WoW's native exact-name targeting with the hostile/living condition confirmed on Ashka. Corpses are cleared without marks or pings, known defeats stay excluded, and searches advance to the remaining bosses.
+
 ## 1.5.235
 
 - Krol'dok boss macros now cycle through verified living bosses on repeated presses even when they already have markers. Existing markers stay in place, and repeated presses do not keep pinging a lone boss.

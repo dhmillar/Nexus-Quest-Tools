@@ -2157,6 +2157,37 @@ do
         return body..tail..recover
     end
 
+    local krolAlive="[@target,harm,nodead]"
+    local function krolNativeSearch(fallback,free,smart,maxBytes)
+        if #fallback==0 then return end
+        local limit=smart and 900 or (maxBytes or 200)
+        local start=stockBatch<=#fallback and stockBatch or 1
+        local body="/stopmacro [combat]\n/cleartarget\n/stopmacro "..krolAlive
+        local stop="\n/stopmacro "..krolAlive
+        local count=0
+        for offset=0,(smart and #fallback-1 or 0) do
+            local label=fallback[(start+offset-1)%#fallback+1]
+            local key=label:lower()
+            local index=free
+            for _,owner in pairs(reservations) do
+                if owner.name==key then index=nil;break end
+            end
+            local step="\n/targetexact "..label
+                ..(index and ("\n/tm "..krolAlive.." ~"..index) or "")
+                ..(AT.db.bossMarkPing and (not lastPress or lastPress.name~=key)
+                   and ("\n/ping "..krolAlive.." Attack") or "")
+                ..("\n/atmob k"..(index or 0)..":"..planFor(key).."f")
+                ..clearDead
+            local tail=count>0 and stop or ""
+            if #body+#tail+#step>limit then break end
+            body=body..tail..step
+            count=count+1
+        end
+        if count==0 then return end
+        lastBossMarkNote=("Prepared a native living-target search of %d boss names."):format(count)
+        return body
+    end
+
     function AT.GetBossTargetMacro(preview,smart,maxBytes)
         local name,id,kind=context()
         if not name then return false end
@@ -2183,8 +2214,10 @@ do
         fallback,fallbackCount=kept,#kept
         if id==3039 then
             -- The Forever parser has returned inconsistent exists/noexists
-            -- results in this dungeon. Never probe the name-only roster.
+            -- results here. Use only its positive hostile/living test.
             if not pick then
+                local search=krolNativeSearch(fallback,free,smart,maxBytes)
+                if search then return true,search end
                 return true,"/stopmacro [combat]"..clearDead,"No living Krol'dok boss could be verified."
             end
             local unit=pick.unit
@@ -2287,12 +2320,13 @@ do
 
     -- This notification occurs only after the player's native macro searches
     -- one exact name and tries /tm. Never assign/reassign markers from Lua.
-    function AT.ReserveBossMark(index,planID)
+    function AT.ReserveBossMark(index,planID,nativeFallback)
         if index~=0 and not validRaidIcon(index) then return end
         local dungeon,id=context()
         if not dungeon or safe(InCombatLockdown)==true then return end
         if id==3039 then
             if safe(UnitExists,"target")~=true or safe(UnitIsDeadOrGhost,"target")~=false then return end
+            if nativeFallback and safe(SecureCmdOptionParse,krolAlive.." yes")~="yes" then return end
         elseif safe(SecureCmdOptionParse,"[@target,exists,nodead] yes")~="yes" then return end
         local observed,readable=get("target",GetRaidTargetIndex)
         local guid=safe(UnitGUID,"target")
@@ -2376,7 +2410,7 @@ do
     function AT.AdvanceBossSearch()
         local _,id=context()
         if not id or fallbackCount<1 then return end
-        stockBatch=stockBatch%fallbackCount+1
+        stockBatch=(stockBatch<=fallbackCount and stockBatch or 1)%fallbackCount+1
         if C_Timer and C_Timer.After and AT.RefreshBossActionBar then C_Timer.After(0,AT.RefreshBossActionBar) end
     end
 

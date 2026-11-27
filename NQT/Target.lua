@@ -633,7 +633,7 @@ function AT.InitTarget()
         if AT.ReserveBossMark then
             local index,plan,advance=command:match("^k([0-8]):(%d+)(f?)$")
             if index then
-                AT.ReserveBossMark(tonumber(index),tonumber(plan))
+                AT.ReserveBossMark(tonumber(index),tonumber(plan),advance=="f")
                 if advance=="f" and AT.AdvanceBossSearch then AT.AdvanceBossSearch() end
                 return
             end

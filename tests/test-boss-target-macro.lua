@@ -177,6 +177,10 @@ function SecureCmdOptionParse(s)
     if s=="[@target,exists,nodead] yes" then
         return units.target and not units.target.dead and "yes"
     end
+    if s=="[@target,harm,nodead] yes" then
+        local t=units.target
+        return t and not t.dead and not t.friendly and not t.attackFlagPending and "yes"
+    end
     if s=="[btn:2]e" then return nil end
     return s
 end
@@ -190,9 +194,14 @@ local function native(text,lookup,refuse)
         if action then
             local chosen=units[token]
             if chosen and not chosen.dead and not chosen.friendly and not chosen.attackFlagPending then
-                if action=="target" then units.target=chosen
+                if action=="stopmacro" then return
+                elseif action=="target" then units.target=chosen
                 elseif action=="ping" then pings[#pings+1]=chosen
-                elseif action=="tm" and not actual[chosen] then actual[chosen]=tonumber(line:match("~(%d)$")) end
+                elseif action=="tm" and not actual[chosen] then
+                    local index=tonumber(line:match("~(%d)$"))
+                    for u,mark in pairs(actual) do if mark==index then actual[u]=nil end end
+                    actual[chosen]=index
+                end
             end
         elseif line=="/stopmacro [combat]" or line=="/stopmacro [btn:2][combat]" then
             if combat then return end
@@ -647,8 +656,8 @@ for _,smart in ipairs({false,true}) do
     actual={};pings={}
     assert(AT.RefreshBossActionBar())
     local miss=smart and press() or body
-    assert(not miss:find("/target",1,true) and not miss:find("exists",1,true))
-    native(miss,{[grox.name]=grox,[z.name]=z},false)
+    assert(not miss:find("exists",1,true))
+    native(miss,{[grox.name]=grox},false)
     assert(not units.target and next(actual)==nil and #pings==0)
     units.nameplate1=z
     assert(AT.RefreshBossActionBar())
@@ -664,7 +673,7 @@ for _,smart in ipairs({false,true}) do
     local old=UnitIsDeadOrGhost
     UnitIsDeadOrGhost=function()return secret end
     assert(AT.RefreshBossActionBar())
-    assert(not (smart and press() or body):find("/target ",1,true),"unknown death status cannot be guessed")
+    assert(not (smart and press() or body):find("/target ",1,true),"unknown death status must use native guarded search, not a direct unit token")
     UnitIsDeadOrGhost=old
 end
 do
@@ -679,7 +688,7 @@ do
         RunLogKilledThisVisit=function(r,name)return r==run and name==z.name end
     }
     assert(AT.RefreshBossActionBar())
-    assert(not body:find("/tm ",1,true) and not press():find("/ping ",1,true),"same-run Journal evidence wins over stale live metadata")
+    assert(not body:find(z.name,1,true) and not press():find(z.name,1,true),"same-run Journal evidence wins over stale live metadata")
     reportedMap=2970
     assert(press():find("/ping [@target,harm,nodead]",1,true),"unrelated Journal map must not suppress a live boss")
     ForeverDungeonJournal_NS=old
@@ -765,3 +774,48 @@ for _,smart in ipairs({false,true}) do
     C_Timer=savedTimer
 end
 print("PASS Krol'dok: both buttons cycle three marked bosses without repeating, keep their markers, skip corpses, and suppress lone-boss ping spam")
+
+-- Repro from the actual client: Ashka is alive and hostile, but both
+-- identifying fields read as hidden. Only native exact-name search sees her.
+for _,smart in ipairs({false,true}) do
+    units={};kind="none";ui[1].scripts.OnEvent(ui[1],"PLAYER_ENTERING_WORLD")
+    kind="party";current=3039;ui[1].scripts.OnEvent(ui[1],"PLAYER_ENTERING_WORLD")
+    local g=mob(258966,9801,"Slavecrusher Grox");g.dead=true
+    local a=mob(259281,9802,"War Handler Ashka")
+    local z=mob(258972,9803,"Twilight Commander Zarmok")
+    local trash=mob(1234,9804,"Trash")
+    local names={[g.name]=g,[a.name]=a}
+    local oldName,oldGUID=UnitName,UnitGUID
+    UnitName=function(u)if units[u]==a or units[u]==z then return secret end return oldName(u) end
+    UnitGUID=function(u)if units[u]==a or units[u]==z then return secret end return oldGUID(u) end
+    units.target=a;pings={};actual={}
+    assert(AT.RefreshBossActionBar())
+    local first=smart and press() or body
+    assert(first:find("[@target,harm,nodead]",1,true) and not first:find("exists",1,true))
+    units.target=trash
+    native(first,names,true)
+    assert(units.target==trash and #pings==0 and not actual[trash],"failed clear must abort the probe")
+    units.target=a
+    if smart then
+        native(first,names,false)
+    else
+        for i=1,7 do
+            assert(AT.RefreshBossActionBar())
+            assert(#body<=255)
+            native(body,names,false)
+            if actual[a] then break end
+            assert(not units.target and #pings==0)
+        end
+    end
+    assert(units.target==a and actual[a]==8 and pings[1]==a and #pings==1 and not actual[g])
+    a.mark=8
+    names[z.name]=z
+    for i=1,7 do
+        assert(AT.RefreshBossActionBar())
+        native(smart and press() or body,names,false)
+        if actual[z] then break end
+    end
+    assert(actual[a]==8 and actual[z]==7 and pings[2]==z and not actual[g])
+    UnitName,UnitGUID=oldName,oldGUID
+end
+print("PASS Krol'dok native hidden-identity fallback: Ashka, second living boss, unchanged raid icon, no exists predicates, misses and corpse cleanup")
