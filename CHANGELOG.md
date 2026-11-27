@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.197 - 2026-11-27
+
+- Fixes the Pet Bar rendering path when WoW supplies a pet nameplate but the addon fails to draw health. The bar no longer inherits stock nameplate transparency and supports the client’s native health display API when raw health cannot be used. Nameplate settings are unchanged.
+
 ## 1.5.196 - 2026-11-27
 
 - Pet Bar requests only the friendly-pet nameplate category outdoors, leaving the friendly-player and NPC settings untouched. Stock graphics are hidden only on confirmed friendly pet nameplates. The game still controls nameplate availability and instance restrictions. The previous pet category setting is restored when NQT no longer needs it.

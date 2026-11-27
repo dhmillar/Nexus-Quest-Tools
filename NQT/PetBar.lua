@@ -1,6 +1,7 @@
 local _,AT=...
 local bar,events,listening,anchoredPlate,anchoredToken
 local tokenHint,removedPlate,recheck
+local healthColorCurve,renderStatus,followElapsed
 local masked={}
 local settingMode,leasePending,writing
 local modernPetCVar="nameplateShowFriendlyPlayerPets"
@@ -103,7 +104,10 @@ end
 local function filterExistingPlates()
     local list=C_NamePlate and safe(C_NamePlate.GetNamePlates)
     for _,plate in ipairs(type(list)=="table" and list or {}) do
-        if usable(plate) then hideStockArt(plate,plateToken(plate)) end
+        if usable(plate) then
+            local token=plateToken(plate)
+            if not ownsUnit(token) then hideStockArt(plate,token) end
+        end
     end
 end
 local function petPlate()
@@ -130,12 +134,13 @@ local function detach()
     bar:Hide()
     if anchoredPlate then
         bar:ClearAllPoints()
-        bar:SetParent(UIParent)
+        events:SetScript("OnUpdate",nil)
     end
     anchoredPlate,anchoredToken=nil,nil
 end
 local function createBar()
-    bar=CreateFrame("StatusBar",nil,UIParent)
+    local bar=CreateFrame("StatusBar",nil,UIParent)
+    bar:SetFrameStrata("MEDIUM")
     bar:SetSize(74,8)
     bar:SetMinMaxValues(0,100)
     bar:SetStatusBarTexture("Interface\\Buttons\\WHITE8X8")
@@ -160,6 +165,60 @@ local function createBar()
     if face then label:SetFont(face,8,"OUTLINE") end
     bar.label=label
     bar:Hide()
+    return bar
+end
+local function screenAnchor(plate)
+    if not usable(plate) then return false end
+    local x,y=safe(plate.GetCenter,plate),safe(plate.GetTop,plate)
+    local scale,root=safe(plate.GetEffectiveScale,plate),safe(UIParent.GetEffectiveScale,UIParent)
+    local w,h=safe(UIParent.GetWidth,UIParent),safe(UIParent.GetHeight,UIParent)
+    if not (finite(x) and finite(y) and finite(scale) and scale>0 and finite(root) and root>0
+        and finite(w) and finite(h)) then return false end
+    x,y=x*scale/root,y*scale/root+3
+    if x<0 or x>w or y<0 or y>h then return false end
+    bar:ClearAllPoints()
+    bar:SetPoint("BOTTOM",UIParent,"BOTTOMLEFT",x,y)
+    return true
+end
+local function bindToPlate(plate,token)
+    if anchoredPlate==plate then anchoredToken=token;return true end
+    detach()
+    -- A UIParent child cannot inherit the stock nameplate's hidden art.
+    local followsCoordinates=screenAnchor(plate)
+    if not followsCoordinates and not pcall(bar.SetPoint,bar,"BOTTOM",plate,"TOP",0,2) then return false end
+    followElapsed=0
+    events:SetScript("OnUpdate",function(_,dt)
+        followElapsed=followElapsed+dt
+        if followElapsed<.04 then return end
+        followElapsed=0
+        local currentToken=usable(plate) and plateToken(plate)
+        if not usable(plate) or (currentToken and not ownsUnit(currentToken)) then
+            bar:Hide()
+        elseif not followsCoordinates or screenAnchor(plate) then bar:Show()
+        else bar:Hide() end
+    end)
+    anchoredPlate,anchoredToken=plate,token
+    return true
+end
+local function paintNativeHealth()
+    if type(UnitHealthPercent)~="function" or not CurveConstants or not CurveConstants.ScaleTo100 then return false end
+    return pcall(function()
+        if not healthColorCurve then
+            local curve=C_CurveUtil.CreateColorCurve()
+            curve:SetType(Enum.LuaCurveType.Step)
+            curve:AddPoint(0,CreateColor(.79,.12,.16,1))
+            curve:AddPoint(.5,CreateColor(.19,1,.20,1))
+            healthColorCurve=curve
+        end
+        -- Use the client display surfaces without converting restricted values in Lua.
+        local color=UnitHealthPercent("pet",false,healthColorCurve)
+        local percent=UnitHealthPercent("pet",false,CurveConstants.ScaleTo100)
+        bar:SetStatusBarColor(color:GetRGBA())
+        bar:SetValue(percent)
+        if not pcall(bar.label.SetFormattedText,bar.label,"%.0f%%",percent) then bar.label:SetText("") end
+        local r,g,b,a=color:GetRGBA()
+        for _,edge in ipairs(bar.edge) do pcall(edge.SetColorTexture,edge,r,g,b,a) end
+    end)
 end
 local function petEvent(_,event,unit)
     if event=="PLAYER_LOGOUT" then
@@ -230,39 +289,30 @@ function AT.RefreshPetBar()
     if not plate then detach();return end
     local health=read(UnitHealth,"pet","number")
     local maximum=read(UnitHealthMax,"pet","number")
-    if not finite(health) or not finite(maximum) or maximum<=0 then
-        if bar then bar:Hide() end
+    if not bar then
+        local ok,made=pcall(createBar)
+        if not ok then renderStatus="could not create the bar";return end
+        bar=made
+    end
+    if not bindToPlate(plate,token) then renderStatus="could not position the bar";return end
+    if finite(health) and finite(maximum) and maximum>0 then
+        local percent=100*(math.max(0,math.min(maximum,health))/maximum)
+        local low=percent<50
+        if low then bar:SetStatusBarColor(.79,.12,.16)
+        else bar:SetStatusBarColor(.19,1,.20) end
+        for _,edge in ipairs(bar.edge) do
+            if low then edge:SetColorTexture(.85,.26,.27,.95)
+            else edge:SetColorTexture(.26,.51,.37,.95) end
+        end
+        bar:SetValue(percent)
+        bar.label:SetText(("%d%%"):format(math.floor(percent)))
+    elseif not paintNativeHealth() then
+        detach()
+        renderStatus="WoW did not supply a displayable health value"
         return
     end
-    local percent=100*(math.max(0,math.min(maximum,health))/maximum)
-    if not bar then createBar() end
-    if anchoredPlate~=plate then
-        detach()
-        local ok=pcall(function()
-            bar:SetParent(plate)
-            bar:ClearAllPoints()
-            bar:SetPoint("BOTTOM",plate,"TOP",0,2)
-            bar:SetFrameLevel(plate:GetFrameLevel()+6)
-        end)
-        if not ok then
-            bar:Hide()
-            bar:ClearAllPoints()
-            bar:SetParent(UIParent)
-            return
-        end
-        anchoredPlate=plate
-    end
-    anchoredToken=token
     hideStockArt(plate,token or "pet")
-    local low=percent<50
-    if low then bar:SetStatusBarColor(.79,.12,.16)
-    else bar:SetStatusBarColor(.19,1,.20) end
-    for _,edge in ipairs(bar.edge) do
-        if low then edge:SetColorTexture(.85,.26,.27,.95)
-        else edge:SetColorTexture(.26,.51,.37,.95) end
-    end
-    bar:SetValue(percent)
-    bar.label:SetText(("%d%%"):format(math.floor(percent)))
+    renderStatus=nil
     bar:Show()
 end
 local function statusText()
@@ -274,7 +324,8 @@ local function statusText()
     if not plate then
         return "friendly pet category: "..(category or "not exposed").."; no usable pet nameplate"
     end
-    return safe(bar and bar.IsShown,bar)==true and "visible" or "pet nameplate found; health or attachment unavailable"
+    if renderStatus then return "pet nameplate found; "..renderStatus end
+    return safe(bar and bar.IsVisible,bar)==true and "visible" or "pet nameplate found; bar not visible"
 end
 function AT.InitPetBar()
     if events or not CreateFrame or not UIParent then return end

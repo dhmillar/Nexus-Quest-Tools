@@ -2,6 +2,9 @@ local AT={db={enabled=true}}
 local sample={health=100,maximum=100,present=true}
 local watcher,bar,created,reads=nil,nil,0,0
 UIParent={}
+UIParent.GetEffectiveScale=function()return 1 end
+UIParent.GetWidth=function()return 800 end
+UIParent.GetHeight=function()return 600 end
 local function plate(token)
     return {namePlateUnitToken=token,IsForbidden=function(self)return self.forbidden==true end,
         IsVisible=function()return true end,GetFrameLevel=function()return 14 end}
@@ -50,7 +53,7 @@ end
 function CreateFrame(kind)
     created=created+1
     local f={events={},shown=true}
-    function f:SetScript(_,fn)self.onEvent=fn end
+    function f:SetScript(k,fn)if k=="OnEvent" then self.onEvent=fn else self.onUpdate=fn end end
     function f:RegisterEvent(e)self.events[e]=true end
     function f:RegisterUnitEvent(e,u)self.events[e]=u end
     function f:UnregisterAllEvents()self.events={} end
@@ -58,7 +61,7 @@ function CreateFrame(kind)
     function f:Show()self.shown=true end
     if kind=="Frame" then watcher=f;return f end
     assert(kind=="StatusBar")
-    bar=f
+    bar=f;f.parent=UIParent
     f.SetFrameStrata=function()end
     f.SetSize=function(self,w,h)self.width,self.height=w,h end
     f.SetPoint=function(self,point,owner,anchor,x,y)self.point={point,owner,anchor,x,y} end
@@ -80,7 +83,7 @@ assert(not bar and reads==0 and not next(watcher.events) and #writes==0,"default
 AT.db.petBarEnabled=true
 AT.RefreshPetBar()
 assert(bar.shown and bar.value==100 and bar.label.text=="100%" and bar.green==1 and not bar.red)
-assert(bar.parent==mine and bar.point[1]=="BOTTOM" and bar.point[3]=="TOP" and bar.point[5]>0)
+assert(bar.parent==UIParent and bar.point[2]==mine and bar.point[1]=="BOTTOM" and bar.point[3]=="TOP" and bar.point[5]>0)
 assert(cv.nameplateShowFriendlyPlayerPets=="1" and cv.nameplateShowFriendlyPlayers=="0"
     and cv.nameplateShowFriendlyNpcs=="0" and cv.nameplateShowFriends=="0")
 assert(other.UnitFrame.a==0 and mine.UnitFrame.a==0 and npc.UnitFrame.a==.8 and enemy.UnitFrame.a==.9 and protected.UnitFrame.a==1)
@@ -109,15 +112,40 @@ assert(not bar.shown,"ignore somebody else's nameplate")
 local replacement=plate("nameplate8")
 ownership,listed="nameplate8",{other,replacement}
 watcher.onEvent(watcher,"NAME_PLATE_UNIT_ADDED","nameplate8")
-assert(bar.shown and bar.parent==replacement and not bar.red,"attach by exact event token")
+assert(bar.shown and bar.parent==UIParent and bar.point[2]==replacement and not bar.red,"attach by exact event token")
 replacement.forbidden=true
 health(40);assert(not bar.shown,"never attach to protected nameplates")
 replacement.forbidden=false
-AT.RefreshPetBar();assert(bar.shown and bar.parent==replacement,"recover a visible pet via nameplate enumeration")
+AT.RefreshPetBar();assert(bar.shown and bar.parent==UIParent and bar.point[2]==replacement,"recover a visible pet via nameplate enumeration")
 local secret=123
 issecretvalue=function(v)return v==secret end
-health(secret);assert(not bar.shown,"do not expose restricted data")
+health(secret);assert(not bar.shown,"hide if no supported API can display restricted values")
+local secretPercent={}
+issecretvalue=function(v)return v==secret or v==secretPercent end
+CurveConstants={ScaleTo100={}}
+Enum={LuaCurveType={Step=1}}
+function CreateColor(...)local rgba={...};return {GetRGBA=function()return unpack(rgba) end} end
+C_CurveUtil={CreateColorCurve=function()
+    return {SetType=function(_,n)assert(n==1)end,AddPoint=function(self,x,c) self[x]=c end}
+end}
+function UnitHealthPercent(unit,predicted,curve)
+    assert(unit=="pet" and not predicted)
+    if curve==CurveConstants.ScaleTo100 then return secretPercent end
+    assert(curve[.5] and curve[0])
+    return curve[0]
+end
+function bar.label:SetFormattedText(fmt,value)assert(value==secretPercent and fmt=="%.0f%%");self.text="native" end
+health(secret);assert(bar.shown and bar.value==secretPercent and bar.red and bar.label.text=="native")
+replacement.GetCenter=function()return 345 end
+replacement.GetTop=function()return 270 end
+replacement.GetEffectiveScale=function()return 1 end
+watcher.onEvent(watcher,"PLAYER_ENTERING_WORLD")
+assert(bar.shown and bar.point[2]==UIParent and bar.point[4]==345)
+replacement.GetCenter=function()return 367 end
+watcher.onUpdate(watcher,.05)
+assert(bar.point[4]==367,"follows exposed screen coordinates without reparenting")
 issecretvalue=nil
+sample.health=25
 combat=true
 AT.db.petBarEnabled=false
 AT.RefreshPetBar();assert(not bar.shown and watcher.events.PLAYER_REGEN_ENABLED and cv.nameplateShowFriendlyPlayerPets=="1")
