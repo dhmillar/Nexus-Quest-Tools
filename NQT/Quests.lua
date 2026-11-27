@@ -678,31 +678,36 @@ local function run()
             local d,turnIn
             if completed(id) then
                 if activeQuest(id,ids) then d,turnIn=turnInDistance(id,ctx,poiByID[id],parent,blocked) end
-                if d and d<=ENTER_YARDS^2+1e-6 then consider(id,d,turnIn) end
+                consider(id,d,turnIn)
             else
                 inProgress[#inProgress+1]=id
             end
         end
     end
-    local nearTurnIn=bestTurnIn~=nil
+    local hasMeasuredTurnIn=bestTurnIn~=nil
     for _,id in ipairs(inProgress) do
         local poi=poiByID[id]
         local d,area=measureProximity(id,ctx,poi,parent,blocked)
-        if nearTurnIn and area=="inside" then
-            -- "Inside" is a highlight, not a zero-yard reading. Use
-            -- actual distance if available, or put the broad area last.
+        if hasMeasuredTurnIn and area=="inside" then
+            -- Blob membership is not a distance to an objective. Compare
+            -- actual measurements, including the enclosing zone if available.
             d=not blocked and distance(id,ctx,poi) or nil
+            if not blocked and parent then
+                local outer=distance(id,parent,parent.points and parent.points[id])
+                if finite(outer) and (not finite(d) or outer<d) then d=outer end
+            end
+            -- Preserve the local-area fallback if no objective distance is
+            -- available; do not prefer a distant hand-in on unknown evidence.
             if not finite(d) then d=ENTER_YARDS^2+1 end
         end
         consider(id,d)
     end
-    if focusTurnIn and best~=focus then release() end
     if best then
         if best==focus or acquire(best,bestTurnIn) then
             focusTurnIn=bestTurnIn
             noteNear(best,ctx,bestDist)
         end
-    elseif currentDistance==math.huge or confirmedDeparture(ctx) then
+    elseif focusTurnIn or currentDistance==math.huge or confirmedDeparture(ctx) then
         release()
     end
 end

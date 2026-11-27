@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.201 - 2026-11-27
+
+- Auto Focus compares the distance to quest objectives and ready-to-turn-in locations. A closer hand-in can take focus beyond the 100-yard highlight radius. Explicit selections and tracking order still take priority.
+
 ## 1.5.200 - 2026-11-27
 
 - Fixes pet name and owner subtitle flicker by suppressing only those text regions. Plater retains control of its frame opacity and visibility.

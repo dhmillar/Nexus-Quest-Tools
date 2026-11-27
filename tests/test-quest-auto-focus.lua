@@ -54,7 +54,7 @@ assert(not AT.GetQuestHUDManualFocus() and AT.GetQuestNavigationID()==11)
 assert(AT.ToggleQuestHUDManualFocus(12)); expect(12)
 assert(AT.IsQuestTurnInNavigation(12))
 assert(AT.ToggleQuestHUDManualFocus(12)); expect(11)
-ready[11]=true; measured[11]=200; measured[13]=0
+cont[12]=false; ready[11]=true; measured[11]=200; measured[13]=0
 map=2;waypoints[13]={1,.58,.5}; expect(13)
 assert(AT.SampleQuestAreas({[13]=true},{})[13]=="near","parent zone resolves missing interior coordinates")
 ready[13]=true;ready[11]=false; measured[11]=nil; waypoints[13]=nil
@@ -63,7 +63,7 @@ map=1; expect(nil)
 instance=true; measured[11]=49; expect(nil)
 inside[11]=true; expect(11)
 assert(AT.SampleQuestAreas({[11]=true},{})[11]=="inside")
-ready[12]=false;AT.ToggleQuestTrackingOrder(12);expect(12)
+ready[12]=false;cont[12]=true;AT.ToggleQuestTrackingOrder(12);expect(12)
 assert(AT.ToggleQuestHUDManualFocus(11));expect(11)
 ready[11]=true;expect(12)
 AT.ResetTrackingOrder()
@@ -83,8 +83,10 @@ assert(watch[11] and not AT.ShouldHideCompletedQuest(11),"the current nearby tur
 assert(AT.SampleQuestAreas({[11]=true},{})[11]=="near","inclusive 100-yard hand-in boundary")
 measured[14]=50;expect(14);assert(not watch[11])
 measured[14]=250
-pois[1][1].x=.601;expect(14)
-assert(AT.SampleQuestAreas({[11]=true},{[11]="near"})[11]=="outside")
+pois[1][1].x=.601;expect(11)
+assert(AT.SampleQuestAreas({[11]=true},{[11]="near"})[11]=="outside","tracking is independent of the highlight radius")
+measured[14]=100;expect(14)
+measured[14]=250;expect(11)
 pois[1][1].x=.51;pois[1][1].inProgress=true;expect(14)
 assert(AT.SampleQuestAreas({[11]=true},{[11]="near"})[11]==nil,"stale objective pins and blobs cannot locate turn-in")
 pois[1][1].inProgress=false;map=2;expect(11);map=1
@@ -101,7 +103,7 @@ expect(11)
 assert(select(3,AT.GetFocusedQuestRoutePoint())==.55)
 AT.ObservedQuestTurnIns={[11]={{1,.55,.5,1,123,0,"Finisher"},{1,.52,.5,1,124,0,"Alternate"}}}
 expect(14)
-print("PASS true turn-in distance, 100-yard boundary, nearest comparison, GPS, exclusions, manual/queue priority, and completed watch safety")
+print("PASS true turn-in distance beyond the highlight radius, nearest comparison, GPS, exclusions, manual/queue priority, and completed watch safety")
 -- A collapsed log and a native distance without a map pin can still switch.
 AT.ObservedQuestTurnIns=nil
 local baseLog=C_QuestLog.GetNumQuestLogEntries
@@ -121,10 +123,15 @@ assert(AT.GetFocusedQuestRoutePoint()==11 and select(2,AT.GetFocusedQuestRoutePo
 measured[14]=20;expect(14)
 measured[14]=nil;expect(11)
 measured[11]=101;expect(14)
+measured[14]=300;expect(11)
+measured[14]=50;expect(14)
+measured[14]=nil
 measured[11]=nil
 pois[1]={{questID=11,x=.54,y=.5,inProgress=false}}
 expect(11)
 assert(select(3,AT.GetFocusedQuestRoutePoint())==.54,"the native ready pin need not repeat isQuestStart=false")
+map=2;waypoints[14]={1,.52,.5};expect(14)
+waypoints[14]=nil;map=1;expect(11)
 C_QuestLog.GetNumQuestLogEntries=baseLog
 print("PASS ready quest without native pin, hidden rows, stock watch required, broad blob ranking, distance-only GPS safety and omitted POI flags")
 
