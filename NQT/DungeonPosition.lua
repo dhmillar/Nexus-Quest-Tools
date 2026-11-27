@@ -1785,6 +1785,44 @@ do
         end
         return ids,names,fallback
     end
+    local defeatedByName,deathInstance={},nil
+    local function enterDeathScope(id)
+        if deathInstance~=id then defeatedByName,deathInstance={},id end
+    end
+    local function observeBossDeath(event,arg1,arg2,arg5)
+        local dungeon,id=context()
+        if not dungeon then return end
+        enterDeathScope(id)
+        local label
+        if event=="ENCOUNTER_END" then
+            if not ordinary(arg5) or arg5~=1 or not usable(arg2,"string") then return end
+            label=arg2
+        else
+            if not usable(arg1,"string") or (arg1~="target" and not allowedToken(arg1)
+                and not arg1:match("^boss%d$")) or safe(UnitExists,arg1)~=true then return end
+            local dead=safe(UnitIsDeadOrGhost,arg1)
+            local health=safe(UnitHealth,arg1)
+            local max=safe(UnitHealthMax,arg1)
+            if dead~=true and not (num(health) and health==0 and num(max) and max>0) then return end
+            label=safe(UnitName,arg1)
+            if not usable(label,"string") then
+                local npc=safe(UnitCreatureID,arg1)
+                local guid=safe(UnitGUID,arg1)
+                if not mapID(npc) and usable(guid,"string") then
+                    npc=tonumber(guid:match("^Creature%-%d+%-%d+%-%d+%-%d+%-(%d+)%-"))
+                end
+                for _,entry in ipairs(factRoster(id)) do
+                    if npc==entry[1] then label=entry[2];break end
+                end
+            end
+        end
+        if usable(label,"string") then
+            local _,names=bossIDs(dungeon,id)
+            local key=label:lower()
+            if names[key] then defeatedByName[key]=true end
+        end
+    end
+
     local function observeReadableBossTarget(dungeon,id)
         if AT.db.dungeonPositionEnabled==false or AT.db.dungeonPositionShowSelf==false then return end
         if safe(InCombatLockdown)==true or safe(UnitExists,"target")~=true
@@ -2042,10 +2080,13 @@ do
         end
         local ids,names,fallback=bossIDs(name,id)
         local pick,free,unreadable,deadNames,livingNames=scan(name,id,preview,ids,names)
+        enterDeathScope(id)
+        for key in pairs(deadNames) do if not livingNames[key] then defeatedByName[key]=true end end
+        for key in pairs(livingNames) do defeatedByName[key]=nil end
         local kept={}
         for _,label in ipairs(fallback) do
             local key=label:lower()
-            if not deadNames[key] or livingNames[key] then kept[#kept+1]=label end
+            if not defeatedByName[key] then kept[#kept+1]=label end
         end
         fallback,fallbackCount=kept,#kept
         if stockBatch>fallbackCount then stockBatch=1 end
@@ -2246,11 +2287,15 @@ do
         local watcher=CreateFrame("Frame")
         for _,event in ipairs({"PLAYER_ENTERING_WORLD","PLAYER_REGEN_ENABLED","NAME_PLATE_UNIT_ADDED",
             "NAME_PLATE_UNIT_REMOVED","PLAYER_TARGET_CHANGED","UPDATE_MOUSEOVER_UNIT",
-            "RAID_TARGET_UPDATE","INSTANCE_ENCOUNTER_ENGAGE_UNIT","GROUP_ROSTER_UPDATE","UNIT_FLAGS","UNIT_HEALTH","UI_ERROR_MESSAGE"}) do
+            "RAID_TARGET_UPDATE","INSTANCE_ENCOUNTER_ENGAGE_UNIT","GROUP_ROSTER_UPDATE","UNIT_FLAGS","UNIT_HEALTH","ENCOUNTER_END","UI_ERROR_MESSAGE"}) do
             pcall(watcher.RegisterEvent,watcher,event)
         end
         local queued
-        watcher:SetScript("OnEvent",function(_,event,_,errorText)
+        watcher:SetScript("OnEvent",function(_,event,arg1,arg2,arg3,arg4,arg5)
+            local errorText=arg2
+            if event=="UNIT_HEALTH" or event=="UNIT_FLAGS" or event=="ENCOUNTER_END" then
+                observeBossDeath(event,arg1,arg2,arg5)
+            end
             if event=="UI_ERROR_MESSAGE" then
                 if lastPress and lastPress.icon~=0 and GetTime()-lastPress.at<1 and usable(errorText,"string") then
                     lastPress.error=errorText:sub(1,110):gsub("[%c|]","")
@@ -2264,6 +2309,7 @@ do
             end
             if event=="PLAYER_ENTERING_WORLD" then
                 local _,id,kind=instance()
+                enterDeathScope((kind=="party" or kind=="raid") and id or nil)
                 if id~=lastInstance or (kind~="party" and kind~="raid") then
                     reservations,lastInstance,stockBatch,lastAttempt,lastPress={},nil,1,nil,nil
                     plans,planIDs,lastTargetLabel={},{},nil

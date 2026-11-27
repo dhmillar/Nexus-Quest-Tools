@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.230
+
+- Confirmed boss deaths stay out of the fallback roster after the nameplate disappears. Encounter failure is not a death, and a fresh run or verified living unit clears the corresponding record.
+
 ## 1.5.229
 
 - Boss macros use the same targeted ping command as chat, after clearing corpses and checking for an acquired target. Raid marks retain living-target and existing-marker protection.

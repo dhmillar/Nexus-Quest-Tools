@@ -665,3 +665,26 @@ for _,smart in ipairs({false,true}) do
         "boss actions must not depend on the harm flag immediately after targetexact")
 end
 print("PASS Krol'dok Grox is marked and pinged on the same press even when its attack flag is not ready")
+
+-- Keep a real death after the corpse's unit token is no longer readable.
+do
+    units={};kind="none";ui[1].scripts.OnEvent(ui[1],"PLAYER_ENTERING_WORLD")
+    kind="party";current=3039;ui[1].scripts.OnEvent(ui[1],"PLAYER_ENTERING_WORLD")
+    local grox=mob(258966,9401,"Slavecrusher Grox")
+    grox.dead=true
+    units.target=grox
+    ui[1].scripts.OnEvent(ui[1],"UNIT_HEALTH","target")
+    units={}
+    assert(AT.RefreshBossActionBar())
+    assert(not body:find(grox.name,1,true) and not press():find(grox.name,1,true),"corpse leaves live token list, not the remembered death list")
+    ui[1].scripts.OnEvent(ui[1],"ENCOUNTER_END",1,"Twilight Commander Zarmok",1,5,0)
+    assert(press():find("Twilight Commander Zarmok",1,true),"a failed encounter is not a kill")
+    ui[1].scripts.OnEvent(ui[1],"ENCOUNTER_END",1,"Twilight Commander Zarmok",1,5,1)
+    assert(not press():find("Twilight Commander Zarmok",1,true),"a confirmed encounter kill is excluded")
+    grox.dead=false;units.nameplate1=grox
+    assert(press():find(grox.name,1,true),"live proof supersedes remembered death")
+    units={};kind="none";ui[1].scripts.OnEvent(ui[1],"PLAYER_ENTERING_WORLD")
+    kind="party";current=3039;ui[1].scripts.OnEvent(ui[1],"PLAYER_ENTERING_WORLD")
+    assert(press():find("Twilight Commander Zarmok",1,true),"a fresh run does not carry deaths from the last run")
+end
+print("PASS confirmed Krol'dok deaths survive nameplate loss; a wipe does not count and living proof or instance exit resets the record")
