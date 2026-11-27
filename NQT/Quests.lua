@@ -166,10 +166,14 @@ local function release()
 end
 
 local function acquire(id,turnIn)
-    local added = not watched(id) and not turnIn
+    local added = not watched(id)
     if added then
         local result = call(Q.AddQuestWatch, id)
-        if result ~= true and not watched(id) then
+        if result ~= true and not watched(id) and turnIn then
+            -- Some clients need a watch before accepting native super-tracking;
+            -- others reject watches on completed quests. Keep local focus either way.
+            added=false
+        elseif result ~= true and not watched(id) then
             -- A full native tracker can block an otherwise valid switch.
             -- Only free the previous watch if this addon added that watch.
             local old = focus
@@ -403,8 +407,11 @@ local function proximityContext()
     return ctx,points,parent,blocked
 end
 
+local function turnInPin(p)
+    return field(p,"isQuestStart")~=true and field(p,"inProgress")==false
+end
+
 local function turnInDistance(id,ctx,poi,parent,blocked)
-    if not ctx then return end
     local function pointDistance(map,x,y,knownContext)
         if not xyValid(x,y) then return end
         local px,py
@@ -421,7 +428,7 @@ local function turnInDistance(id,ctx,poi,parent,blocked)
         return dx*dx+dy*dy,{map,x,y}
     end
     local function nativePoint(c,p)
-        if c and field(p,"isQuestStart")==false and field(p,"inProgress")==false then
+        if c and turnInPin(p) then
             return pointDistance(c.id,field(p,"x"),field(p,"y"),c)
         end
     end
@@ -432,8 +439,18 @@ local function turnInDistance(id,ctx,poi,parent,blocked)
     -- Generic objective waypoints, blobs and reference-only coordinates
     -- cannot establish that a completed quest is near its actual finisher.
     local map,x,y=observedTurnIn(id,nil,nil,nil,false,true)
-    if not map or blocked and map~=ctx.id then return end
-    return pointDistance(map,x,y,map==ctx.id and ctx or parent and map==parent.id and parent or nil)
+    if map and ctx and (not blocked or map==ctx.id) then
+        d,point=pointDistance(map,x,y,map==ctx.id and ctx or parent and map==parent.id and parent or nil)
+        if d then return d,point end
+    end
+    -- Native same-continent distance can focus a ready quest without a
+    -- pin, unless the map still advertises it as an unfinished objective.
+    -- No coordinates are inferred from this distance.
+    local parentPOI=parent and parent.points and parent.points[id]
+    if not blocked and field(poi,"inProgress")~=true and field(parentPOI,"inProgress")~=true then
+        local native,localWorld=call(Q.GetDistanceSqToQuest,id)
+        if finite(native) and native>0 and localWorld==true then return native,{} end
+    end
 end
 
 local function measureProximity(id,ctx,poi,parent,blocked,limit)
@@ -474,12 +491,18 @@ end
 
 local function snapshot()
     local ids = {}
-    local shown = call(Q.GetNumQuestLogEntries)
+    local shown,total = call(Q.GetNumQuestLogEntries)
     local size = finite(shown) and math.min(1000, math.max(0, shown)) or 0
+    local seen=0
     for i = 1, size do
         local info = call(Q.GetInfo, i)
         local id = field(info, "questID")
-        if validID(id) and not field(info, "isHeader") and not field(info, "isHidden") then ids[id] = true end
+        if validID(id) and not field(info, "isHeader") and not field(info, "isHidden") then ids[id] = true;seen=seen+1 end
+    end
+    if finite(total) and total>seen and AT.GetCachedRankQuestIDs then
+        for id in pairs(AT.GetCachedRankQuestIDs() or {}) do
+            if validID(id) and call(Q.IsOnQuest,id)==true then ids[id]=true end
+        end
     end
     local watches = call(Q.GetNumQuestWatches)
     local count = finite(watches) and math.min(1000, math.max(0, watches)) or 0
@@ -600,23 +623,36 @@ local function run()
         if activeQuest(id,ids) then ids[id]=true end
     end
     local best,bestDist,bestTurnIn,currentDistance
+    local inProgress={}
+    local function consider(id,d,point)
+        if id==focus then currentDistance=d end
+        if finite(d) and d>=0 and (not bestDist or d<bestDist
+            or d==bestDist and (id==focus or best~=focus and id<best)) then
+            best,bestDist,bestTurnIn=id,d,point
+        end
+    end
     for id in pairs(ids) do
         if not AT.IsQuestExcluded(id) then
             local d,turnIn
             if completed(id) then
                 if activeQuest(id,ids) then d,turnIn=turnInDistance(id,ctx,poiByID[id],parent,blocked) end
-                if d and d>ENTER_YARDS^2+1e-6 then d,turnIn=nil,nil end
+                if d and d<=ENTER_YARDS^2+1e-6 then consider(id,d,turnIn) end
             else
-                d=measureProximity(id,ctx,poiByID[id],parent,blocked)
-            end
-            if id==focus then currentDistance=d end
-            -- In-progress quests still qualify outside the highlight range;
-            -- turn-ins enter the same nearest-first comparison at 100 yd.
-            if finite(d) and d>=0 and (not bestDist or d<bestDist
-                or d==bestDist and (id==focus or best~=focus and id<best)) then
-                best,bestDist,bestTurnIn=id,d,turnIn
+                inProgress[#inProgress+1]=id
             end
         end
+    end
+    local nearTurnIn=bestTurnIn~=nil
+    for _,id in ipairs(inProgress) do
+        local poi=poiByID[id]
+        local d,area=measureProximity(id,ctx,poi,parent,blocked)
+        if nearTurnIn and area=="inside" then
+            -- "Inside" is a highlight, not a zero-yard reading. Use
+            -- actual distance if available, or put the broad area last.
+            d=not blocked and distance(id,ctx,poi) or nil
+            if not finite(d) then d=ENTER_YARDS^2+1 end
+        end
+        consider(id,d)
     end
     if focusTurnIn and best~=focus then release() end
     if best then
@@ -679,7 +715,7 @@ local function nativeTurnIn(id,map)
     if not isType(points,"table") then return end
     for _,p in ipairs(points) do
         -- The Forever quest POI API distinguishes starts and in-progress pins.
-        if field(p,"questID")==id and field(p,"isQuestStart")==false and field(p,"inProgress")==false then
+        if field(p,"questID")==id and turnInPin(p) then
             local x,y=field(p,"x"),field(p,"y")
             if xyValid(x,y) then return map,x,y end
         end
@@ -829,7 +865,7 @@ end
 
 function AT.GetQuestTurnInPoint(id,viewMap)
     if not AT.IsQuestTurnInNavigation(id) then return end
-    if focus==id and focusTurnIn and not AT.GetQuestHUDManualFocus() then return unpack(focusTurnIn) end
+    if focus==id and focusTurnIn and focusTurnIn[1] and not AT.GetQuestHUDManualFocus() then return unpack(focusTurnIn) end
     return resolveTurnInPoint(id,viewMap,false)
 end
 

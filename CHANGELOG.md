@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.176 - 2026-11-27
+
+- **Nearby turn-in tracking:** Uses WoW's same-continent quest distance when a ready quest has no turn-in pin and the map does not show an unfinished objective. Distance-only tracking never supplies guessed GPS coordinates.
+- Ready quests can be found under collapsed log headers. The stock tracker is asked to watch the current nearby turn-in when needed to switch; the temporary watch is removed when focus moves on.
+- Being inside a broad objective area no longer counts as zero yards when comparing that quest with a nearby turn-in.
+
 ## 1.5.175 - 2026-11-27
 
 - **Nearby turn-ins:** A ready quest now joins automatic nearest-quest selection within 100 yards of its verified hand-in location. It can also highlight and sort as nearby in Rank Quest's Completed view.

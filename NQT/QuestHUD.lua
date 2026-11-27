@@ -190,6 +190,9 @@ local function dungeonFor(row,index,poiName,currentName)
 end
 
 local logCache,logDirty
+function AT.GetCachedRankQuestIDs()
+    return logCache and logCache.rows
+end
 local function visibleQuestLog()
     local all,headers={},{}
     local shown,total=call(Q.GetNumQuestLogEntries)
@@ -2317,7 +2320,7 @@ local function arrange()
                 b.detail:SetTextColor(1,.78,.40)
             elseif marker and marker.area then
                 color(b.mark,.30,.96,.78,1)
-                if marker.area=="near" then detail="Near an objective" end
+                if marker.area=="near" and not q.complete then detail="Near an objective" end
                 b.detail:SetTextColor(.52,.97,.85)
             else
                 color(b.mark,a.accent[1],a.accent[2],a.accent[3],q.complete and .95 or .62)
