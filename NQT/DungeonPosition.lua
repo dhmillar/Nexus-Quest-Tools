@@ -1980,7 +1980,7 @@ do
 
     local function reacquireTail(label,ping)
         if not label then return "" end
-        return "\n/stopmacro [harm,nodead]\n/cleartarget\n/stopmacro [exists]"
+        return "\n/stopmacro [exists,nodead]\n/cleartarget\n/stopmacro [exists]"
             .."\n/targetexact [noexists] "..label.."\n/atmob k0:"..planFor(label:lower())..ping..clearDead
     end
 
@@ -1999,14 +1999,14 @@ do
             -- Every known candidate already has a mark. Reacquire the
             -- last one rather than start over at an out-of-range entry.
             return "/stopmacro [combat]"..reacquireTail(recent,
-                AT.db.bossMarkPing and "\n/ping [@target,harm,nodead] Attack" or ""):gsub("^\n/stopmacro %[harm,nodead%]", "", 1)
+                AT.db.bossMarkPing and "\n/ping [@target,exists,nodead] Attack" or ""):gsub("^\n/stopmacro %[exists,nodead%]", "", 1)
         end
         if #freeNames==0 then return end
         searchSlots,searchHit={},nil
         local body="/stopmacro [combat]\n/cleartarget\n/stopmacro [exists]"
-        local ping=AT.db.bossMarkPing and "\n/ping [@target,harm,nodead] Attack" or ""
+        local ping=AT.db.bossMarkPing and "\n/ping [@target,exists,nodead] Attack" or ""
         local recover=recent and reacquireTail(recent,ping) or clearDead
-        local mark=free and ("\n/tm [harm,nodead] ~"..free) or ""
+        local mark=free and ("\n/tm [exists,nodead] ~"..free) or ""
         local tail,count,lastProbe
         for _,entry in ipairs(freeNames) do
             local name,slot=entry[1],entry[2]
@@ -2097,8 +2097,8 @@ do
             body=body.."\n/targetexact "..(i==1 and "" or "[noexists] ")..label
 
         end
-        local ping=AT.db.bossMarkPing and "\n/ping [@target,harm,nodead] Attack" or ""
-        body=body..(index and ("\n/tm [harm,nodead] ~"..index) or "")
+        local ping=AT.db.bossMarkPing and "\n/ping [@target,exists,nodead] Attack" or ""
+        body=body..(index and ("\n/tm [exists,nodead] ~"..index) or "")
             ..("\n/atmob k"..(index or 0)..":"..planFor(labels[1]:lower())..(not pick and "f" or ""))
         if not pick then
             if not smart then
@@ -2137,7 +2137,7 @@ do
         if index~=0 and not validRaidIcon(index) then return end
         local dungeon,id=context()
         if not dungeon or safe(InCombatLockdown)==true then return end
-        if safe(SecureCmdOptionParse,"[harm,nodead] yes")~="yes" then return end
+        if safe(SecureCmdOptionParse,"[@target,exists,nodead] yes")~="yes" then return end
         local observed,readable=get("target",GetRaidTargetIndex)
         local guid=safe(UnitGUID,"target")
         local label=safe(UnitName,"target")
@@ -2145,7 +2145,7 @@ do
         local name=usable(label,"string") and label:lower() or nil
         local planned=planID and plans[planID]
         -- Clear old target, stop if that fails, then one native /targetexact.
-        -- A live hostile target here identifies that planned name even when
+        -- A living target here identifies that planned exact name even when
         -- the client doesn't expose UnitName or UnitGUID to Lua.
         if planID and (not planned or (name and name~=planned)) then return end
         name=name or planned
@@ -2187,7 +2187,7 @@ do
 
     function AT.ObserveBossSearch(plan)
         if not searchHit and plans[plan] and context() and safe(InCombatLockdown)~=true
-            and safe(SecureCmdOptionParse,"[harm,nodead] yes")=="yes" then
+            and safe(SecureCmdOptionParse,"[@target,exists,nodead] yes")=="yes" then
             searchHit=plan
         end
     end

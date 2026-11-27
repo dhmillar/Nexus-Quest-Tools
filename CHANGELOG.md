@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.227
+
+- Boss marks and pings use the living target selected by the exact-name search, without waiting for the hostility flag. Dead-target protection still applies.
+
 ## 1.5.226
 
 - Boss fallback skips confirmed corpses. The macro explicitly checks the selected unit when clearing a corpse, and /nqtboss explains when combat prevents the scan.

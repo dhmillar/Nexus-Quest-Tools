@@ -31,7 +31,7 @@ function UnitExists(unit) return units[unit]~=nil end
 function UnitGUID(unit) return units[unit].guid end
 function GetRaidTargetIndex(unit) return units[unit].mark end
 function UnitIsDeadOrGhost(unit) return units[unit].dead==true end
-function UnitCanAttack(_,unit) return not units[unit].friendly end
+function UnitCanAttack(_,unit) return not units[unit].friendly and not units[unit].attackFlagPending end
 function UnitClassification(unit) return units[unit].classification or "elite" end
 function UnitName(unit) return units[unit].name end
 function CanBeRaidTarget(unit) return not units[unit].immune end
@@ -87,10 +87,10 @@ units.nameplate2.dist=81
 units.nameplate3=mob(648,103,"Trash")
 units.nameplate3.dist=1
 units.target=units.nameplate1
-assert(press()=="/stopmacro [combat]\n/cleartarget\n/stopmacro [exists]\n/targetexact Boss B\n/tm [harm,nodead] ~8\n/atmob k8:1\n/cleartarget [@target,dead]")
+assert(press()=="/stopmacro [combat]\n/cleartarget\n/stopmacro [exists]\n/targetexact Boss B\n/tm [exists,nodead] ~8\n/atmob k8:1\n/cleartarget [@target,dead]")
 units.nameplate2.mark=8
 AT.db.bossMarkPing=true
-assert(press()=="/stopmacro [combat]\n/cleartarget\n/stopmacro [exists]\n/targetexact Boss A\n/tm [harm,nodead] ~7\n/atmob k7:2\n/ping [@target,harm,nodead] Attack\n/cleartarget [@target,dead]")
+assert(press()=="/stopmacro [combat]\n/cleartarget\n/stopmacro [exists]\n/targetexact Boss A\n/tm [exists,nodead] ~7\n/atmob k7:2\n/ping [@target,exists,nodead] Attack\n/cleartarget [@target,dead]")
 units.nameplate1.mark=7
 units.nameplate4=mob(645,104,"Boss C")
 assert(press():find("~4",1,true),"third boss gets Triangle")
@@ -132,7 +132,7 @@ function EditMacro(i,n,icon,b)
 end
 assert(loadfile("NQT/Target.lua"))("NQT",AT)
 assert(AT.RefreshBossActionBar())
-assert(body:find("/targetexact Hamhock",1,true) and body:find("/ping [@target,harm,nodead] Attack",1,true))
+assert(body:find("/targetexact Hamhock",1,true) and body:find("/ping [@target,exists,nodead] Attack",1,true))
 assert(not body:find("/atmob [btn:2]e;c",1,true),"does not capture the secondary target")
 units.nameplate1.mark=8
 units.nameplate3=mob(1716,789,"Bazil Thredd")
@@ -156,7 +156,7 @@ function issecretvalue(v) return v==secret or v==hidden end
 units={nameplate1=mob(1696,773,"Targorr the Dread"),nameplate2=mob(648,205,"Defias Prisoner")}
 assert(AT.RefreshBossActionBar())
 assert(body:find("Targorr the Dread",1,true) and not body:find("Defias Prisoner",1,true))
-assert(body:find("/tm [harm,nodead] ~8",1,true))
+assert(body:find("/tm [exists,nodead] ~8",1,true))
 units.nameplate2.mark=hidden
 assert(AT.RefreshBossActionBar())
 assert(body:find("Targorr the Dread",1,true) and not body:find("/tm",1,true),"an unreadable unrelated mark does not prevent targeting")
@@ -174,8 +174,8 @@ print("PASS screenshot regression: exact Targorr match without GUID, safe unread
 SlashCmdList={}
 local pings, actual, priorTarget = {}, {}, nil
 function SecureCmdOptionParse(s)
-    if s=="[harm,nodead] yes" then
-        return units.target and not units.target.dead and not units.target.friendly and "yes"
+    if s=="[@target,exists,nodead] yes" then
+        return units.target and not units.target.dead and "yes"
     end
     if s=="[btn:2]e" then return nil end
     return s
@@ -184,12 +184,13 @@ AT.InitTarget()
 local function native(text,lookup,refuse)
     for line in text:gmatch("[^\n]+") do
         local target=units.target
-        local live=target and not target.dead and not target.friendly
+        local live=target and not target.dead
+        local hostile=live and not target.friendly and not target.attackFlagPending
         if line=="/stopmacro [combat]" or line=="/stopmacro [btn:2][combat]" then
             if combat then return end
         elseif line=="/cleartarget" then
             if not refuse then priorTarget,target=target,nil; units.target=target end
-        elseif line=="/stopmacro [harm,nodead]" then
+        elseif line=="/stopmacro [exists,nodead]" then
             if live then return end
         elseif line=="/stopmacro [exists]" then
             if target then return end
@@ -200,14 +201,14 @@ local function native(text,lookup,refuse)
                 local hit=lookup[name]
                 if hit then units.target=hit;ui[1].scripts.OnEvent(ui[1],"PLAYER_TARGET_CHANGED") end
             end
-        elseif line:find("^/tm ") and live then
+        elseif line:find("^/tm ") and (line:find("[exists,nodead]",1,true) and live or hostile) then
             local index=tonumber(line:match("~(%d)$")); assert(index)
             if not actual[target] then
                 for unit,mark in pairs(actual) do if mark==index then actual[unit]=nil end end
                 actual[target]=index
             end
-        elseif line:find("^/ping ") and live then
-            assert(line=="/ping [@target,harm,nodead] Attack","boss ping must use target, not cursor")
+        elseif line:find("^/ping ") and (line:find("[@target,exists,nodead]",1,true) and live or hostile) then
+            assert(line=="/ping [@target,exists,nodead] Attack","boss ping must use target, not cursor")
             pings[#pings+1]=target
         elseif line:find("^/atmob ") then
             SlashCmdList.AUTOTRACKMOB(line:sub(8))
@@ -646,4 +647,19 @@ for _,smart in ipairs({false,true}) do
     combat=false
     assert(#pings==1,"combat stop must be reflected by the test environment")
 end
-print("PASS Drowned City skips known dead roster bosses, chooses and marks the living boss, and respects combat stop")
+print("PASS Krol'dok Stronghold skips known dead roster bosses, chooses and marks the living boss, and respects combat stop")
+
+-- Krol'dok boss acquisition succeeds before the harm flag becomes usable.
+-- Both native actions use the live target, independent of the attack flag.
+for _,smart in ipairs({false,true}) do
+    units={};kind="none";ui[1].scripts.OnEvent(ui[1],"PLAYER_ENTERING_WORLD")
+    kind="party";current=3039;ui[1].scripts.OnEvent(ui[1],"PLAYER_ENTERING_WORLD")
+    local grox=mob(258966,9301,"Slavecrusher Grox")
+    grox.attackFlagPending=true
+    actual={};pings={}
+    assert(AT.RefreshBossActionBar())
+    native(smart and press() or body,{[grox.name]=grox},false)
+    assert(units.target==grox and actual[grox]==8 and pings[1]==grox,
+        "boss actions must not depend on the harm flag immediately after targetexact")
+end
+print("PASS Krol'dok Grox is marked and pinged on the same press even when its attack flag is not ready")
