@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.188 - 2026-11-27
+
+- **Scholomance:** Added Eva Sarkhoff’s pickup and return directions for Doctor Theolen Krastinov, Krastinov's Bag of Horrors, and Kirtonos the Herald. Blood of Innocents remains the summon item, not the quest starter. Fallback hand-ins do not replace live game pins.
+- **Level Guide:** Added the verified pickups for Vivian Lagrave, Get Me Out of Here!, and Buzzbox 525.
+
 ## 1.5.187 - 2026-11-27
 
 - **Riverglades:** Added five pickup locations and seven fallback hand-ins, covering Sergeant Riftan's chain, Drink Up!, Her World, and Frazzlespark's Crate. Drink Up! starts with Innkeeper Zizplink, not the Frothing Mug he gives you.

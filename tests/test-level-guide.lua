@@ -629,6 +629,13 @@ do
     for q,npc in pairs({[94888]="Sergeant Riftan",[94889]="Sergeant Riftan",[96015]="Sergeant Riftan",[95957]="Innkeeper Zizplink",[95975]="Gray Dawnbright"}) do
         assert(real.GetShareQuestStart(q,2548):find(npc,1,true))
     end
+    assert(not real.LevelGuideItemStarts[5384],"provided Blood of Innocents is not a quest starter")
+    assert(not real.LevelGuideQuestGivers[5383],"do not conflate the unused bag quest with 5515")
+    for _,q in ipairs({5382,5515,5384}) do assert(real.GetShareQuestStart(q,1422):find("Eva Sarkhoff",1,true)) end
+    assert(real.GetShareQuestStart(6132,1443):find("Melizza Brimbuzzle",1,true))
+    assert(real.GetShareQuestStart(1003,1439):find("Buzzbox 323",1,true))
+    assert(real.LevelGuideQuestGivers[1003][1][7]==1,"Buzzbox is an object")
+    assert(not (real.GetShareQuestStart(4133,1458) or ""):find("Apothecary Zinge",1,true))
     assert(real.GetShareQuestStart(5213,1423):find("Betina Bigglezink",1,true))
     assert(real.GetShareQuestStart(98423,3065):find("Reliquary of Kings",1,true))
     assert(real.GetShareQuestStart(909,nil):find("Moonshrine Ruins",1,true))
@@ -641,6 +648,9 @@ do
     UnitFactionGroup=function() return "Horde" end
     assert(not (real.GetShareQuestStart(94888,2548) or ""):find("Sergeant Riftan",1,true))
     assert(not (real.GetShareQuestStart(95957,2548) or ""):find("Innkeeper Zizplink",1,true))
+    assert(real.GetShareQuestStart(4133,1458):find("Apothecary Zinge",1,true))
+    assert(not (real.GetShareQuestStart(1003,1439) or ""):find("Buzzbox 323",1,true))
+    assert(real.GetShareQuestStart(5384,1422):find("Eva Sarkhoff",1,true))
     assert(real.GetShareQuestStart(6922,nil):find("Moonshrine Ruins",1,true))
     assert(not real.GetShareQuestStart(98423,3065):find("Reliquary of Kings",1,true))
     assert(real.GetShareQuestStart(781,1412):find("Brambleblade Ravine",1,true))

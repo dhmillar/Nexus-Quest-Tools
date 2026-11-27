@@ -6,6 +6,11 @@
 -- Observed interactions: Efficient Games (https://efficient.games), CC BY 4.0.
 local _,AT=...
 AT.ForeverVerifiedEndpointReferences={
+ -- Eva's observed location on 5382: https://github.com/JIVESCORP/eg-link-output-wowf/blob/c1bf99bc2835bbe1b2dad82fb99f994c0cfffe33/data/wowf/1.60.1.71139/npcs.json
+ -- Exact end identities: https://foreverquestlog.com/quests/5382/ ; https://foreverquestlog.com/quests/5515/ ; https://foreverquestlog.com/quests/5384/
+ [5382]={{1422,.7019,.7383,1,11216,0,"Eva Sarkhoff"}},
+ [5515]={{1422,.7019,.7383,1,11216,0,"Eva Sarkhoff"}},
+ [5384]={{1422,.7019,.7383,1,11216,0,"Eva Sarkhoff"}},
  -- Forever NPC positions: https://github.com/JIVESCORP/eg-link-output-wowf/blob/c1bf99bc2835bbe1b2dad82fb99f994c0cfffe33/data/wowf/1.60.1.71139/npcs.json
  -- All hand-ins observed directly except 96015 and 95975, whose recipients are independently verified:
  -- https://foreverquestlog.com/quests/96015/ ; https://foreverquestlog.com/quests/95975/

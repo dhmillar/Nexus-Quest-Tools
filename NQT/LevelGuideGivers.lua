@@ -8,6 +8,14 @@ local _,AT=...
 -- https://www.wowhead.com/forever/quest=96084/somethings-in-the-water
 -- https://foreverquestlog.com/quests/96084/
 AT.LevelGuideQuestGivers={
+ -- Forever observations: https://github.com/JIVESCORP/eg-link-output-wowf/blob/c1bf99bc2835bbe1b2dad82fb99f994c0cfffe33/data/wowf/1.60.1.71139/npcs.json
+ -- Eva's follow-ups: https://foreverquestlog.com/quests/5515/ ; https://foreverquestlog.com/quests/5384/
+ [5382]={{1422,.7019,.7383,0,11216,"Eva Sarkhoff"}},
+ [5515]={{1422,.7019,.7383,0,11216,"Eva Sarkhoff"}},
+ [5384]={{1422,.7019,.7383,0,11216,"Eva Sarkhoff"}},
+ [4133]={{1458,.4994,.6839,2,5204,"Apothecary Zinge"}},
+ [6132]={{1443,.3384,.5357,0,12277,"Melizza Brimbuzzle"}},
+ [1003]={{1439,.5128,.2458,1,17184,"Buzzbox 323",1}},
  -- Observed Forever offers: https://github.com/JIVESCORP/eg-link-output-wowf/blob/c1bf99bc2835bbe1b2dad82fb99f994c0cfffe33/data/wowf/1.60.1.71139/npcs.json
  [94888]={{2548,0.3066,0.4902,1,258023,"Sergeant Riftan"}},
  [94889]={{2548,0.3066,0.4902,1,258023,"Sergeant Riftan"}},
@@ -2626,7 +2634,6 @@ AT.LevelGuideItemStarts={
  [5361]={13507,{}},
  [5381]={14523,{}},
  [5383]={13543,{}},
- [5384]={13523,{}},
  [5385]={13562,{}},
  [5441]={16114,{}},
  [5462]={13585,{}},
