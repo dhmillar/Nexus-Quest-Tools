@@ -62,7 +62,7 @@ assert(#edits==previous,"no macro edits while locked")
 locked=false;AT.RefreshSmartBuff()
 assert(edits[#edits][1]:find("@party2",1,true))
 auras.party2={19740};AT.RefreshSmartBuff()
-assert(edits[#edits][1]=="#showtooltip","no queued action after coverage is complete")
+assert(edits[#edits][1]=="# No buff to cast","no queued action after coverage is complete")
 -- Two-part Forever names accept the chat separator and spaces, without
 -- matching another character who shares the same first name.
 members.party1.name="Mira"
@@ -200,4 +200,54 @@ do
     auras.player={13163};AT.RefreshSmartBuff();assert(not f.visible)
     print("PASS Hunter travel toggle, group clause, combat Hawk/Shift-Monkey, learned-spell guard, and melee advice")
     print("PASS movable reminder scale, icon-only edit mode, reset and hide when covered")
+end
+
+-- Exercise the real native macro path: queued cast, idle, migration in place,
+-- no repeated writes, no edits during combat, and no changes to other macros.
+do
+    local native={}
+    local writes,creates=0,0
+    function GetMacroInfo(id)
+        local m=native[id]
+        if m then return m.name,m.icon,m.body end
+    end
+    function EditMacro(id,name,asset,body)
+        assert(not locked)
+        writes=writes+1
+        native[id]={name=name,icon=asset or native[id].icon,body=body}
+        return id
+    end
+    function CreateMacro(name,asset,body,personal)
+        assert(not locked and personal)
+        creates=creates+1
+        native[121]={name=name,icon=asset,body=body}
+        return 121
+    end
+    local picked
+    function PickupMacro(id) picked=id end
+    GetCursorInfo=nil
+    local nqt={}
+    assert(loadfile("NQT/Target.lua"))("NQT",nqt)
+    local idle="# No buff to cast"
+    local active="#showtooltip\n/cast [@party1,help,nodead,nocombat] Arcane Intellect"
+    local header="# NQT:smart-buff:v1\n"
+    locked=false
+    native[1]={name="Foreign",icon=134400,body=header..idle}
+    native[121]={name="NQT Smart Buff",icon=134400,body=header..idle}
+    assert(nqt.SyncSmartBuffAction(idle,false))
+    assert(writes==1 and creates==0 and native[121].icon==135987 and native[121].body==header..idle)
+    assert(native[1].icon==134400,"do not change an account macro")
+    assert(nqt.SyncSmartBuffAction(idle,false) and writes==1)
+    assert(nqt.SyncSmartBuffAction(active,false) and native[121].body==header..active and native[121].icon==135987)
+    assert(nqt.SyncSmartBuffAction(idle,false) and native[121].body==header..idle and native[121].icon==135987)
+    native[121].icon=132331
+    assert(nqt.SyncSmartBuffAction(active,false) and native[121].icon==132331,"preserve an explicit custom icon")
+    locked=true
+    local before=writes
+    assert(not nqt.SyncSmartBuffAction(idle,false) and writes==before)
+    locked=false
+    native[121]=nil
+    assert(nqt.SyncSmartBuffAction(idle,false) and creates==0)
+    assert(nqt.SyncSmartBuffAction(idle,true) and creates==1 and picked==121 and native[121].icon==135987)
+    print("PASS Smart Buff native action-bar icon migration, no-action state, custom icon and combat guard")
 end

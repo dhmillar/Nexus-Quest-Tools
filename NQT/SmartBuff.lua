@@ -442,6 +442,8 @@ local function createReminderClicker()
     end)
     return b
 end
+local idleMacro="# No buff to cast"
+
 local function hunterMacro()
     local hawk,monkey,cheetah,pack=spellFor("hawk"),spellFor("monkey"),spellFor("cheetah"),spellFor("pack")
     local clauses={}
@@ -463,11 +465,11 @@ local function hunterMacro()
         add("nocombat",hawk)
     end
     local command="#showtooltip\n/cast "..table.concat(clauses,"; ")
-    if #clauses==0 then return "#showtooltip" end
+    if #clauses==0 then return idleMacro end
     if #command>236 then
         -- Keep one action per press even with long localized spell names.
         -- The 19-byte owned macro header and newline count toward WoW's limit.
-        return hawk and ("#showtooltip\n/cast [@player] !"..hawk.name) or "#showtooltip"
+        return hawk and ("#showtooltip\n/cast [@player] !"..hawk.name) or idleMacro
     end
     return command
 end
@@ -492,7 +494,7 @@ local function hunterMeleeReminder()
 end
 local function body(entry,class,enabled)
     if enabled and class=="HUNTER" then return hunterMacro() end
-    if not entry or not entry.unit then return "#showtooltip" end
+    if not entry or not entry.unit then return idleMacro end
     return "#showtooltip\n/cast [@"..entry.unit..",help,nodead,nocombat] "..entry.name
 end
 function AT.RefreshSmartBuff()

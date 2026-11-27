@@ -156,11 +156,11 @@ local function findMacro()
     local bankStart = limits.MAX_ACCOUNT_MACROS or MAX_ACCOUNT_MACROS or 120
     local bankCount = limits.MAX_CHARACTER_MACROS or MAX_CHARACTER_MACROS or 18
     for i = 1, bankStart + bankCount do
-        local name, _, body = GetMacroInfo(i)
+        local name, texture, body = GetMacroInfo(i)
         if name then
             taken[name] = true
             if i > bankStart and ownedBody(body) then
-                return i, name, body
+                return i, name, body, texture
             end
         end
     end
@@ -232,11 +232,11 @@ local function findNativeMacro(header, labels)
     local bankCount = limits.MAX_CHARACTER_MACROS or MAX_CHARACTER_MACROS or 18
     local taken = {}
     for i = 1, bankStart + bankCount do
-        local name, _, body = GetMacroInfo(i)
+        local name, texture, body = GetMacroInfo(i)
         if not private(name) and type(name) == "string" then taken[name] = true end
         if i > bankStart and not private(body) and type(body) == "string"
             and body:sub(1, #header + 1) == header .. "\n" then
-            return i, name, body
+            return i, name, body, texture
         end
     end
     for _, name in ipairs(labels) do
@@ -244,17 +244,22 @@ local function findNativeMacro(header, labels)
     end
 end
 
-local function syncNative(header, labels, asset, command, create)
+local function syncNative(header, labels, asset, command, create, migrateQuestionIcon)
     if not (GetMacroInfo and CreateMacro and EditMacro) then return false, "WoW's macro editor is unavailable." end
-    local id, name, previous = findNativeMacro(header, labels)
+    local id, name, previous, texture = findNativeMacro(header, labels)
     if not id and not create then return true end
     if not name then return false, "Both names for this Auto Track macro are already in use." end
     local body = header .. "\n" .. command
-    if previous ~= body then
-        if id then pcall(EditMacro, id, name, nil, body)
+    -- Keep a real icon when Smart Buff intentionally has no spell to cast.
+    -- Only replace the old automatic question mark, not a custom icon.
+    local replaceIcon = id and migrateQuestionIcon and not private(texture) and
+        (texture == nil or texture == 134400 or (type(texture) == "string" and
+            texture:lower():find("inv_misc_questionmark", 1, true) ~= nil))
+    if previous ~= body or replaceIcon then
+        if id then pcall(EditMacro, id, name, replaceIcon and asset or nil, body)
         else pcall(CreateMacro, name, asset, body, true) end
-        local updatedID, _, actual = findNativeMacro(header, labels)
-        if not updatedID or actual ~= body then
+        local updatedID, _, actual, updatedTexture = findNativeMacro(header, labels)
+        if not updatedID or actual ~= body or (replaceIcon and (private(updatedTexture) or updatedTexture == texture or updatedTexture == 134400 or updatedTexture == nil)) then
             return false, "WoW did not save the macro. Close /macro and check for a free character macro slot."
         end
         id = updatedID
@@ -262,11 +267,11 @@ local function syncNative(header, labels, asset, command, create)
     return true, nil, id, name
 end
 
-local function pickupNative(header, labels, asset, command)
+local function pickupNative(header, labels, asset, command, migrateQuestionIcon)
     if InCombatLockdown() then return false, "Leave combat before setting up this macro." end
     if not PickupMacro then return false, "WoW's macro editor is unavailable." end
     if GetCursorInfo and GetCursorInfo() then return false, "Clear your cursor before picking up the macro." end
-    local ready, why, id, name = syncNative(header, labels, asset, command, true)
+    local ready, why, id, name = syncNative(header, labels, asset, command, true, migrateQuestionIcon)
     if not ready then return false, why end
     local ok = pcall(PickupMacro, id)
     if not ok or (GetCursorInfo and GetCursorInfo() ~= "macro") then
@@ -276,10 +281,11 @@ local function pickupNative(header, labels, asset, command)
 end
 
 local buffHeader, buffLabels = "# NQT:smart-buff:v1", {"NQT Smart Buff","NQT Buff"}
+local buffIcon = 135987
 function AT.SyncSmartBuffAction(command,pickup)
     if InCombatLockdown and InCombatLockdown() then return false,"Leave combat before setting up Smart Buff." end
-    if pickup then return pickupNative(buffHeader,buffLabels,134400,command) end
-    return syncNative(buffHeader,buffLabels,134400,command,false)
+    if pickup then return pickupNative(buffHeader,buffLabels,buffIcon,command,true) end
+    return syncNative(buffHeader,buffLabels,buffIcon,command,false,true)
 end
 
 local primaryHeader, primaryLabels = "# AutoTrack:skull:v1", {"AT Skull", "AutoTrack Skull"}

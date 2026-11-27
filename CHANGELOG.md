@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.214
+
+- Smart Buff keeps its buff icon on the action bar when nobody needs an eligible buff. Existing question-mark icons migrate in place without changing the cast or replacing custom icons.
+
 ## 1.5.213
 
 - Auto Focus ranks ready turn-ins and in-progress quests together by distance. Manual focus resumes automatic ranking after completion. Added the Sister Rowland hand-in for Something's in the Water and /nqtturnins to inspect ready destinations.
