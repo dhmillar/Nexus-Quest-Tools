@@ -525,13 +525,14 @@ function AT.RefreshSmartBuff()
     if call(InCombatLockdown)==true then return end
     if overlay and not clicker then clicker=createReminderClicker() end
     updateReminderClick(nextAction)
-    local command=body(nextAction,class,enabled)
+    local command=body(nextAction,class,AT.db.enabled~=false)
     if AT.SyncSmartBuffAction and syncedBody~=command then
         if AT.SyncSmartBuffAction(command,false) then syncedBody=command end
     end
 end
 function AT.PickupSmartBuffMacro()
-    if not AT.db or AT.db.enabled==false or AT.db.smartBuffEnabled~=true then return false,"Enable Smart Buff in Classes first." end
+    if not AT.db or AT.db.enabled==false then return false,"Enable NQT first." end
+    if shortClass()~="HUNTER" and AT.db.smartBuffEnabled~=true then return false,"Enable Smart Buff in Classes first." end
     if shortClass()=="ROGUE" then return false,"Rogue poison reminders do not apply or choose poisons for you." end
     if not plans[shortClass()] then return false,"No supported buff spells for this class." end
     AT.RefreshSmartBuff()
@@ -657,12 +658,13 @@ function AT.InitSmartBuff()
         if event=="UNIT_SPELLCAST_SUCCEEDED" and unit~="player" then return end
         if event=="UNIT_AURA" and (type(unit)~="string" or not (unit=="player" or unit:match("^party%d+$") or unit:match("^raid%d+$"))) then return end
         if event=="PLAYER_REGEN_ENABLED" or event=="GROUP_ROSTER_UPDATE" then AT.RefreshSmartBuff();return end
-        if AT.db.smartBuffEnabled and shortClass()=="HUNTER" and
-            (event=="UNIT_AURA" and unit=="player" or event=="PLAYER_TARGET_CHANGED" or event=="UNIT_TARGET" and unit=="target") then
+        local hunter=AT.db.enabled~=false and shortClass()=="HUNTER"
+        if hunter and (event=="UNIT_AURA" and unit=="player" or AT.db.smartBuffEnabled and
+            (event=="PLAYER_TARGET_CHANGED" or event=="UNIT_TARGET" and unit=="target")) then
             AT.RefreshSmartBuff();return
         end
         if event=="PLAYER_TARGET_CHANGED" or event=="UNIT_TARGET" then return end
-        if not AT.db.smartBuffEnabled or queued or not (C_Timer and C_Timer.After) then return end
+        if (not AT.db.smartBuffEnabled and not hunter) or queued or not (C_Timer and C_Timer.After) then return end
         queued=true
         C_Timer.After(.3,function() queued=nil;AT.RefreshSmartBuff() end)
     end)

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.217
+
+- The Hunter Smart Buff action-bar macro still switches aspects when Smart Buff reminders are off. Existing idle buttons recover without re-placement or enabling reminder popups.
+
 ## 1.5.216
 
 - Hunter Smart Buff shows the next aspect through WoW's native macro display, with Hawk only as the idle fallback. A direct player aura lookup preserves the travel toggle when an unrelated buff makes the full list unreadable. No indoor check or protected edits in combat.

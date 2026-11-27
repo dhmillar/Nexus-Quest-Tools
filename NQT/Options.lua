@@ -317,7 +317,7 @@ local function buildPanel()
     option(classes, "petBarEnabled", "Pet Bar", -294,
         "Shows only your active pet’s overhead health where supported. Uses the pet category without changing friendly player or NPC settings. Bright green at 50% and above, red below 50%.")
     option(classes, "smartBuffEnabled", "Smart Buff reminders", -2,
-        "Shows missing buffs for your class. Hunters use their action-bar macro for Hawk in combat, Pack or Cheetah out of combat, and Shift for Monkey in combat.")
+        "Shows missing buffs for your class. Turning off reminders does not disable the Hunter action-bar macro.")
     buffPreviewButton = setupButton(classes,"Preview / Move",158,397,-3,function()
         if AT.SetSmartBuffPreview then AT.SetSmartBuffPreview(not AT.IsSmartBuffPreview());refreshPanel() end
     end)

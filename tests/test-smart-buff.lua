@@ -218,6 +218,24 @@ do
     assert(f.visible and #edits==count,"confirmed melee threat shows advice, not a protected write")
     auras.player={13163};AT.RefreshSmartBuff();assert(not f.visible)
     print("PASS Hunter travel toggle, group clause, combat Hawk/Shift-Monkey, learned-spell guard, and melee advice")
+    locked=false
+    -- The reminders checkbox must not turn an already installed Hunter button into a no-op.
+    AT.db.smartBuffEnabled=false
+    auras.player={13165}
+    AT.RefreshSmartBuff()
+    assert(not f.visible and not click.visible)
+    assert(edits[#edits][1]:find("!Aspect of the Cheetah",1,true))
+    assert(AT.PickupSmartBuffMacro(),"Hunter can place the macro with reminders off")
+    auras.player={5118}
+    frames[2].scripts.OnEvent(frames[2],"UNIT_AURA","player")
+    assert(edits[#edits][1]:find("[nocombat,@player] !Aspect of the Hawk",1,true))
+    assert(not edits[#edits][1]:find("Cheetah",1,true) and not f.visible)
+    AT.db.enabled=false
+    AT.RefreshSmartBuff()
+    assert(edits[#edits][1]=="# No buff to cast" and not AT.PickupSmartBuffMacro())
+    AT.db.enabled=true
+    AT.db.smartBuffEnabled=true
+    print("PASS Hunter action-bar toggle works with reminders switched off; master disable still stops it")
     print("PASS movable reminder scale, icon-only edit mode, reset and hide when covered")
 end
 
