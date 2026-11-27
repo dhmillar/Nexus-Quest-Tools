@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.233
+
+- Krol'dok boss targeting uses only a currently verified living boss and no longer does a blind exact-name search or emits existence predicates. Other dungeon paths are unchanged.
+
 ## 1.5.232
 
 - The stock minimap can dock over the dungeon map even when the fullscreen map hides its normal parent. Closing the map restores the stock parent, anchor, and zoom. SexyMap's path is unchanged.

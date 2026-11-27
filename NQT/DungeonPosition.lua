@@ -1957,7 +1957,8 @@ do
                 local key=guid or label
                 local attack=safe(UnitCanAttack,"player",unit)
                 if reachable and boss and key and not confirmed[nameKey or ""]
-                    and not confirmed[rosterName[npc] or ""] and not candidateGUIDs[key] and (not knownDead or dead~=true)
+                    and not confirmed[rosterName[npc] or ""] and not candidateGUIDs[key]
+                    and (id~=3039 and (not knownDead or dead~=true) or id==3039 and knownDead and dead==false)
                     and ordinary(attack) and attack==true then
                     if label and label~="" then
                         local distance,checked=safe(UnitDistanceSquared,unit)
@@ -2140,6 +2141,23 @@ do
             if not defeatedByName[key] and not confirmed[key] then kept[#kept+1]=label end
         end
         fallback,fallbackCount=kept,#kept
+        if id==3039 then
+            -- The Forever parser has returned inconsistent exists/noexists
+            -- results in this dungeon. Never probe the name-only roster.
+            if not pick then
+                return true,"/stopmacro [combat]"..clearDead,"No living Krol'dok boss could be verified."
+            end
+            local unit=pick.unit
+            local alive="[@"..unit..",harm,nodead]"
+            local action="/stopmacro [combat]"
+            if unit~="target" then action=action.."\n/target "..alive end
+            if pick.index then action=action.."\n/tm "..alive.." ~"..pick.index end
+            if AT.db.bossMarkPing then action=action.."\n/ping "..alive.." Attack" end
+            action=action.."\n/atmob k"..(pick.index or 0)..":"..planFor(pick.label:lower())..clearDead
+            if maxBytes and #action>maxBytes then return true,nil,"Boss action does not fit." end
+            lastBossMarkNote="Prepared a verified living boss: "..pick.label.."."
+            return true,action
+        end
         if stockBatch>fallbackCount then stockBatch=1 end
         local labels={}
         if pick then
@@ -2230,7 +2248,9 @@ do
         if index~=0 and not validRaidIcon(index) then return end
         local dungeon,id=context()
         if not dungeon or safe(InCombatLockdown)==true then return end
-        if safe(SecureCmdOptionParse,"[@target,exists,nodead] yes")~="yes" then return end
+        if id==3039 then
+            if safe(UnitExists,"target")~=true or safe(UnitIsDeadOrGhost,"target")~=false then return end
+        elseif safe(SecureCmdOptionParse,"[@target,exists,nodead] yes")~="yes" then return end
         local observed,readable=get("target",GetRaidTargetIndex)
         local guid=safe(UnitGUID,"target")
         local label=safe(UnitName,"target")
@@ -2368,6 +2388,12 @@ do
                 end
             end
             if not AT.db or not AT.db.bossAutoMark then return end
+            if event=="NAME_PLATE_UNIT_REMOVED" or event=="PLAYER_TARGET_CHANGED" then
+                local _,id=context()
+                if id==3039 and safe(InCombatLockdown)~=true and AT.RefreshBossActionBar then
+                    AT.RefreshBossActionBar()
+                end
+            end
             if event=="RAID_TARGET_UPDATE" then markRevision=markRevision+1 end
             if event=="RAID_TARGET_UPDATE" and safe(InCombatLockdown)~=true then
                 -- The action-bar body is prepared between presses. Rebuild

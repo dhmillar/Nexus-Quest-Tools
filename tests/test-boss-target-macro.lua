@@ -186,7 +186,15 @@ local function native(text,lookup,refuse)
         local target=units.target
         local live=target and not target.dead
         local hostile=live and not target.friendly and not target.attackFlagPending
-        if line=="/stopmacro [combat]" or line=="/stopmacro [btn:2][combat]" then
+        local action,token=line:match("^/(%a+) %[@([%w]+),harm,nodead%]")
+        if action then
+            local chosen=units[token]
+            if chosen and not chosen.dead and not chosen.friendly and not chosen.attackFlagPending then
+                if action=="target" then units.target=chosen
+                elseif action=="ping" then pings[#pings+1]=chosen
+                elseif action=="tm" and not actual[chosen] then actual[chosen]=tonumber(line:match("~(%d)$")) end
+            end
+        elseif line=="/stopmacro [combat]" or line=="/stopmacro [btn:2][combat]" then
             if combat then return end
         elseif line=="/cleartarget" then
             if not refuse then priorTarget,target=target,nil; units.target=target end
@@ -273,7 +281,7 @@ for _,id in ipairs(ids) do
             units.nameplate1=mob(record[1],909,record[2])
             units.nameplate1.npc=record[1]
             assert(AT.RefreshBossActionBar())
-            assert(body:find("/targetexact "..record[2],1,true),
+            assert(body:find(id==3039 and "/target [@nameplate1,harm,nodead]" or "/targetexact "..record[2],1,true),
                 "missing boss '"..record[2].."' in instance "..id..": "..body)
             assert(#body<=255)
         end
@@ -629,102 +637,51 @@ native(body,{[long.name]=long},false)
 assert(units.target==nil and next(actual)==nil and #pings==0)
 print("PASS both macro entry points clear corpses, including stale and recovery results; Smart Target continues to a living boss and long names fit")
 
--- A boss already confirmed dead must not be selected again just because
--- its name is next in the native fallback roster.
+-- Krol'dok has no blind named probes when the client cannot certify life.
 for _,smart in ipairs({false,true}) do
     units={};kind="none";ui[1].scripts.OnEvent(ui[1],"PLAYER_ENTERING_WORLD")
     kind="party";current=3039;ui[1].scripts.OnEvent(ui[1],"PLAYER_ENTERING_WORLD")
-    local dead=mob(258966,9201,"Slavecrusher Grox")
-    local alive=mob(258972,9202,"Twilight Commander Zarmok")
-    dead.dead=true
-    units.target=dead
+    local grox=mob(258966,9201,"Slavecrusher Grox")
+    local z=mob(258972,9202,"Twilight Commander Zarmok")
+    grox.dead=true;units.target=grox
     actual={};pings={}
+    assert(AT.RefreshBossActionBar())
+    local miss=smart and press() or body
+    assert(not miss:find("/target",1,true) and not miss:find("exists",1,true))
+    native(miss,{[grox.name]=grox,[z.name]=z},false)
+    assert(not units.target and next(actual)==nil and #pings==0)
+    units.nameplate1=z
     assert(AT.RefreshBossActionBar())
     local action=smart and press() or body
-    assert(not action:find(dead.name,1,true),action)
-    native(action,{[dead.name]=dead,[alive.name]=alive},false)
-    assert(units.target==alive and actual[alive]==8 and pings[1]==alive and not actual[dead])
-    combat=true
-    native(action,{[alive.name]=alive},false)
-    combat=false
-    assert(#pings==1,"combat stop must be reflected by the test environment")
-end
-print("PASS Krol'dok Stronghold skips known dead roster bosses, chooses and marks the living boss, and respects combat stop")
-
--- Krol'dok boss acquisition succeeds before the harm flag becomes usable.
--- Both native actions use the live target, independent of the attack flag.
-for _,smart in ipairs({false,true}) do
-    units={};kind="none";ui[1].scripts.OnEvent(ui[1],"PLAYER_ENTERING_WORLD")
-    kind="party";current=3039;ui[1].scripts.OnEvent(ui[1],"PLAYER_ENTERING_WORLD")
-    local grox=mob(258966,9301,"Slavecrusher Grox")
-    grox.attackFlagPending=true
-    actual={};pings={}
+    assert(action:find("/target [@nameplate1,harm,nodead]",1,true) and not action:find("exists",1,true))
+    native(action,{},false)
+    assert(units.target==z and actual[z]==8 and pings[1]==z)
+    local before=#pings
+    z.dead=true
+    native(action,{},false)
+    assert(not units.target and #pings==before,"cached macro must not retarget a boss after it dies")
+    z.dead=false
+    local old=UnitIsDeadOrGhost
+    UnitIsDeadOrGhost=function()return secret end
     assert(AT.RefreshBossActionBar())
-    native(smart and press() or body,{[grox.name]=grox},false)
-    assert(units.target==grox and actual[grox]==8 and pings[1]==grox,
-        "boss actions must not depend on the harm flag immediately after targetexact")
+    assert(not (smart and press() or body):find("/target ",1,true),"unknown death status cannot be guessed")
+    UnitIsDeadOrGhost=old
 end
-print("PASS Krol'dok Grox is marked and pinged on the same press even when its attack flag is not ready")
-
--- Keep a real death after the corpse's unit token is no longer readable.
 do
     units={};kind="none";ui[1].scripts.OnEvent(ui[1],"PLAYER_ENTERING_WORLD")
     kind="party";current=3039;ui[1].scripts.OnEvent(ui[1],"PLAYER_ENTERING_WORLD")
-    local grox=mob(258966,9401,"Slavecrusher Grox")
-    grox.dead=true
-    units.target=grox
-    ui[1].scripts.OnEvent(ui[1],"UNIT_HEALTH","target")
-    units={}
-    assert(AT.RefreshBossActionBar())
-    assert(not body:find(grox.name,1,true) and not press():find(grox.name,1,true),"corpse leaves live token list, not the remembered death list")
-    ui[1].scripts.OnEvent(ui[1],"ENCOUNTER_END",1,"Twilight Commander Zarmok",1,5,0)
-    assert(press():find("Twilight Commander Zarmok",1,true),"a failed encounter is not a kill")
-    ui[1].scripts.OnEvent(ui[1],"ENCOUNTER_END",1,"Twilight Commander Zarmok",1,5,1)
-    assert(not press():find("Twilight Commander Zarmok",1,true),"a confirmed encounter kill is excluded")
-    grox.dead=false;units.nameplate1=grox
-    assert(press():find(grox.name,1,true),"live proof supersedes remembered death")
-    units={};kind="none";ui[1].scripts.OnEvent(ui[1],"PLAYER_ENTERING_WORLD")
-    kind="party";current=3039;ui[1].scripts.OnEvent(ui[1],"PLAYER_ENTERING_WORLD")
-    assert(press():find("Twilight Commander Zarmok",1,true),"a fresh run does not carry deaths from the last run")
-end
-print("PASS confirmed Krol'dok deaths survive nameplate loss; a wipe does not count and living proof or instance exit resets the record")
-
--- Reproduce the screenshot: the currently loaded Journal has a red kill
--- indicator for Zarmok, but Blizzard masks the target's Lua name/death status.
-do
-    units={};kind="none";ui[1].scripts.OnEvent(ui[1],"PLAYER_ENTERING_WORLD")
-    kind="party";current=3039;ui[1].scripts.OnEvent(ui[1],"PLAYER_ENTERING_WORLD")
+    local z=mob(258972,9501,"Twilight Commander Zarmok");units.target=z
     local run={closed=false}
     local reportedMap=3039
-    local old=_G.ForeverDungeonJournal_NS
-    _G.ForeverDungeonJournal_NS={
+    local old=ForeverDungeonJournal_NS
+    ForeverDungeonJournal_NS={
         RunLog={InsideMap=function()return reportedMap end,Current=function()return run end},
-        RunLogKilledThisVisit=function(r,name) return r==run and name=="Twilight Commander Zarmok" end
+        RunLogKilledThisVisit=function(r,name)return r==run and name==z.name end
     }
-    local corpse=mob(258972,9501,"Twilight Commander Zarmok")
-    units.target=corpse
-    -- Deliberately put stale living metadata on the client's target.
     assert(AT.RefreshBossActionBar())
-    assert(not body:find(corpse.name,1,true) and not press():find(corpse.name,1,true),"do not exact-target a boss the current run already records as defeated")
+    assert(not body:find("/tm ",1,true) and not press():find("/ping ",1,true),"same-run Journal evidence wins over stale live metadata")
     reportedMap=2970
-    assert(press():find(corpse.name,1,true),"a different map is not current-run evidence")
-    _G.ForeverDungeonJournal_NS=old
-    units={}
-    ui[1].scripts.OnEvent(ui[1],"PARTY_KILL","Player-1","Creature-0-0-0-0-258966-000000")
-    assert(not press():find("Slavecrusher Grox",1,true),"public kill signal works without Dungeon Journal")
-    ui[1].scripts.OnEvent(ui[1],"BOSS_KILL",1,"Twilight Commander Zarmok")
-    assert(not press():find(corpse.name,1,true),"public BOSS_KILL works independently")
+    assert(press():find("/ping [@target,harm,nodead]",1,true),"unrelated Journal map must not suppress a live boss")
+    ForeverDungeonJournal_NS=old
 end
-print("PASS current Krol'dok run excludes the Journal-confirmed corpse and accepts readable native kill events")
-
-do
-    units={};kind="none";ui[1].scripts.OnEvent(ui[1],"PLAYER_ENTERING_WORLD")
-    kind="party";current=3039;ui[1].scripts.OnEvent(ui[1],"PLAYER_ENTERING_WORLD")
-    ui[1].scripts.OnEvent(ui[1],"ENCOUNTER_END",3451,"Overseer Mugg",1,5,0)
-    assert(press():find("Overlord Mugg",1,true),"wipe must not tag the exact boss as dead")
-    ui[1].scripts.OnEvent(ui[1],"ENCOUNTER_END",3451,"Overseer Mugg",1,5,1)
-    ui[1].scripts.OnEvent(ui[1],"ENCOUNTER_END",3453,"Handler Ashka",1,5,1)
-    local b=press()
-    assert(not b:find("Overlord Mugg",1,true) and not b:find("War Handler Ashka",1,true),"encounter names do not need to match the physical boss name")
-end
-print("PASS exact instance-bound Krol'dok encounter IDs match Mugg and Ashka even when event display names differ")
+print("PASS Krol'dok: both buttons target and act only on a verified living unit, skip missing/hidden/dead and then reject a stale cached boss that died")
