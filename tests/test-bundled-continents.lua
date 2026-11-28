@@ -58,10 +58,11 @@ for w=0,1 do
     local tile=d.tiles[k]
     if tile and d.tiles[k+d.ny] then
       local m,z=unpackTile(tile)
-      local right=unpackTile(d.tiles[k+d.ny])
+      local right,zright=unpackTile(d.tiles[k+d.ny])
       for j=1,67 do
        local a=m[66*67+j]
-       if a and a%2==1 and right[j] and math.floor(right[j]/2)%2==1 then
+       if a and a%2==1 and right[j] and math.floor(right[j]/2)%2==1
+           and (not d.layerTransit or z[66*67+j]%2==0 and zright[j]%2==0) then
           spawnX=(d.tx+math.floor((k-1)/d.ny))*1600/3+66.5*step
           spawnY=(d.ty+(k-1)%d.ny)*1600/3+(j-.5)*step
           spawnZ=z[66*67+j]
@@ -82,6 +83,43 @@ for w=0,1 do
  spawnZ=spawnZ+120
  assert(not AT.GetBundledWalkingAPI(from),"wrong height rejected")
  print("PASS real terrain seam and world isolation",w)
+end
+
+-- Real licensed continent geometry includes reciprocally connected lower
+-- edges in columns where another elevation shares the same map pixel.
+for w=0,1 do
+ world=w
+ local d=D[w]
+ assert(d.layerTransit)
+ local from,through,to
+ for k=1,d.nx*d.ny do
+    if d.tiles[k] then
+      local m,z=unpackTile(d.tiles[k])
+      for j=1,65*67 do
+       local a,b,c=m[j],m[j+67],m[j+134]
+       if a and b and c and a%2==1 and b%4==3 and math.floor(c/2)%2==1
+          and z[j]%2==0 and z[j+67]%2==1 and z[j+134]%2==0 then
+          spawnX=(d.tx+math.floor((k-1)/d.ny))*1600/3+(math.floor((j-1)/67)+.5)*step
+          spawnY=(d.ty+(k-1)%d.ny)*1600/3+((j-1)%67+.5)*step
+          spawnZ=z[j]
+          from,through,to=point(spawnX,spawnY),point(spawnX+step,spawnY),point(spawnX+2*step,spawnY)
+          break
+       end
+      end
+    end
+    if from then break end
+ end
+ assert(from and through and to,"real lower layer transit fixture")
+ local api=assert(AT.GetBundledWalkingAPI(from))
+ local path
+ assert(api.WalkPath("transit",from,to,function(p)path=p end));drain()
+ assert(path and #path.waypoints==3 and math.abs(path.yards-2*step)<.01,"real edge through base column")
+ local bad,reason=api.WalkPath("ambiguous endpoint",from,through,function()error("ambiguous floor accepted")end)
+ assert(not bad and reason=="offmesh","don't direct player to a 2D endpoint with ambiguous height")
+ spawnX=spawnX+step
+ local origin=point(spawnX,spawnY)
+ assert(not AT.GetBundledWalkingAPI(origin),"don't start on an unverified floor")
+ print("PASS real base-edge transit and ambiguous endpoints rejected",w)
 end
 
 -- Deterministic 131-cell corridor forces multiple projection frames.

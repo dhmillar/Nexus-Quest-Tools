@@ -91,14 +91,16 @@ local function bits(D,x,y)
     if not mask or mask==0 or not h then return end
     local z=l+256*h
     if z>=32768 then z=z-65536 end
-    return mask,z
+    local layerFlag=D.layerTransit and z%2 or 0
+    return mask,z-layerFlag,layerFlag==1
 end
 local function transform(D,point,checkHeight)
     local world,x,y=project(point)
     if not D or world~=D.world then return end
     local X,Y=floor(x/TILE*D.cells-D.tx*D.cells),floor(y/TILE*D.cells-D.ty*D.cells)
-    local mask,z=bits(D,X,Y)
-    if not mask then return end
+    local mask,z,layered=bits(D,X,Y)
+    -- Route through a proven base edge but never guess an ambiguous endpoint floor.
+    if not mask or layered then return end
     if checkHeight then
         local px,py,az,area=call(UnitPosition,"player")
         if not(finite(area) and area==world and finite(px) and finite(py) and finite(az)

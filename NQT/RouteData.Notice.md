@@ -8,7 +8,7 @@ Corresponding input and build instructions:
 - Upstream [terrain bake and third-party attribution](https://github.com/cjber/shortest-path-forever/blob/9b0058ab4b8913196b8899d87952958e3f49bf24/THIRD_PARTY.md) and [baker source](https://github.com/cjber/shortest-path-forever/tree/9b0058ab4b8913196b8899d87952958e3f49bf24/tools/baker).
 - From the tagged NQT repository, run `node tools/import-spf-grid.cjs <directory-containing-both-files> NQT/NQTDBRouteTiles.lua`.
 
-The upstream files describe terrain baked from Forever build 71037 with TrinityCore e3916b2adcf2f8a70ae33817fc57b6c0266e2fb0. NQT keeps the dry base grid only and discards ambiguous floors, one-way edges, drops and restricted clearance. It includes no upstream runtime, Polestar trails, Blizzard client files, world textures, or transportation data. NQT's own solver reads the converted tile data without loading Shortest Path Forever.
+The upstream files describe terrain baked from Forever build 71037 with TrinityCore e3916b2adcf2f8a70ae33817fc57b6c0266e2fb0. NQT keeps dry base edges only and discards one-way edges, drops and restricted clearance. The original Zephras slice discards cells with stacked layers. The newer continent grids mark verified lower-floor edges for transit only and never use a stacked cell as an unverified start or destination. It includes no upstream runtime, Polestar trails, Blizzard client files, world textures, or transportation data. NQT's own solver reads the converted tile data without loading Shortest Path Forever.
 
 ## Eastern Kingdoms and Kalimdor
 
@@ -16,8 +16,8 @@ The two continent payloads, `NQTDBRouteWorld0.lua` and `NQTDBRouteWorld1.lua`, a
 
 ```sh
 node tools/verify-spf-continent-source.cjs /path/to/upstream/Nav
-node tools/import-spf-grid.cjs /path/to/upstream/Nav NQT/NQTDBRouteWorld0.lua 0
-node tools/import-spf-grid.cjs /path/to/upstream/Nav NQT/NQTDBRouteWorld1.lua 1
+node tools/import-spf-grid.cjs /path/to/upstream/Nav NQT/NQTDBRouteWorld0.lua 0 --layer-transit
+node tools/import-spf-grid.cjs /path/to/upstream/Nav NQT/NQTDBRouteWorld1.lua 1 --layer-transit
 ```
 
 The same reciprocal dry-step filters apply. Completely empty tiles are omitted. The continent files store run-length encoded empty cells, direction masks, and height deltas; the client only decodes tiles needed for the current search. The route engine does not load Shortest Path Forever or Polestar.

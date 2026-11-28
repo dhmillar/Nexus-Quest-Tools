@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.270 - 2026-11-28
+
+- Added 37,482 continent terrain cells as verified lower-floor transit. Routes may cross them along clear reciprocal dry edges, but NQT does not pick an ambiguous floor as a start or destination.
+- The coverage audit reports transit-only cells separately instead of counting them as routable quest destinations.
+
 ## 1.5.269 - 2026-11-28
 
 - NQTDB adds 301 likely quest starts. Level Guide and Share Verify label historical starter relationships as likely, use only independently observed Forever positions, and preserve confirmed start sources.

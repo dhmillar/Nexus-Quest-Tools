@@ -10,20 +10,27 @@ function readWorld(w){
  const [tx,ty,nx,ny,cells]=["tx","ty","nx","ny","cells"].map(read);
  if(cells!==n||![tx,ty,nx,ny].every(Number.isSafeInteger))throw Error("Invalid grid header");
  const tiles=new Map();
+ const layerTransit=text.includes("layerTransit=true");
  for(const m of text.matchAll(/^ \[(\d+)\]=(.*?),\r?$/gms)){
   const tile=Buffer.alloc(n*n);
   if(w===2991){
    const cells=[...m[2].matchAll(/\\(\d{3})/g)].map(a=>+a[1]);
    if(cells.length!==3*n*n)throw Error("Invalid Zephras payload");
-   for(let i=0;i<n*n;i++)tile[i]=cells[i*3];
+   for(let i=0;i<n*n;i++)tile[i]=cells[i*3]?(layerTransit&&cells[i*3+1]%2?2:1):0;
   }else{
    const encoded=m[2].match(/^"([A-Za-z0-9+/]+)"$/)?.[1];
    if(!encoded)throw Error("Invalid continent tile");
-   let pos=0,cell=0;
+   let pos=0,cell=0,h=0;
    while(pos<encoded.length){
     const a=alphabet.indexOf(encoded[pos++]),b=alphabet.indexOf(encoded[pos++]),c=alphabet.indexOf(encoded[pos++]);
     if(a===0)cell+=b*64+c;
-    else {tile[cell++]=(a-1)*64+b;if(c===63)pos+=3;}
+    else{
+     if(c===63){
+      const x=alphabet.indexOf(encoded[pos++])*4096+alphabet.indexOf(encoded[pos++])*64+alphabet.indexOf(encoded[pos++]);
+      h=x%2===0?x/2:-(x+1)/2;
+     }else h+=c-31;
+     tile[cell++]=(a-1)*64+b?(layerTransit&&h%2!==0?2:1):0;
+    }
    }
    if(cell!==n*n||pos!==encoded.length)throw Error("Invalid tile length");
   }
@@ -40,7 +47,9 @@ function status(v){
  if(x<0||y<0||x>=w.nx*n||y>=w.ny*n)return "beyondGrid";
  const t=w.tiles.get(Math.floor(x/n)*w.ny+Math.floor(y/n)+1);
  if(!t)return "noDryTile";
- if(t[x%n*n+y%n])return "dryCell";
+ const cell=t[x%n*n+y%n];
+ if(cell===2)return "layerTransitOnly";
+ if(cell===1)return "dryCell";
  return "maskedCell";
 }
 const seen=new Map();

@@ -1,6 +1,8 @@
 "use strict";
 const fs=require("node:fs"), z=require("node:zlib"), path=require("node:path");
-const [src,out,arg,explain]=process.argv.slice(2);
+const [src,out,arg,...extra]=process.argv.slice(2);
+const transit=extra.includes("--layer-transit");
+const explain=extra.find(a=>a!=="--layer-transit");
 const world=arg===undefined?2991:Number(arg);
 if(![0,1,2991].includes(world))throw Error("unsupported world");
 const prefix="Nav"+world;
@@ -120,9 +122,9 @@ const W=ny*n,H=nx*n;
 function slot(X,Y){
  if(X<0||Y<0||X>=H||Y>=W)return;
  const tile=tiles[Math.floor(X/n)*ny+Math.floor(Y/n)+1],cell=X%n*n+Y%n;
- if(tile&&(tile.values[cell]>>8)===1&&!tile.floors.has(cell))return [tile,cell];
+ if(tile&&(tile.values[cell]>>8)===1&&(transit||!tile.floors.has(cell)))return [tile,cell];
 }
-let edges=0,nodes=0;
+let edges=0,nodes=0,layerNodes=0;
 const payload={};
 for(const [key,t] of Object.entries(tiles)){
  const k=+key-1;const bin=Buffer.alloc(cap*3);
@@ -139,13 +141,17 @@ for(const [key,t] of Object.entries(tiles)){
   }
   if(mask){
    nodes++;
+   const layer=transit&&t.floors.has(j);
+   if(layer)layerNodes++;
    bin[j*3]=mask;
-   bin.writeInt16LE(t.heights[j]*h,j*3+1);
+   bin.writeInt16LE(t.heights[j]*h+(layer?1:0),j*3+1);
   }
  }
  if(bin.some(Boolean)||world===2991)payload[key]=bin;
 }
 if((world===2991&&Object.keys(payload).length!==25)||edges<20000||nodes<4000)throw Error("unexpected converted coverage: "+[Object.keys(payload).length,nodes,edges]);
+if(transit&&h%2!==0)throw Error("Layer transit flags require even height step");
+if(explain&&transit)throw Error("Run the masked-cell audit without layer transit");
 if(explain){
  const summary={},T=1600/3;
  const evidence=JSON.parse(fs.readFileSync(explain,"utf8")).evidence;
@@ -208,11 +214,11 @@ if(world!==2991){
  "-- Derived dry ground grid from Shortest Path Forever v1.49.2; see RouteData.Notice.md.",
  "local _,AT=...","AT.NQTDB=AT.NQTDB or {}","AT.NQTDB.RouteWorlds=AT.NQTDB.RouteWorlds or {}",
  "AT.NQTDB.RouteWorlds["+world+"]={world="+world+",cells="+n+",nx="+nx+",ny="+ny+",tx="+cx+",ty="+cy+",",
- ' navigationBuild=71037, codec="nq1", tiles={'];
+ ' navigationBuild=71037, codec="nq1", '+(transit?'layerTransit=true, ':'')+'tiles={'];
  for(const [key,bin] of Object.entries(payload))lines.push(" ["+key+"]="+JSON.stringify(encode(bin))+",");
  lines.push(" }}","");
  fs.writeFileSync(out,lines.join("\n"));
- console.log({world,tiles:Object.keys(payload).length,nodes,edges,bytes:fs.statSync(out).size});
+ console.log({world,tiles:Object.keys(payload).length,nodes,layerNodes,edges,bytes:fs.statSync(out).size});
 }else{
 const lua=s=>'"'+[...s].map(b=>"\\"+String(b).padStart(3,"0")).join("")+'"';
 const lines=["-- SPDX-License-Identifier: GPL-3.0-or-later","-- Derived from Shortest Path Forever v1.49.2 by cjber and contributors.",
@@ -220,7 +226,7 @@ const lines=["-- SPDX-License-Identifier: GPL-3.0-or-later","-- Derived from Sho
  "-- NQT conversion: dry reciprocal base steps only. This module contains derived grid facts, not upstream code.",
  "local _,AT=...","AT.NQTDB=AT.NQTDB or {}","AT.NQTDB.RouteTiles={",
  " world=2991, cells="+n+", nx="+nx+", ny="+ny+", tx="+cx+", ty="+cy+",",
- " navigationBuild=71037, tiles={"];
+ " navigationBuild=71037, "+(transit?"layerTransit=true, ":"")+"tiles={"];
 for(const [key,b] of Object.entries(payload)){
  const fragments=[];
  for(let i=0;i<b.length;i+=1500)fragments.push(lua(b.subarray(i,i+1500)));
