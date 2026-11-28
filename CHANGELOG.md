@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.260 - 2026-11-28
+
+- Rank Quest preserves the creature ID from confirmed kill objectives through portrait lookup.
+- Adds 82 observed creature models and quest-specific corpse-source references for 499 quest/item pairs, including sources that did not previously show a portrait. No Questie installation required.
+
 ## 1.5.259 - 2026-11-28
 
 - Restores **Use Classic drop rates** in Rank Quest for all players, enabled by default.

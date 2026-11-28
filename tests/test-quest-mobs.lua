@@ -93,3 +93,18 @@ do
     assert(not AT.GetQuestObjectiveNPC(94887,{type="event"},"Find Twilight's Shroud"))
     print("PASS exact NPC objective IDs and portraits for find, talk, rescue and escort; reject items, areas and mismatches")
 end
+
+do
+    GetLocale=function()return "enGB" end
+    local name,id=AT.GetQuestKillMobName(95789,{type="monster",npcID=259987},"Saltseer Manhunters slain: 0/3")
+    assert(name=="Saltseer Manhunter" and id==259987)
+    local model,picked=AT.GetQuestMobDisplayID(name,true,95789,nil,id)
+    assert(model and picked==id,"preserve a confirmed native ID through portrait lookup")
+    assert(AT.QuestMobData.creatures[857][5]==15114,"new observed portrait not a placeholder")
+    local exact=AT.GetQuestDropMobNames(752,18)
+    assert(exact and #exact==1 and exact[1]=="Defias Thug","observed source scoped to quest and collected item")
+    local display,source=AT.GetQuestMobDisplayID(exact[1],true,18,752)
+    assert(display==129962 and source==38,"collect portrait comes from exact source")
+    assert(not AT.GetQuestDropMobNames(999900,18))
+    print("PASS added real kill and collect portraits, enGB, exact NPC and quest/item identity")
+end

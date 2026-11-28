@@ -6,7 +6,7 @@ local function pos(value)
     return public(value,"number") and value>0 and value%1==0
 end
 local function english()
-    return GetLocale and GetLocale()=="enUS"
+    local locale=GetLocale and GetLocale();return locale=="enUS" or locale=="enGB"
 end
 local function normalize(name)
     if not public(name,"string") then return end
@@ -189,21 +189,31 @@ function AT.GetQuestKillMobName(qid,objective,label)
     if not public(kind,"string") or (kind~="monster" and kind~="kill") then return end
     local line=cleanObjective(label)
     if not line or line=="" then return end
+    for _,verb in ipairs(npcPrefixes) do if line:find(verb.." ",1,true)==1 then return end end
+    for _,verb in ipairs(npcSuffixes) do
+        if line:match(" "..verb.."[%.!]?$") then return end
+    end
     local data=AT.QuestMobData
-    local exact=data and data.killLabels[qid] and data.killLabels[qid][line]
-    if exact then local e=mob(exact);return e and e[1] end
     local subject=killSubject(line) or (kind=="kill" and line)
-    if not subject then return end
-    local live
     for _,key in ipairs({"npcID","creatureID","monsterID"}) do
         local candidate=objective[key]
-        if pos(candidate) then live=candidate;break end
+        if pos(candidate) then
+            local e=mob(candidate)
+            if subject then
+                if e and matches(e[1],subject) then return e[1],candidate end
+                return
+            end
+            local catalog=AT.ForeverLevelGuideQuests
+            local quest=catalog and catalog[qid]
+            for _,o in ipairs(quest and quest[10] or {}) do
+                if o[1]==1 and o[2]==candidate and e then return e[1],candidate end
+            end
+            break
+        end
     end
-    if live then
-        local e=mob(live)
-        if e and matches(e[1],subject) then return e[1] end
-        return
-    end
+    local exact=data and data.killLabels[qid] and data.killLabels[qid][line]
+    if exact then local e=mob(exact);return e and e[1],exact end
+    if not subject then return end
     local names=data and data.questMobs[qid]
     local found
     for _,id in ipairs(names or {}) do
@@ -239,17 +249,20 @@ function AT.GetKnownQuestDropItem(qid,label)
     return match
 end
 local itemNames,itemSources,itemNamesPack,itemNamesData
-function AT.GetQuestDropMobNames(item)
+function AT.GetQuestDropMobNames(item,qid)
     if not english() or not pos(item) then return end
     local pack=AT.ObservedQuestDrops
     local data=AT.QuestMobData
     if itemNamesPack~=pack or itemNamesData~=data or not itemNames then
         itemNamesPack,itemNamesData,itemNames,itemSources=pack,data,{},{}
     end
-    if itemNames[item]~=nil then return itemNames[item] or nil end
+    local byQuest=pos(qid) and AT.ObservedQuestCorpseSources and AT.ObservedQuestCorpseSources[qid]
+    local direct=byQuest and byQuest[item]
+    local key=direct and qid..":"..item or item
+    if itemNames[key]~=nil then return itemNames[key] or nil end
     local rows=pack and pack.items and pack.items[item]
     local names,seen={},{}
-    itemSources[item]=seen
+    itemSources[key]=seen
     local function add(id)
         local npc=mob(id)
         local name=npc and npc[1]
@@ -257,22 +270,31 @@ function AT.GetQuestDropMobNames(item)
         if seen[name]==nil then seen[name]=id;names[#names+1]=name
         elseif seen[name]~=id then seen[name]=false end
     end
-    for _,e in ipairs(rows or {}) do
-        if e[6]==0 and pos(e[2]) then add(e[1]) end
+    for _,npc in ipairs(direct or {}) do add(npc) end
+    if #names==0 then
+        for _,e in ipairs(rows or {}) do
+            if e[6]==0 and pos(e[2]) then add(e[1]) end
+        end
+        for _,npc in ipairs(data and data.dropMobs and data.dropMobs[item] or {}) do add(npc) end
+        if exactDropSources[item] then add(exactDropSources[item]) end
     end
-    for _,npc in ipairs(data and data.dropMobs and data.dropMobs[item] or {}) do add(npc) end
-    if exactDropSources[item] then add(exactDropSources[item]) end
     table.sort(names)
-    itemNames[item]=#names>0 and names or false
-    return itemNames[item] or nil
+    itemNames[key]=#names>0 and names or false
+    return itemNames[key] or nil
 end
-function AT.GetQuestMobDisplayID(name,exactName,qid,sourceItem)
+function AT.GetQuestMobDisplayID(name,exactName,qid,sourceItem,explicitNPC)
     if not english() or (not exactName and AT.IsPartialTarget and AT.IsPartialTarget()) then return end
     local key=normalize(name)
     if not key then return end
+    if pos(explicitNPC) then
+        local e=mob(explicitNPC)
+        if e and normalize(e[1])==key then return e[5],explicitNPC end
+        return
+    end
     if pos(sourceItem) then
-        AT.GetQuestDropMobNames(sourceItem)
-        local source=itemSources and itemSources[sourceItem] and itemSources[sourceItem][name]
+        AT.GetQuestDropMobNames(sourceItem,qid)
+        local indexed=itemSources and ((pos(qid) and itemSources[qid..":"..sourceItem]) or itemSources[sourceItem])
+        local source=indexed and indexed[name]
         if source==false then return end
         if source then
             local row=mob(source)
