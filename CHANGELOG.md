@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.263 - 2026-11-28
+
+- First standalone NQTDB terrain slice: dry walking routes on eligible Zephras Isle ground, using 25 converted tiles. Shortest Path Forever does not have to be installed.
+- Supports matching positions on builds 71037 and 71139. Ambiguous floors, swimming, other worlds, flight, and off-grid endpoints do not use this pilot. When the correct terrain route is unavailable, the distinctly labeled direct bearing can still show.
+- Includes upstream attribution, GPL route-data notice and reproducible importer. Does not import other worlds or transit routes yet.
+
 ## 1.5.262 - 2026-11-28
 
 - Bundles NQTDB inside NQT. No Questie installation required.

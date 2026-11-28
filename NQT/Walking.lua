@@ -19,7 +19,7 @@ local function time()
     return GetTime and GetTime() or 0
 end
 
-local function apiForWalking(from, quest)
+local function apiForWalking(from, quest, snapshot)
     local now=time()
     local lastFailure
     local function checked(api, road)
@@ -34,7 +34,9 @@ local function apiForWalking(from, quest)
         local ok, nav = pcall(api.NavVersion)
         if ok and type(nav) == "string" and nav ~= "" then return api, nav, road end
     end
-    local api,nav,road=checked(AT.GetRoadWalkingAPI and AT.GetRoadWalkingAPI(from),true)
+    local api,nav,road=checked(AT.GetBundledWalkingAPI and AT.GetBundledWalkingAPI(from,snapshot),false)
+    if api then return api,nav,road end
+    api,nav,road=checked(AT.GetRoadWalkingAPI and AT.GetRoadWalkingAPI(from),true)
     return api,nav,road,lastFailure
 end
 
@@ -57,7 +59,7 @@ end
 
 local function valid(job)
     if state ~= job or not active(job.quest) then return false end
-    local api, nav = apiForWalking(job.from, job.quest)
+    local api, nav = apiForWalking(job.from, job.quest,true)
     if api ~= job.api or nav ~= job.nav then return false end
     if C_Map and C_Map.GetBestMapForUnit then
         local ok, map = pcall(C_Map.GetBestMapForUnit, "player")
