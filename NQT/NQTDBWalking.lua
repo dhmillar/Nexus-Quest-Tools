@@ -197,10 +197,22 @@ local function search(D,sx,sy,tx,ty,callback,estimateOnly,goals)
     local function region(x,y)
         return floor(x/atlas.step)*atlas.groups+floor(y/atlas.step)+1
     end
+    local function rangeAt(index)
+        local r=atlas.ranges[index]
+        if type(r)=="table" then return r end
+        if atlas.codec~="b64x4" or type(r)~="string" or #r~=32 then return end
+        local out={}
+        for i=1,32,4 do
+            local a,b,c,d=r:byte(i,i+3)
+            if not (digits[a] and digits[b] and digits[c] and digits[d]) then return end
+            out[#out+1]=((digits[a]*64+digits[b])*64+digits[c])*64+digits[d]
+        end
+        return out
+    end
     if atlas and group==atlas.component then
         local function include(x,y)
             if component(D,x,y)~=group then atlas=nil;return end
-            local r=atlas.ranges[region(x,y)]
+            local r=rangeAt(region(x,y))
             if not r then atlas=nil;return end
             for i=1,#r,2 do
                 destinations[i]=destinations[i] and math.min(destinations[i],r[i]) or r[i]
@@ -216,7 +228,7 @@ local function search(D,sx,sy,tx,ty,callback,estimateOnly,goals)
         if not atlas then return 0 end
         local k=region(x,y)
         if regionScores[k] then return regionScores[k] end
-        local r=atlas.ranges[k]
+        local r=rangeAt(k)
         local best=0
         if r then for i=1,#destinations,2 do
             best=math.max(best,destinations[i]-r[i+1],r[i]-destinations[i+1])

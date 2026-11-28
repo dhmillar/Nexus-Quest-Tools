@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.299 - 2026-11-28
+
+- Walking: tighten and pack NQTDB’s outdoor route search hints without changing terrain or route cost. The same 4,983-yard test route dropped from 205 to 109 scheduler slices; existing obstacle, zone-boundary and floor guards still apply.
+
 ## 1.5.298 - 2026-11-28
 
 - Walking: keep the verified route to a tracked map waypoint across an outdoor zone boundary when you are still on the line. Reproject the line for the new map; a replaced waypoint, interior, another world or a move away from the path still starts fresh.

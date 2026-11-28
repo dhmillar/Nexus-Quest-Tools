@@ -6,9 +6,13 @@ const {decode}=require("./build-nqtdb-dry-components.cjs");
 const [root="NQT",target="landmark-candidate-local.lua",worldArg]=process.argv.slice(2);
 const alphabet="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 const Xd=[1,-1,0,0,1,1,-1,-1],Yd=[0,0,1,-1,1,-1,1,-1];
-const TILE=16, UNSEEN=0xffffffff;
+const TILE=8, UNSEEN=0xffffffff;
 const flag=i=>1<<i;
 function char64(s,k){const d=alphabet.indexOf(s[k]);if(d<0)throw Error("non-Base64");return d}
+function encode(n){
+ if(!Number.isSafeInteger(n)||n<0||n>=2**24)throw Error("landmark interval packing limit");
+ return [18,12,6,0].map(b=>alphabet[(n>>b)&63]).join("");
+}
 function regionMask(d,w,index){
  const height=d.nx*d.C,width=d.ny*d.C, size=width*height;
  const labels=new Uint16Array(size),mask=new Uint8Array(size);
@@ -98,11 +102,11 @@ for(const world of (worldArg?[+worldArg]:[0,1])){
   home=next;
  }
  console.log({world,component:g.id,count:g.count,regions:ranges.size,landmarks:used});
- lines.push(" ["+world+"]={component="+g.id+",step="+TILE+",groups="+g.groups+",ranges={");
+ lines.push(" ["+world+"]={component="+g.id+",step="+TILE+",groups="+g.groups+",codec=\"b64x4\",ranges={");
  for(const k of [...ranges.keys()].sort((a,b)=>a-b)){
   const a=ranges.get(k);
   if(a.length!==8)throw Error("incomplete interval");
-  lines.push("  ["+k+"]={"+a.join(",")+"},");
+  lines.push("  ["+k+"]=\""+a.map(encode).join("")+"\",");
  }
  lines.push(" }},");
 }
