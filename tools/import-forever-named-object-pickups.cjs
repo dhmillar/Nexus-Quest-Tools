@@ -39,7 +39,7 @@ if(count!==total||total<4000||pages.length<10)throw Error("Incomplete Everloot s
 for(const d of eg(egLoot,"-loot.json","loot")){
  if(d.format!==3)throw Error("Unexpected loot format.");
  for(const [tag,r] of Object.entries(d.sources??{})){
-  const m=tag.match(/^object:(\d+)(\|quest)?(\|group)?$/);if(!m)continue;
+  const m=tag.match(/^object:(\d+)(\|spell:\d+)?(\|quest)?(\|group)?$/);if(!m)continue;
   for(const [str,v] of Object.entries(r.items??{})){
    const i=+str;
    if(!want.has(i)||!id(v.drops)||!id(r.windows)||v.drops>r.windows||(v.shared??0)!==0)continue;

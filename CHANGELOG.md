@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.280 - 2026-11-28
+
+- Rank Quest now names 103 more verified quest-item sources, including gathered objects and containers opened with a quest interaction.
+- When multiple objects share the same name, the quest log shows the name without assuming which object ID you need. No invented drop rates or map pins.
+
 ## 1.5.279 - 2026-11-28
 
 - Refresh the walking route as soon as a tracked quest becomes ready to turn in, even if its map coordinates have not changed.

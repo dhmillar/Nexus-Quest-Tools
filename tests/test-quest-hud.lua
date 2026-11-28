@@ -562,7 +562,7 @@ do
     local priorDB,priorLocale,priorObjectives=AT.NQTDB,GetLocale,C_QuestLog.GetQuestObjectives
     local priorObject=AT.GetQuestLootObjectName
     GetLocale=function()return "enUS" end
-    local source={NQTDB={NamedObjectPickups={[12]={[999371]={{629472,"Admiral's Treasure Chest"}}}}}}
+    local source={NQTDB={NamedObjectPickups={[12]={[999371]={{629472,"Admiral's Treasure Chest"},{629473,"Admiral's Treasure Chest"}}}}}}
     assert(loadfile("NQT/QuestMobs.lua"))("NQT",source)
     AT.GetQuestLootObjectName=source.GetQuestLootObjectName
     C_QuestLog.GetQuestObjectives=function(q)

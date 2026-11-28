@@ -328,9 +328,12 @@ function AT.GetQuestLootObjectName(qid,item)
     local catalog=AT.NQTDB and AT.NQTDB.NamedObjectPickups
     local objectives=catalog and catalog[qid]
     local rows=objectives and objectives[item]
-    if not rows or #rows~=1 then return end
-    local r=rows[1]
-    return r[2],r[1]
+    local first=rows and rows[1]
+    if not first then return end
+    -- Multiple spawn templates can share one label. Report the label without
+    -- implying a unique object ID, or suppress if the names differ.
+    for i=2,#rows do if rows[i][2]~=first[2] then return end end
+    return first[2],#rows==1 and first[1] or nil
 end
 local itemNames,itemSources,itemNamesPack,itemNamesData
 function AT.GetQuestDropMobNames(item,qid)
