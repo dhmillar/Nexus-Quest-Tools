@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.284 - 2026-11-28
+
+- Rank Quest now shows the Gem of the First Khan as a usable item for The Pariah's Instructions, even when it is the only Khan gem in your bags.
+- Added regression coverage for alternate quest items and merchant highlights based on the merchant's live stock.
+
 ## 1.5.283 - 2026-11-28
 
 - Added independently corroborated recipient names and locations for three Horde turn-ins in Undercity and Feralas.

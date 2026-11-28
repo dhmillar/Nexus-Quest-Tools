@@ -898,6 +898,33 @@ do
     AT.ForeverProvidedQuestUses=nil
     AT.ForeverObservedQuestUses=nil
 
+
+    -- Two different Khan gems use the same spell. Reuse real shipped rows
+    -- under the fixture's quest ID so this exercises actual tile selection.
+    local oldDB,gemDB,priorBags=AT.NQTDB,{},C_Container
+    assert(loadfile("NQT/NQTDB.lua"))("NQT",gemDB)
+    local primary=assert(usePack.ForeverObservedQuestUses[7067][1])
+    local alternate=assert(gemDB.NQTDB.QuestUses[7067][1])
+    assert(primary[1]==17765 and alternate[1]==17761 and alternate[2]==21957)
+    AT.ForeverObservedQuestUses={[12]={primary}}
+    AT.NQTDB={QuestUses={[12]={alternate}}}
+    C_Container=nil
+    GetQuestLogSpecialItemInfo=function()end
+    local havePrimary,haveAlternate,rightSpell=false,true,true
+    C_Item={GetItemIconByID=function()return 133 end,
+        GetItemCount=function(i) return (i==17765 and havePrimary or i==17761 and haveAlternate) and 1 or 0 end,
+        GetItemSpell=function(i) return "Gem",i==17761 and not rightSpell and 999999 or 21957 end}
+    AT.RefreshQuestHUD()
+    assert(qrow.item.shown and qrow.item.link=="item:17761","alternate exact gem works with no native special item")
+    havePrimary=true
+    AT.RefreshQuestHUD()
+    assert(qrow.item.shown and qrow.item.link=="item:17765" and qrow.itemTiles[2].link=="item:17761")
+    rightSpell=false
+    AT.RefreshQuestHUD()
+    assert(qrow.item.shown and not qrow.itemTiles[2].shown,"unknown alternate runtime spell is not clickable")
+    AT.NQTDB,AT.ForeverObservedQuestUses,C_Container=oldDB,nil,priorBags
+    print("PASS Rank Quest uses either confirmed possessed Khan gem and rejects a wrong spell")
+
     -- Another character has no native special-item button or bundled entry.
     -- Repair cold spell metadata and show only a game-linked, usable held item.
     local oldBags=C_Container

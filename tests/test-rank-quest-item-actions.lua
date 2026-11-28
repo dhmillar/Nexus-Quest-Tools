@@ -189,11 +189,13 @@ do
     end
     C_QuestLog={
         IsOnQuest=function(q) return owns and q==95988 end,
+        GetNumQuestLogEntries=function() return owns and 1 or 0 end,
+        GetInfo=function(i) if owns and i==1 then return {isHeader=false,questID=95988} end end,
         ReadyForTurnIn=function() return complete end,
         GetQuestObjectives=function()
             return {{type="item",itemID=271657,finished=finished},
                 {type="item",itemID=271653,finished=false},
-                {type="item",itemID=271650,finished=false}}
+                {type="item",itemID=271650,finished=true}}
         end,
     }
     local hooks={}
@@ -203,7 +205,7 @@ do
     MerchantFrame_UpdateBuybackInfo=function() end
     MERCHANT_ITEMS_PER_PAGE=2
     GetMerchantNumItems=function() return 3 end
-    local stock={271657,271653,271650}
+    local stock={271657,271654,271650}
     GetMerchantItemID=function(index) if index~=1 then return stock[index] end end
     GetMerchantItemLink=function(index) return "item:"..stock[index] end
     local function slot(index)
@@ -249,8 +251,8 @@ do
     assert(a.regions[1].shown and #a.regions==6,"reuses art across pages")
     MerchantFrame.selectedTab=2;hooks.MerchantFrame_UpdateBuybackInfo()
     assert(not a.regions[1].shown,"never highlight buyback")
-    MerchantFrame.selectedTab=1;merchant=260565;event("MERCHANT_SHOW");flush()
-    assert(not a.regions[1].shown and b.regions[1].shown,"matches current merchant id, not other vendor")
+    MerchantFrame.selectedTab=1;merchant=260565;stock[1],stock[2]=271654,271653;event("MERCHANT_SHOW");flush()
+    assert(not a.regions[1].shown and b.regions[1].shown,"matches live stock after changing merchants")
     complete=true;event("QUEST_LOG_UPDATE");flush()
     assert(not b.regions[1].shown,"ready quests no longer need items")
     complete=false;owns=false;event("QUEST_LOG_UPDATE");flush();assert(not b.regions[1].shown)

@@ -17,7 +17,7 @@ const validId=n=>Number.isSafeInteger(n)&&n>0;
 const nameOK=n=>typeof n==="string"&&n.length>0&&n.length<=100&&!/[\x00-\x1f;|\[\]]/.test(n);
 const round=n=>+n.toFixed(4);
 const coord=p=>p&&validId(p.uiMap)&&[0,1,2991].includes(p.instance)&&p.mapX>0&&p.mapX<1&&p.mapY>0&&p.mapY<1;
-const starts={},ends={},uses={},spots={};
+const starts={},ends={},uses={},repeatUses={},spots={};
 const objectiveTypes={monster:1,item:2,object:3};
 for(const file of fs.readdirSync(input).filter(f=>/-((npcs)|(item_uses)|(objectives))\.json$/.test(f)).sort((a,b)=>+a.split(/[.-]/)[3]- +b.split(/[.-]/)[3])){
  const data=JSON.parse(fs.readFileSync(path.join(input,file),"utf8")),tag=data.meta?.dataset;
@@ -49,6 +49,7 @@ for(const file of fs.readdirSync(input).filter(f=>/-((npcs)|(item_uses)|(objecti
     if(!validId(+item)||!validId(u.spellId)||!validId(u.progressed)||!(Object.keys(u.objectives||{}).length))continue;
     const r=uses[q]??={};
     r[item]=r[item]===undefined||r[item]===u.spellId?u.spellId:false;
+    if(u.progressed>=2&&u.sources>=2) (repeatUses[q]??={})[item]=true;
    }
   }
  }else if(tag==="objectives"){
@@ -75,10 +76,21 @@ const qstr=s=>JSON.stringify(s);
 function lua(v){return Array.isArray(v)?"{"+v.map(lua).join(",")+"}":typeof v==="string"?qstr(v):String(v);}
 function table(name,rows){return ["AT."+name+"={",...Object.entries(rows).filter(([,v])=>v).map(([q,v])=>" ["+q+"]="+lua(v)+","),"}"];}
 const rows={};
-const oldUse=listed(facts,["ForeverObservedQuestUses","ForeverProvidedQuestUses","ForeverInstructedQuestUses"]);
+const oldUse=new Map();
+for(const key of ["ForeverObservedQuestUses","ForeverProvidedQuestUses","ForeverInstructedQuestUses"]){
+ const section=(facts.split("AT."+key+"={")[1]??"").split(/\r?\n}/)[0];
+ for(const row of section.matchAll(/^\s*\[(\d+)\]\s*=\{(.*)/gm)){
+  const q=+row[1],known=oldUse.get(q)??oldUse.set(q,new Map()).get(q);
+  for(const m of row[2].matchAll(/\{(\d+),(\d+)\}/g))known.set(+m[1],+m[2]);
+ }
+}
 for(const [q,rs] of Object.entries(uses)){
- const exact=Object.entries(rs).filter(([i,s])=>s).map(([i,s])=>[+i,s]);
- if(exact.length&&!oldUse.has(+q))rows[q]=exact;
+ const known=oldUse.get(+q);
+ // Existing spell matches are not a complete list of the items that invoke
+ // the spell. Distinct items must independently show repeated progression.
+ const exact=Object.entries(rs).filter(([i,s])=>s&&!known?.has(+i)&&
+   (!known||repeatUses[q]?.[i]&&[...known.values()].includes(s))).map(([i,s])=>[+i,s]);
+ if(exact.length)rows[q]=exact;
 }
 const L=["-- Adapted from Efficient Games Forever observations, CC BY 4.0.",
  "-- https://github.com/JIVESCORP/eg-link-output-wowf/tree/c1bf99bc2835bbe1b2dad82fb99f994c0cfffe33/data/wowf",
