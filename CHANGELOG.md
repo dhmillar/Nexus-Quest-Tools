@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.283 - 2026-11-28
+
+- Added independently corroborated recipient names and locations for three Horde turn-ins in Undercity and Feralas.
+- Uses a Blizzard turn-in pin for navigation when available. Bundled reference coordinates are displayed but never used as GPS destinations without a verified Forever hand-in.
+
 ## 1.5.282 - 2026-11-28
 
 - If a walking route fails, recompute when you move far enough to try a different approach or the quest target changes, instead of waiting out the previous failure.

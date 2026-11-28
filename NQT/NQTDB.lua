@@ -4517,3 +4517,16 @@ db.ObjectPickupApproaches={
  [99153]={[1]={"item",286269,1,{{1420,0.0976,0.6961},{1420,0.0978,0.6928},{1420,0.0988,0.6926}}}},
 }
 -- END NQTDB object pickup approaches
+-- BEGIN NQTDB corroborated turn-in labels (generated)
+-- Quest turn-in links and outdoor NPC locations: Efficient Games Forever, CC BY 4.0.
+-- https://github.com/JIVESCORP/eg-link-output-wowf/tree/c1bf99bc2835bbe1b2dad82fb99f994c0cfffe33/data/wowf
+-- https://efficient.games | https://creativecommons.org/licenses/by/4.0/
+-- Exact quest/recipient facts independently checked against CMaNGOS Classic DB, GPL-2.0.
+-- https://github.com/cmangos/classic-db/tree/04bc47631b680b99cdfeee88488dafb5e871c207
+-- No same-build actual completion witness; display or native POI map lookup only.
+db.CorroboratedTurnInLabels={
+ [736]={{1458,0.5371,0.5418,1,2934,2,"Keeper Bel'dugur"}}, -- 1.60.1.71091
+ [7734]={{1444,0.745,0.4283,1,7854,2,"Jangdor Swiftstrider"}}, -- 1.60.1.71091
+ [7738]={{1444,0.745,0.4283,1,7854,2,"Jangdor Swiftstrider"}}, -- 1.60.1.71091
+}
+-- END NQTDB corroborated turn-in labels

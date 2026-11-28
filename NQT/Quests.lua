@@ -898,7 +898,8 @@ observedTurnIn=function(id,map,x,y,reference,skipName)
             or (AT.ForeverATTQuestNPCReferences and AT.ForeverATTQuestNPCReferences[id])
             or (AT.ForeverVerifiedEndpointReferences and AT.ForeverVerifiedEndpointReferences[id])
             or (AT.ForeverSupplementalTurnInReferences and AT.ForeverSupplementalTurnInReferences[id])
-            or (AT.NQTDB and AT.NQTDB.TurnIns[id])
+            or (AT.NQTDB and AT.NQTDB.TurnIns and AT.NQTDB.TurnIns[id])
+            or (AT.NQTDB and AT.NQTDB.CorroboratedTurnInLabels and AT.NQTDB.CorroboratedTurnInLabels[id])
     else
         source=AT.ObservedQuestTurnIns and AT.ObservedQuestTurnIns[id]
     end
@@ -980,7 +981,9 @@ resolveTurnInPoint=function(id,viewMap,wantName,lookup)
         if not queryHints(AT.ObservedQuestTurnIns) and not queryHints(AT.NQTDB and AT.NQTDB.VerifiedCompletionTurnIns)
             and not queryHints(referenceTurnIns) and not queryHints(AT.ForeverQuestNPCReferences) and not queryHints(AT.ForeverATTQuestNPCReferences) then
             if not queryHints(AT.ForeverVerifiedEndpointReferences) and not queryHints(AT.ForeverSupplementalTurnInReferences) then
-                queryHints(AT.NQTDB and AT.NQTDB.TurnIns)
+                if not queryHints(AT.NQTDB and AT.NQTDB.TurnIns) then
+                    queryHints(AT.NQTDB and AT.NQTDB.CorroboratedTurnInLabels)
+                end
             end
         end
     end
