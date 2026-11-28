@@ -83,3 +83,35 @@ for w=0,1 do
  assert(not AT.GetBundledWalkingAPI(from),"wrong height rejected")
  print("PASS real terrain seam and world isolation",w)
 end
+
+-- Deterministic 131-cell corridor forces multiple projection frames.
+world=31
+local function corridor(first,last)
+ local rows={}
+ for x=0,66 do
+  for y=0,66 do
+   local mask=0
+   if y==5 then mask=(x==66 and last or 1)+(x==0 and first or 2) end
+   rows[#rows+1]=string.char(mask,0,0)
+  end
+ end
+ return table.concat(rows)
+end
+D[world]={world=world,cells=67,nx=2,ny=1,tx=0,ty=0,tiles={corridor(0,1),corridor(2,0)}}
+spawnX,spawnY,spawnZ=.5*step,5.5*step,0
+local start,goal=point(spawnX,spawnY),point(spawnX+130*step,spawnY)
+local project,projectionCalls=C_Map.GetMapPosFromWorldPos,0
+C_Map.GetMapPosFromWorldPos=function(...)
+ projectionCalls=projectionCalls+1
+ return project(...)
+end
+local api=assert(AT.GetBundledWalkingAPI(start))
+local cancel=assert(api.WalkPath("project",start,goal,function()error("cancelled projection delivered")end))
+table.remove(q,1)()
+assert(projectionCalls==48 and #q==1,"48 projection calls maximum on first frame")
+cancel();drain();assert(projectionCalls==48)
+local route
+assert(api.WalkPath("project",start,goal,function(r)route=r end));drain()
+assert(route and #route.waypoints==131 and math.abs(route.yards-step*130)<.02)
+assert(projectionCalls==179)
+print("PASS 131-cell route projects in bounded frames and cancels cleanly mid-projection")

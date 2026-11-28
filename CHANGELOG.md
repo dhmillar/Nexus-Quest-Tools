@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.267 - 2026-11-28
+
+- NQTDB adds verified local merchant sources for 24 item objectives across 21 quests. Filters by faction and map, excludes non-targetable props, and leaves known loot sources and curated vendors alone.
+- Long routes project up to 48 waypoints per frame and can cancel while projecting. Route comparisons no longer build paths they will discard.
+
 ## 1.5.266 - 2026-11-28
 
 - Overhead Vendor Icons now recover missing unit tooltip data from the exact NPC link or its visible nameplate title, retry delayed titles, and render independently of faded friendly nameplate art.

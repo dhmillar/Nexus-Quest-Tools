@@ -105,7 +105,7 @@ local function transform(D,point,checkHeight)
     end
     return X,Y
 end
-local function search(D,sx,sy,tx,ty,callback)
+local function search(D,sx,sy,tx,ty,callback,estimateOnly)
     local W=D.ny*D.cells
     local function encode(x,y)return x*W+y end
     local function unpackKey(k)return floor(k/W),k%W end
@@ -153,6 +153,7 @@ local function search(D,sx,sy,tx,ty,callback)
             visits=visits+1
             if c==g[k] then
                 if k==target then
+                    if estimateOnly then return finish(true,c*TILE/D.cells) end
                     local keys={k}
                     while parents[k] do k=parents[k];keys[#keys+1]=k end
                     return finish(keys,c*TILE/D.cells)
@@ -165,7 +166,8 @@ local function search(D,sx,sy,tx,ty,callback)
                         if bits(D,X,Y) then
                             local nextKey,v=encode(X,Y),c+costs[d]
                             if g[nextKey]==nil or v<g[nextKey] then
-                                g[nextKey],parents[nextKey]=v,k
+                                g[nextKey]=v
+                                if not estimateOnly then parents[nextKey]=k end
                                 push(nextKey,v,v+heuristic(X,Y))
                             end
                         end
@@ -197,7 +199,7 @@ function api.EstimateWalks(_,from,targets,callback)
         cancel=search(D,sx,sy,x,y,function(keys,yards)
             result[i]=keys and yards or false
             C_Timer.After(0,nextGoal)
-        end)
+        end,true)
     end
     C_Timer.After(0,nextGoal)
     return function()stop=true;if cancel then cancel()end end
@@ -213,22 +215,35 @@ function api.WalkPath(_,from,to,callback)
     verified[from]=nil
     local tx,ty=transform(D,to,false)
     if not(sx and tx) then return nil,"offmesh" end
-    return search(D,sx,sy,tx,ty,function(keys,yards)
+    local stopped
+    local cancel=search(D,sx,sy,tx,ty,function(keys,yards)
         if not keys then callback(nil,yards);return end
         local points={}
         local W=D.ny*D.cells
-        for i=#keys,1,-1 do
-            local k=keys[i]
-            local x=(D.tx+(floor(k/W)+.5)/D.cells)*TILE
-            local y=(D.ty+(k%W+.5)/D.cells)*TILE
-            local map,p=call(C_Map.GetMapPosFromWorldPos,D.world,CreateVector2D(x,y),from.map)
-            if not finite(map) or not p or issecretvalue and issecretvalue(p) then callback(nil,"projection");return end
-            local u,v=call(p.GetXY,p)
-            if not(finite(u) and finite(v) and u>=0 and u<=1 and v>=0 and v<=1) then callback(nil,"projection");return end
-            points[#points+1]={map=map,x=u,y=v}
+        local i=#keys
+        local function projectBatch()
+            if stopped then return end
+            -- Small batches keep long multi-tile paths from blocking a frame.
+            for _=1,48 do
+                if i<1 then
+                    callback({waypoints=points,yards=yards,navVersion=api.NavVersion(),roadAware=false})
+                    return
+                end
+                local k=keys[i]
+                local x=(D.tx+(floor(k/W)+.5)/D.cells)*TILE
+                local y=(D.ty+(k%W+.5)/D.cells)*TILE
+                local map,p=call(C_Map.GetMapPosFromWorldPos,D.world,CreateVector2D(x,y),from.map)
+                if not finite(map) or not p or issecretvalue and issecretvalue(p) then callback(nil,"projection");return end
+                local u,v=call(p.GetXY,p)
+                if not(finite(u) and finite(v) and u>=0 and u<=1 and v>=0 and v<=1) then callback(nil,"projection");return end
+                points[#points+1]={map=map,x=u,y=v}
+                i=i-1
+            end
+            C_Timer.After(0,projectBatch)
         end
-        callback({waypoints=points,yards=yards,navVersion=api.NavVersion(),roadAware=false})
+        projectBatch()
     end)
+    return function() stopped=true;cancel() end
 end
 function AT.GetBundledWalkingAPI(origin,snapshot)
     local D=data(origin)

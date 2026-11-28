@@ -52,13 +52,61 @@ local observedVendors={}
 local function allowedVendor(v)
     return v[3]==0 or UnitFactionGroup and UnitFactionGroup("player")== (v[3]==1 and "Alliance" or "Horde")
 end
+local function vendorValue(fn,...)
+    if type(fn)~="function" then return end
+    local ok,v=pcall(fn,...)
+    if ok and (not issecretvalue or not issecretvalue(v)) then return v end
+end
+local function nearbyObservedVendor(qid,item)
+    local db=AT.NQTDB
+    local exact=db and db.VendorObjectives and db.VendorObjectives[qid]
+    local rows=exact and exact[item] and db.ObjectiveVendors and db.ObjectiveVendors[item]
+    local maps=C_Map
+    local faction=vendorValue(UnitFactionGroup,"player")
+    local side=faction=="Alliance" and 1 or faction=="Horde" and 2
+    if not rows or not maps or not side then return end
+    local map=vendorValue(maps.GetBestMapForUnit,"player")
+    for _=1,4 do
+        if not pos(map) then return end
+        local p=vendorValue(maps.GetPlayerMapPosition,map,"player")
+        local x,y
+        if public(p,"table") then
+            if p.GetXY then
+                local ok,px,py=pcall(p.GetXY,p)
+                if ok and public(px,"number") and public(py,"number") and px>=0 and py>=0 and px<=1 and py<=1 then
+                    x,y=px,py
+                end
+            elseif public(p.x,"number") and public(p.y,"number") and p.x>=0 and p.y>=0 and p.x<=1 and p.y<=1 then
+                x,y=p.x,p.y
+            end
+        end
+        local best,r2,nMatches
+        for _,r in ipairs(rows) do
+            if r[4]==map and (r[3]==side or r[3]==0) then
+                nMatches=(nMatches or 0)+1
+                if x then
+                    local d=(x-r[5])^2+(y-r[6])^2
+                    if not r2 or d<r2 then best,r2=r,d end
+                elseif not best then best=r end
+            end
+        end
+        if best then
+            if x or nMatches==1 then return best end
+            return
+        end
+        local info=vendorValue(maps.GetMapInfo,map)
+        map=public(info,"table") and info.parentMapID
+    end
+end
 function AT.GetQuestObjectiveVendor(qid,item)
     local locale=GetLocale and GetLocale()
     if locale~="enUS" and locale~="enGB" or not pos(qid) or not pos(item) then return end
     local vendors=questVendors[qid]
     local observed=observedVendors[qid]
     local v=observed and observed[item] or vendors and vendors[item]
-    if not v or not allowedVendor(v) then return end
+    if v and not allowedVendor(v) then v=nil end
+    v=v or nearbyObservedVendor(qid,item)
+    if not v then return end
     local npc=mob(v[1])
     return v[2],v[1],npc and npc[5]
 end

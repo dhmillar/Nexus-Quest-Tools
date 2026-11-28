@@ -103,6 +103,10 @@ const catalogBindings=[
  "db.ClassicDropRefs=AT.ClassicQuestDropReferences",
  "db.ClassicCreatureRefs=AT.ClassicQuestCreatureProfiles",
 ];
-fs.writeFileSync(path.join(N,"NQTDB.lua"),generated+"\n"+catalogBindings.join("\n")+"\n");
+// Independent merchant facts have their own pinned importer and inputs.
+const dest=path.join(N,"NQTDB.lua");
+const merchant=fs.existsSync(dest)&&fs.readFileSync(dest,"utf8").match(
+ /-- BEGIN NQTDB merchant facts \(generated\)\r?\n[\s\S]*?-- END NQTDB merchant facts\r?\n/);
+fs.writeFileSync(dest,generated+"\n"+catalogBindings.join("\n")+"\n"+(merchant?.[0]||""));
 console.log(result);
 
