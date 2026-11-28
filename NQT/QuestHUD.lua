@@ -1175,6 +1175,53 @@ local function questItemID(link)
     return tonumber(link:match("|Hitem:(%d+)") or link:match("^item:(%d+)$"))
 end
 
+
+local questBagActions, pendingItemData
+local function requestRankQuestItemData(item)
+    if not id(item) or not (C_Item and C_Item.RequestLoadItemDataByID) then return end
+    pendingItemData=pendingItemData or {}
+    if not pendingItemData[item] then
+        pendingItemData[item]=true
+        call(C_Item.RequestLoadItemDataByID,item)
+    end
+end
+
+-- Build the live index once per bag/log invalidation, not once per quest row.
+-- An item must be owned, explicitly linked to an active quest by the game,
+-- and have an on-use spell. Collection items and quest starters do not count
+-- from a matching name, a generic quest flag or an item-source backlink.
+local function liveQuestBagActions()
+    if questBagActions then return questBagActions end
+    questBagActions={}
+    local bags=C_Container
+    if not (bags and bags.GetContainerItemQuestInfo and bags.GetContainerItemID and bags.GetContainerNumSlots) then return questBagActions end
+    for bag=0,NUM_BAG_SLOTS or 4 do
+        local slots=call(bags.GetContainerNumSlots,bag)
+        if id(slots) and slots<=200 then
+            for slot=1,slots do
+                local info=call(bags.GetContainerItemQuestInfo,bag,slot)
+                local quest=field(info,"questID")
+                if id(quest) and field(info,"isQuestItem")==true and field(info,"isActive")==true then
+                    local item=call(bags.GetContainerItemID,bag,slot)
+                    if id(item) then
+                        local _,spell=call(C_Item and C_Item.GetItemSpell or GetItemSpell,item)
+                        if id(spell) then
+                            local list=questBagActions[quest] or {}
+                            questBagActions[quest]=list
+                            if not list[item] then
+                                list[item]=call(bags.GetContainerItemLink,bag,slot) or ("item:"..item)
+                            end
+                        else
+                            requestRankQuestItemData(item)
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return questBagActions
+end
+
 local function questItemList(qid,index)
     local results,seen={},{}
     if not Q then return results end
@@ -1193,7 +1240,10 @@ local function questItemList(qid,index)
     if id(liveIndex) and field(call(Q.GetInfo,liveIndex),"questID")==qid then
         add(call(GetQuestLogSpecialItemInfo,liveIndex))
     end
-    if call(Q.IsOnQuest,qid)~=true or call(AT.IsQuestReadyForTurnIn or Q.ReadyForTurnIn,qid)==true then return results end
+    local active=call(Q.IsOnQuest,qid)
+    local confirmed=id(liveIndex) and field(call(Q.GetInfo,liveIndex),"questID")==qid
+    if not ordinary(active) then return results end
+    if (active~=true and (active==false or not confirmed)) or call(AT.IsQuestReadyForTurnIn or Q.ReadyForTurnIn,qid)==true then return results end
     local function addVerifiedUses(pack)
         for _,record in ipairs(pack and pack[qid] or {}) do
             local item,expectedSpell=unpack(record)
@@ -1201,7 +1251,7 @@ local function questItemList(qid,index)
                 local count=call(C_Item and C_Item.GetItemCount or GetItemCount,item,false,false)
                 if id(count) then
                     local _,spell=call(C_Item and C_Item.GetItemSpell or GetItemSpell,item)
-                    if id(spell) and spell==expectedSpell then add("item:"..item,nil,count) end
+                    if id(spell) and spell==expectedSpell then add("item:"..item,nil,count) elseif not id(spell) then requestRankQuestItemData(item) end
                 end
             end
         end
@@ -1209,6 +1259,18 @@ local function questItemList(qid,index)
     addVerifiedUses(AT.ForeverObservedQuestUses)
     addVerifiedUses(AT.ForeverProvidedQuestUses)
     addVerifiedUses(AT.ForeverInstructedQuestUses)
+    local held=liveQuestBagActions()[qid]
+    if held then
+        local ids={}
+        for item in pairs(held) do ids[#ids+1]=item end
+        table.sort(ids)
+        for _,item in ipairs(ids) do
+            if not seen[item] then
+                local count=call(C_Item and C_Item.GetItemCount or GetItemCount,item,false,false)
+                if id(count) then add(held[item],nil,count) end
+            end
+        end
+    end
     return results
 end
 
@@ -1286,6 +1348,7 @@ local function factDropItem(qid,objective,wanted)
                 named=item
             end
         elseif id(required) and required==amount then
+            requestRankQuestItemData(item)
             if possible and possible~=item then unresolved=true end
             possible=item
         end
@@ -1369,6 +1432,15 @@ local function objectiveDropSuffix(qid,item)
     end
     local currentMode=grouped and 1 or 0
     local estimate=earlyRate(currentMode)
+    if not estimate then
+        local localRates=AT.ForeverPublicDropWindows and AT.ForeverPublicDropWindows[qid]
+        local record=localRates and localRates[item]
+        local window=record and record[currentMode]
+        if window then
+            local a,b=fmtDrop(window[1]*100),fmtDrop(window[2]*100)
+            estimate=" ("..(a==b and a or a.."\226\128\147"..b)..")"
+        end
+    end
     if estimate then return estimate end
     if AT.ForeverRivergladesDropComparison and AT.ForeverRivergladesDropComparison[qid] then
         local other
@@ -1393,7 +1465,7 @@ local function objectiveDropSuffix(qid,item)
         if estimate then return estimate end
         local ref=AT.ForeverReportedQuestDropReferences and AT.ForeverReportedQuestDropReferences[qid]
         local row=ref and ref[item]
-        if row then return " ("..fmtDrop(row[2]/100).." reported)" end
+        if row then return " ("..fmtDrop(row[2]/100)..")" end
         return ""
     end
     local a,b=fmtDrop(low),fmtDrop(high)
@@ -3059,7 +3131,7 @@ function AT.InitQuestHUD()
     hud:SetScript("OnSizeChanged",pushRefresh)
     local watcher=CreateFrame("Frame")
     for _,event in ipairs({"PLAYER_ENTERING_WORLD","QUEST_ACCEPTED","QUEST_REMOVED","QUEST_COMPLETE","QUEST_TURNED_IN","QUEST_LOG_UPDATE",
-        "QUEST_WATCH_UPDATE","BAG_UPDATE_DELAYED","GET_ITEM_INFO_RECEIVED","GROUP_ROSTER_UPDATE","QUEST_DATA_LOAD_RESULT","PLAYER_REGEN_DISABLED","PLAYER_REGEN_ENABLED","PLAYER_LEVEL_UP","PLAYER_MAP_CHANGED","ZONE_CHANGED","ZONE_CHANGED_INDOORS","ZONE_CHANGED_NEW_AREA","SUPER_TRACKING_CHANGED","GLOBAL_MOUSE_DOWN","CHAT_MSG_SYSTEM","UI_ERROR_MESSAGE","UNIT_QUEST_LOG_CHANGED","PLAYER_TARGET_CHANGED","UNIT_PORTRAIT_UPDATE"}) do
+        "QUEST_WATCH_UPDATE","BAG_UPDATE_DELAYED","GET_ITEM_INFO_RECEIVED","ITEM_DATA_LOAD_RESULT","GROUP_ROSTER_UPDATE","QUEST_DATA_LOAD_RESULT","PLAYER_REGEN_DISABLED","PLAYER_REGEN_ENABLED","PLAYER_LEVEL_UP","PLAYER_MAP_CHANGED","ZONE_CHANGED","ZONE_CHANGED_INDOORS","ZONE_CHANGED_NEW_AREA","SUPER_TRACKING_CHANGED","GLOBAL_MOUSE_DOWN","CHAT_MSG_SYSTEM","UI_ERROR_MESSAGE","UNIT_QUEST_LOG_CHANGED","PLAYER_TARGET_CHANGED","UNIT_PORTRAIT_UPDATE"}) do
         pcall(watcher.RegisterEvent,watcher,event)
     end
     watcher:SetScript("OnEvent",function(_,event,first,second)
@@ -3068,6 +3140,12 @@ function AT.InitQuestHUD()
             return
         end
         if event=="GLOBAL_MOUSE_DOWN" then releaseOnOutsideClick();return end
+        if event=="ITEM_DATA_LOAD_RESULT" and (not id(first) or not pendingItemData or not pendingItemData[first]) then return end
+        if event=="BAG_UPDATE_DELAYED" or event=="GET_ITEM_INFO_RECEIVED" or event=="ITEM_DATA_LOAD_RESULT"
+            or event=="QUEST_LOG_UPDATE" or event=="QUEST_ACCEPTED" or event=="QUEST_REMOVED"
+            or event=="QUEST_TURNED_IN" or event=="PLAYER_ENTERING_WORLD" then
+            questBagActions=nil
+        end
         if event=="CHAT_MSG_SYSTEM" or event=="UI_ERROR_MESSAGE" then
             Share.feedback(event=="CHAT_MSG_SYSTEM" and first or second);return
         end

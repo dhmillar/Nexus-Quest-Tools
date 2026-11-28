@@ -289,6 +289,8 @@ Share Verify and the inline party rows show Offer pending while a recipient deci
 
 Rank Quest can match exact enUS quest item names from bundled Forever client data before the item cache finishes loading. Unknown rates are not invented, and solo and group quest samples remain separate.
 
-A rate marked **reported** is a published reference for the exact item and mob where quest eligibility and solo/party mode were not confirmed. Stronger measured samples take precedence.
+Rank Quest prioritizes observed Forever rates, then published references for exact items and creatures. Supplemental estimates in ForeverQuestFacts.lua use adapted [Efficient Games loot observations](https://github.com/JIVESCORP/eg-link-output-wowf/blob/main/DATASETS.md), [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), filtered to known quest objectives and grouped by game build and solo/party mode. Loot-window samples are estimates, not guaranteed per-kill probabilities.
 
 Performance: coalesces routine quest-watch updates and native map pin refresh bursts, and avoids scanning unopened quest starter candidates or the full loot-item catalog during routine quest progress.
+
+If the built-in tracker has no quest item button, Rank Quest can show a held item with an on-use spell when the game links the item to that exact active quest.

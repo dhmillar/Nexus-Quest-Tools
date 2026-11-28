@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.258 - 2026-11-28
+
+- Rank Quest detects usable items that the game associates with an active quest even if no default quest item button exists. Items appear after loading their spell data and disappear after they leave the bag.
+- Adds measured Forever drop estimates across 73 exact quest/item pairs, using solo and party samples separately. The standard Show item drop rates option controls the display; unknown rates remain blank.
+
 ## 1.5.246 - 2026-11-28
 
 - Both maps show a solid amber **Direct Bearing Only** line when NQT can locate you and the tracked quest but has no walking path. Available road routes take priority and stay green for turn-ins and yellow for objectives.

@@ -488,9 +488,28 @@ do
             return getObjectives(q)
         end
         AT.RefreshQuestHUD()
-        assert(find("Acquired in Stranglethorn").objectives[1].text:find("9% reported",1,true))
+        assert(find("Acquired in Stranglethorn").objectives[1].text:find("(9%)",1,true))
         assert(not find("A flight to Duskwood").objectives[1].text:find("reported",1,true))
         AT.ForeverReportedQuestDropReferences=refs
+
+        local windows=packed.ForeverPublicDropWindows
+        assert(windows and windows[96109] and windows[96109][266888])
+        local oldPublic=AT.ForeverPublicDropWindows
+        AT.ForeverPublicDropWindows={[12]={[266888]={[0]={.625,.7272727272}}}}
+        C_QuestLog.GetQuestObjectives=function(q)
+            if q==12 or q==11 then return {{type="item",itemID=266888,text="Collection: 0/5"}} end
+            return getObjectives(q)
+        end
+        IsInGroup=function()return false end
+        AT.RefreshQuestHUD()
+        assert(find("Acquired in Stranglethorn").objectives[1].text:find("63%",1,true))
+        assert(find("Acquired in Stranglethorn").objectives[1].text:find("73%",1,true))
+        assert(not find("A flight to Duskwood").objectives[1].text:find("63%",1,true))
+        IsInGroup=function()return true end
+        AT.RefreshQuestHUD()
+        assert(not find("Acquired in Stranglethorn").objectives[1].text:find("63%",1,true),"do not show solo samples as party rates")
+        AT.ForeverPublicDropWindows=oldPublic
+
         AT.ForeverEarlyDropSamples={[12]=early[596]}
         C_QuestLog.GetQuestObjectives=function(q)
             if q==12 or q==11 then return {{type="item",itemID=3915,text="Bloody Bone Necklace: 0/25"}} end
@@ -825,6 +844,44 @@ do
     assert(not qrow.itemTiles[4].shown,"supplied item disappears after leaving the bag")
     AT.ForeverProvidedQuestUses=nil
     AT.ForeverObservedQuestUses=nil
+
+    -- Another character has no native special-item button or bundled entry.
+    -- Repair cold spell metadata and show only a game-linked, usable held item.
+    local oldBags=C_Container
+    local warm,held,requests,scans=false,true,0,0
+    GetQuestLogSpecialItemInfo=function()end
+    C_QuestLog.IsOnQuest=nil
+    C_Container={
+        GetContainerNumSlots=function(b) scans=scans+1; return b==0 and 4 or 0 end,
+        GetContainerItemQuestInfo=function(_,s) return {
+            questID=s==4 and 11 or 12,isQuestItem=true,isActive=s~=3,
+        } end,
+        GetContainerItemID=function(_,s) if s~=1 or held then return 9100+s end end,
+    }
+    C_Item={
+        GetItemCount=function()return 1 end,
+        GetItemSpell=function(i) if i==9101 and warm or i==9103 or i==9104 then return "Use",501 end end,
+        RequestLoadItemDataByID=function(i) if i==9101 then requests=requests+1 end end,
+    }
+    startupWatcher.scripts.OnEvent(startupWatcher,"BAG_UPDATE_DELAYED")
+    AT.RefreshQuestHUD()
+    assert(not qrow.item.shown and requests==1)
+    local before=scans
+    AT.RefreshQuestHUD()
+    assert(scans==before,"one live inventory scan per invalidation")
+    warm=true
+    startupWatcher.scripts.OnEvent(startupWatcher,"ITEM_DATA_LOAD_RESULT",9101,true)
+    AT.RefreshQuestHUD()
+    assert(qrow.item.shown and qrow.item.link=="item:9101")
+    assert(not qrow.itemTiles[2].shown,"do not show ordinary collection loot, unaccepted starters, or another quest's item")
+    held=false
+    startupWatcher.scripts.OnEvent(startupWatcher,"BAG_UPDATE_DELAYED")
+    AT.RefreshQuestHUD()
+    assert(not qrow.item.shown and requests==1)
+    C_Container=oldBags
+    startupWatcher.scripts.OnEvent(startupWatcher,"BAG_UPDATE_DELAYED")
+    print("PASS live quest item fallback, cold-cache redraw, ownership and one scan per bag invalidation")
+
     C_QuestLog.GetLogIndexForQuestID,C_QuestLog.IsOnQuest,GetQuestLogSpecialItemInfo,C_Item=oldIndex,oldOn,oldSpecial,oldItem
     AT.RefreshQuestHUD()
 end
