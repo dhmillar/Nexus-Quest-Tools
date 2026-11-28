@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.277 - 2026-11-28
+
+- Preserve established routes through verified narrow dry passages instead of hiding the line mid-walk.
+- Separate narrow-only and stacked terrain. Precise live player positions can use narrow centerlines; off-center starts, ambiguous floors, and unverified destinations remain guarded.
+
 ## 1.5.276 - 2026-11-28
 
 - Ready quests can use a verified hand-in location when the native pin cannot be routed. The backup must be for the same held quest, valid faction, same outdoor map, and within 30 yards of the native pin. Reachable native markers always win.

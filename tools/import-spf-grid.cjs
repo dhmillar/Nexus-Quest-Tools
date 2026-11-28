@@ -3,8 +3,9 @@ const fs=require("node:fs"), z=require("node:zlib"), path=require("node:path");
 const [src,out,arg,...extra]=process.argv.slice(2);
 const transit=extra.includes("--layer-transit");
 const centerline=extra.includes("--centerline");
+const flags2=extra.includes("--separate-transit-flags");
 const explain=extra.find(a=>!a.startsWith("--"));
-if(centerline&&!transit)throw Error("centerline requires transit guards");
+if(centerline&&!transit||flags2&&!centerline)throw Error("centerline requires transit guards");
 const world=arg===undefined?2991:Number(arg);
 if(![0,1,2991].includes(world))throw Error("unsupported world");
 const prefix="Nav"+world;
@@ -154,7 +155,9 @@ for(const [key,t] of Object.entries(tiles)){
    if(layered)layerNodes++;
    if(narrowOnly)centerOnlyNodes++;
    bin[j*3]=mask;
-   bin.writeInt16LE(t.heights[j]*h+(layer?1:0),j*3+1);
+   const yards=t.heights[j]*h;
+   const encoded=flags2?yards*2+(layered?1:0)+(narrowOnly?2:0):yards+(layer?1:0);
+   bin.writeInt16LE(encoded,j*3+1);
   }
  }
  if(bin.some(Boolean)||world===2991)payload[key]=bin;
@@ -224,7 +227,7 @@ if(world!==2991){
  "-- Derived dry ground grid from Shortest Path Forever v1.49.2; see RouteData.Notice.md.",
  "local _,AT=...","AT.NQTDB=AT.NQTDB or {}","AT.NQTDB.RouteWorlds=AT.NQTDB.RouteWorlds or {}",
  "AT.NQTDB.RouteWorlds["+world+"]={world="+world+",cells="+n+",nx="+nx+",ny="+ny+",tx="+cx+",ty="+cy+",",
- ' navigationBuild=71037, codec="nq1", '+(transit?'layerTransit=true, ':'')+(centerline?'centerline=true, ':'')+'tiles={'];
+ ' navigationBuild=71037, codec="nq1", '+(transit?'layerTransit=true, ':'')+(centerline?'centerline=true, ':'')+(flags2?'endpointFlags2=true, ':'')+'tiles={'];
  for(const [key,bin] of Object.entries(payload))lines.push(" ["+key+"]="+JSON.stringify(encode(bin))+",");
  lines.push(" }}","");
  fs.writeFileSync(out,lines.join("\n"));
@@ -236,7 +239,7 @@ const lines=["-- SPDX-License-Identifier: GPL-3.0-or-later","-- Derived from Sho
  "-- NQT conversion: dry reciprocal base steps only. This module contains derived grid facts, not upstream code.",
  "local _,AT=...","AT.NQTDB=AT.NQTDB or {}","AT.NQTDB.RouteTiles={",
  " world=2991, cells="+n+", nx="+nx+", ny="+ny+", tx="+cx+", ty="+cy+",",
- " navigationBuild=71037, "+(transit?"layerTransit=true, ":"")+(centerline?"centerline=true, ":"")+"tiles={"];
+ " navigationBuild=71037, "+(transit?"layerTransit=true, ":"")+(centerline?"centerline=true, ":"")+(flags2?"endpointFlags2=true, ":"")+"tiles={"];
 for(const [key,b] of Object.entries(payload)){
  const fragments=[];
  for(let i=0;i<b.length;i+=1500)fragments.push(lua(b.subarray(i,i+1500)));

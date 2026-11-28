@@ -27,6 +27,8 @@ for _,name in ipairs({"NQTDB","NQTDBRouteWorld0","NQTDBRouteWorld1","NQTDBWalkin
  assert(loadfile("NQT/"..name..".lua"))("NQT",AT)
 end
 local D=AT.NQTDB.RouteWorlds
+local function flag(d,z)return d.endpointFlags2 and z%4 or d.layerTransit and z%2 or 0 end
+local function ground(d,z)return (z-flag(d,z))/(d.endpointFlags2 and 2 or 1) end
 local step=1600/3/67
 local digits={};local b64="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
 for i=1,#b64 do digits[b64:byte(i)]=i-1 end
@@ -62,10 +64,10 @@ for w=0,1 do
       for j=1,67 do
        local a=m[66*67+j]
        if a and a%2==1 and right[j] and math.floor(right[j]/2)%2==1
-           and (not d.layerTransit or z[66*67+j]%2==0 and zright[j]%2==0) then
+           and flag(d,z[66*67+j])==0 and flag(d,zright[j])==0 then
           spawnX=(d.tx+math.floor((k-1)/d.ny))*1600/3+66.5*step
           spawnY=(d.ty+(k-1)%d.ny)*1600/3+(j-.5)*step
-          spawnZ=z[66*67+j]
+          spawnZ=ground(d,z[66*67+j])
           from,to=point(spawnX,spawnY),point(spawnX+step,spawnY)
           break
        end
@@ -98,10 +100,10 @@ for w=0,1 do
       for j=1,65*67 do
        local a,b,c=m[j],m[j+67],m[j+134]
        if a and b and c and a%2==1 and b%4==3 and math.floor(c/2)%2==1
-          and z[j]%2==0 and z[j+67]%2==1 and z[j+134]%2==0 then
+          and flag(d,z[j])==0 and flag(d,z[j+67])%2==1 and flag(d,z[j+134])==0 then
           spawnX=(d.tx+math.floor((k-1)/d.ny))*1600/3+(math.floor((j-1)/67)+.5)*step
           spawnY=(d.ty+(k-1)%d.ny)*1600/3+((j-1)%67+.5)*step
-          spawnZ=z[j]
+          spawnZ=ground(d,z[j])
           from,through,to=point(spawnX,spawnY),point(spawnX+step,spawnY),point(spawnX+2*step,spawnY)
           break
        end
@@ -279,3 +281,53 @@ assert(not AT.GetBundledWalkingAPI(start),"a known world conflict is not overrid
 IsInInstance=function()return true end
 assert(not AT.GetBundledWalkingAPI(start),"a plausible map coordinate never enables an instance")
 print("PASS real Forever placeholder and withheld height cases; only independently confirmed public single-floor coordinates route")
+
+-- A new two-bit field distinguishes narrow-only from stacked cells.
+-- Precise public origin samples can start at a proven centerline; a POI
+-- cannot claim the whole cell and an ambiguous stacked origin stays offmesh.
+IsInInstance=nil;issecretvalue=nil
+local originIndex=8*67+8+1
+local function alternate(flags)
+ dry[originIndex]=string.char(edges[originIndex-1],80+flags,0)
+ D[world]={world=world,cells=67,nx=1,ny=1,tx=0,ty=0,tiles={table.concat(dry)},endpointFlags2=true}
+end
+alternate(2)
+spawnX,spawnY,spawnZ=8.5*step,8.5*step,40
+function UnitPosition()return spawnX,spawnY,spawnZ,world end
+start=fromWorld(201,spawnX,spawnY)
+assert(AT.GetBundledWalkingAPI(start) and AT.GetBundledWalkingAPI(start,true),"only the verified centerline, including safe job snapshot")
+picked=nil
+assert(api.WalkBestPath("narrow-origin",start,{quick},function(r)picked=r end));drain()
+assert(picked and picked.targetIndex==1)
+spawnX=spawnX+2
+assert(not AT.GetBundledWalkingAPI(fromWorld(201,spawnX,spawnY)),"off-center point not proven")
+spawnX=spawnX-2
+local unknown,why=api.WalkPath("narrow destination",quick,start,function()error("accepted a narrow 2D target")end)
+assert(not unknown and why=="offmesh")
+alternate(3)
+assert(not AT.GetBundledWalkingAPI(start),"never select an ambiguous floor")
+print("PASS precise dry centerline origin, snapshot stability, and non-guessing destination/floor guards")
+
+-- A route already established on a verified floor must not flicker out
+-- when crossing a narrow-only centerline cell slightly off its center.
+alternate(0)
+local pathIndex=7*67+8+1
+dry[pathIndex]=string.char(edges[pathIndex-1],82,0)
+D[world].tiles[1]=table.concat(dry)
+local liveQuest=1948
+function AT.GetQuestNavigationID()return liveQuest end
+function AT.GetFocusedQuestRouteTargets()return liveQuest,{quick} end
+AT.CancelQuestWalking()
+spawnX,spawnY=8.5*step,8.5*step
+start=fromWorld(201,spawnX,spawnY)
+assert(not AT.GetFocusedQuestWalkingPath(liveQuest,start,440,1000));drain()
+local preserved=AT.GetFocusedQuestWalkingPath(liveQuest,start,440,1000)
+assert(preserved)
+spawnX=7.5*step+2.2
+local narrow=fromWorld(201,spawnX,spawnY)
+assert(not AT.GetBundledWalkingAPI(narrow) and AT.CanCarryBundledCenterline(narrow))
+assert(AT.GetFocusedQuestWalkingPath(liveQuest,narrow,440,1000)==preserved)
+spawnY=spawnY+3.7
+assert(not AT.GetFocusedQuestWalkingPath(liveQuest,fromWorld(201,spawnX,spawnY),440,1000),"do not carry the path off its verified line")
+assert(not AT.GetFocusedQuestWalkingPath(liveQuest,narrow,440,1000),"don't resurrect the path after mismatched position")
+print("PASS established route stays visible across a nearby dry centerline without starting from an unverified point")

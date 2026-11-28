@@ -10,13 +10,14 @@ function readWorld(w){
  const [tx,ty,nx,ny,cells]=["tx","ty","nx","ny","cells"].map(read);
  if(cells!==n||![tx,ty,nx,ny].every(Number.isSafeInteger))throw Error("Invalid grid header");
  const tiles=new Map();
- const layerTransit=text.includes("layerTransit=true");
+ const layerTransit=text.includes("layerTransit=true"), flags2=text.includes("endpointFlags2=true");
+ const cellState=(mask,h)=>!mask?0:flags2&&h%4!==0?((h&1)?2:3):layerTransit&&h%2?2:1;
  for(const m of text.matchAll(/^ \[(\d+)\]=(.*?),\r?$/gms)){
   const tile=Buffer.alloc(n*n);
   if(w===2991){
    const cells=[...m[2].matchAll(/\\(\d{3})/g)].map(a=>+a[1]);
    if(cells.length!==3*n*n)throw Error("Invalid Zephras payload");
-   for(let i=0;i<n*n;i++)tile[i]=cells[i*3]?(layerTransit&&cells[i*3+1]%2?2:1):0;
+   for(let i=0;i<n*n;i++)tile[i]=cellState(cells[i*3],cells[i*3+1]);
   }else{
    const encoded=m[2].match(/^"([A-Za-z0-9+/]+)"$/)?.[1];
    if(!encoded)throw Error("Invalid continent tile");
@@ -29,7 +30,7 @@ function readWorld(w){
       const x=alphabet.indexOf(encoded[pos++])*4096+alphabet.indexOf(encoded[pos++])*64+alphabet.indexOf(encoded[pos++]);
       h=x%2===0?x/2:-(x+1)/2;
      }else h+=c-31;
-     tile[cell++]=(a-1)*64+b?(layerTransit&&h%2!==0?2:1):0;
+     tile[cell++]=cellState((a-1)*64+b,h);
     }
    }
    if(cell!==n*n||pos!==encoded.length)throw Error("Invalid tile length");
@@ -48,6 +49,7 @@ function status(v){
  const t=w.tiles.get(Math.floor(x/n)*w.ny+Math.floor(y/n)+1);
  if(!t)return "noDryTile";
  const cell=t[x%n*n+y%n];
+ if(cell===3)return "narrowCenterlineOnly";
  if(cell===2)return "transitOnly";
  if(cell===1)return "dryCell";
  return "maskedCell";

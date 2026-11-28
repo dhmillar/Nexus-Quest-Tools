@@ -204,6 +204,36 @@ currentTargets = function(quest, map, force)
     return candidateCache
 end
 
+local function carryCenterline(quest,from,width,height)
+    local saved=lastPublished
+    if not saved or saved.quest~=quest or saved.map~=from.map
+        or not AT.CanCarryBundledCenterline or not AT.CanCarryBundledCenterline(from) then return end
+    local c=currentTargets(quest,from.map)
+    if c.stale or c.key~=saved.key then return end
+    local points=saved.path.waypoints
+    local function nearby(first,last)
+        for i=first,last do
+            local a,b=points[i],points[i+1]
+            if a.map==from.map and b.map==from.map then
+                local px,py=(from.x-a.x)*width,(from.y-a.y)*height
+                local vx,vy=(b.x-a.x)*width,(b.y-a.y)*height
+                local length=vx*vx+vy*vy
+                if length>0 then
+                    local t=math.max(0,math.min(1,(px*vx+py*vy)/length))
+                    if (px-t*vx)^2+(py-t*vy)^2<=3.5^2 then
+                        saved.centerlineIndex=i
+                        return saved.path,saved.target,"routed"
+                    end
+                end
+            end
+        end
+    end
+    if saved.centerlineIndex then
+        return nearby(math.max(1,saved.centerlineIndex-8),math.min(#points-1,saved.centerlineIndex+20))
+    end
+    return nearby(1,math.min(#points-1,1600))
+end
+
 function AT.GetFocusedQuestWalkingPath(quest, from, width, height)
     if not active(quest) or not goodPlace(from) or not (finite(width) and width > 0 and finite(height) and height > 0)
         or not AT.GetFocusedQuestRouteTargets then
@@ -212,6 +242,8 @@ function AT.GetFocusedQuestWalkingPath(quest, from, width, height)
     end
     local api, nav, road, why = apiForWalking(from, quest)
     if not api then
+        local carried,target,status=carryCenterline(quest,from,width,height)
+        if carried then return carried,target,status end
         AT.CancelQuestWalking()
         return nil,nil,why or "provider_missing"
     end

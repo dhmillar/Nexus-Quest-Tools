@@ -92,8 +92,12 @@ local function bits(D,x,y)
     if not mask or mask==0 or not h then return end
     local z=l+256*h
     if z>=32768 then z=z-65536 end
+    if D.endpointFlags2 then
+        local flags=z%4
+        return mask,(z-flags)/2,flags%2==1,flags>=2
+    end
     local layerFlag=D.layerTransit and z%2 or 0
-    return mask,z-layerFlag,layerFlag==1
+    return mask,z-layerFlag,layerFlag==1,false
 end
 local function component(D,x,y)
     local groups=AT.NQTDB and AT.NQTDB.DryComponents
@@ -143,13 +147,21 @@ local function confirmOrigin(world,x,y,z,map)
     local w,X,Y=project({map=map,x=u,y=v})
     return w==world and (X-x)^2+(Y-y)^2<=16
 end
-local function transform(D,point,checkHeight)
+local function transform(D,point,checkHeight,asOrigin)
     local world,x,y=project(point)
     if not D or world~=D.world then return end
     local X,Y=floor(x/TILE*D.cells-D.tx*D.cells),floor(y/TILE*D.cells-D.ty*D.cells)
-    local mask,z,layered=bits(D,X,Y)
+    local mask,z,layered,narrow=bits(D,X,Y)
     -- Transit-only cells can carry a proven dry edge, not a guessed endpoint.
     if not mask or layered then return end
+    if narrow then
+        -- The tile bake only certifies the centerline. Reserve that point
+        -- for a live origin close to it, never a guessed quest destination.
+        if not asOrigin then return end
+        local cx=(D.tx+(X+.5)/D.cells)*TILE
+        local cy=(D.ty+(Y+.5)/D.cells)*TILE
+        if (x-cx)^2+(y-cy)^2>1.5^2 then return end
+    end
     if checkHeight and not confirmOrigin(world,x,y,z,point.map) then return end
     return X,Y
 end
@@ -272,7 +284,7 @@ local verified=setmetatable({},{__mode="k"})
 local api={version=2,minor=7,NavVersion=function()return "NQTDB-dry-multiworld-1" end}
 function api.EstimateWalks(_,from,targets,callback)
     local D=data(from)
-    local sx,sy=transform(D,from,true)
+    local sx,sy=transform(D,from,true,true)
     if not sx then return nil,"offmesh" end
     local now=call(GetTime)
     if finite(now) then verified[from]={sx,sy,now,D} end
@@ -323,7 +335,7 @@ local function projectOut(world,x,y,hint)
 end
 local function startCell(from)
     local D=data(from)
-    local sx,sy=transform(D,from,true)
+    local sx,sy=transform(D,from,true,true)
     local now=call(GetTime)
     local previous=verified[from]
     if D and not sx and previous and previous[4]==D and finite(now) and now-previous[3]>=0 and now-previous[3]<=35 then
@@ -415,13 +427,27 @@ function api.WalkBestPath(_,from,targets,callback)
     C_Timer.After(0,collect)
     return function() stopped=true;if cancel then cancel() end end
 end
-function AT.GetBundledWalkingAPI(origin,snapshot)
+local function eligible(origin)
     local D=data(origin)
     if not D or not C_Timer or type(C_Timer.After)~="function" or not C_Map or not C_Map.GetMapPosFromWorldPos then return end
     local _,build=call(GetBuildInfo)
     if not (build=="71037" or build=="71139") then return end
     if call(IsInInstance)==true or call(IsSwimming)==true
         or call(IsFlying)==true or call(UnitOnTaxi,"player")==true then return end
+    return D
+end
+function AT.GetBundledWalkingAPI(origin,snapshot)
+    local D=eligible(origin)
     -- Layered cells never pass endpoint validation, even with readable X/Y.
-    if transform(D,origin,not snapshot) then return api end
+    if D and transform(D,origin,not snapshot,true) then return api end
+end
+function AT.CanCarryBundledCenterline(origin)
+    local D=eligible(origin)
+    if not D or not D.endpointFlags2 then return false end
+    local w,x,y=project(origin)
+    if w~=D.world then return false end
+    local X,Y=floor(x/TILE*D.cells-D.tx*D.cells),floor(y/TILE*D.cells-D.ty*D.cells)
+    local mask,z,stacked,narrow=bits(D,X,Y)
+    if not mask or stacked or not narrow then return false end
+    return confirmOrigin(w,x,y,z,origin.map)
 end

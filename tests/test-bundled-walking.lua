@@ -36,8 +36,10 @@ local function point(X,Y)
  if mask and mask~=0 then
   local u,v=norm((D.tx+(X+.5)/n)*t,(D.ty+(Y+.5)/n)*t)
   local Z=l+256*h
-  if D.layerTransit and Z%2==1 then return end
-  return {map=map,x=u,y=v,z=Z<32768 and Z or Z-65536,mask=mask}
+  Z=Z<32768 and Z or Z-65536
+  local flags=D.endpointFlags2 and Z%4 or D.layerTransit and Z%2 or 0
+  if flags~=0 then return end
+  return {map=map,x=u,y=v,z=Z/(D.endpointFlags2 and 2 or 1),mask=mask}
  end
 end
 local n=D.cells
