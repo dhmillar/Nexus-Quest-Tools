@@ -108,3 +108,14 @@ route.fraction=.8
 AT.RenderWorldQuestRoute("routed",20,route)
 assert(writes-previous==2 and math.abs(layer.parts[1].x-17)<.00001,"route progress moves only its first glow and line anchor")
 print("PASS native zoom/pan clipping, line weight, and redraw work bounded to changed native properties")
+
+function AT.GetQuestNavigationID()return 20,"guide" end
+function AT.GetLevelGuideRoutePoint()return 20,120,.21,.7,"Known Giver" end
+C_Map.GetPlayerMapPosition=nil
+C_QuestLog={GetNextWaypointForMap=function()error("do not replace an explicitly tracked quest start")end}
+turnIn=false
+AT.RenderWorldQuestRoute("routed",20,route)
+assert(layer.legendText=="WALK TO QUEST START")
+AT.RenderWorldQuestRoute("planning",20,nil)
+assert(layer.legendText=="QUEST START  |  NO WALKING LINE ON THIS MAP","keep selected giver when terrain route is unavailable")
+print("PASS Level Guide world overlay preserves explicit quest-giver destination")

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.291 - 2026-11-28
+
+- Track a quest giver in Level Guide to get a terrain-aware route before accepting the quest, including across outdoor zone borders in the same world.
+- The map keeps the selected quest start instead of switching to a quest objective. Dungeon floors and other worlds are not treated as walkable connections.
+
 ## 1.5.290 - 2026-11-28
 
 - Vendor Icons recognize 363 verified merchant NPCs, including 116 repair vendors, even when a nameplate subtitle is missing or localized.

@@ -3,7 +3,7 @@ local frame, lines, caption, elapsed = nil, nil, nil, 0
 local refreshPeriod, enterAreaYards, leaveAreaYards = 0.3, 35, 52
 local previewYards, renderLimit, offPathYards = 90, 30, 24
 local currentPath, cursor, projected, arrival
-local scopeQuest, scopeTurnIn, scopeMap, positionLost, routeStatus, statusQuest
+local scopeQuest, scopeTurnIn, scopeGuide, scopeMap, positionLost, routeStatus, statusQuest
 local meter, metadata, travelDetail, measure, mapRoute
 local bearing, bearingStatus, distanceSource, selectionSource, drawFailure
 
@@ -39,11 +39,11 @@ local function data(quest)
     local maps = C_Map
     if not (maps and maps.GetBestMapForUnit and maps.GetPlayerMapPosition and maps.GetMapWorldSize
         ) then return nil,"position" end
-    if not scopeTurnIn and type(GetTaskInfo) == "function" then
+    if not scopeTurnIn and not scopeGuide and type(GetTaskInfo) == "function" then
         local ok, inside = pcall(GetTaskInfo, quest)
         if ok and ordinary(inside) and inside == true then return {insideTaskArea=true} end
     end
-    if not scopeTurnIn and C_Minimap and C_Minimap.IsInsideQuestBlob then
+    if not scopeTurnIn and not scopeGuide and C_Minimap and C_Minimap.IsInsideQuestBlob then
         local ok,inside=pcall(C_Minimap.IsInsideQuestBlob,quest)
         if ok and ordinary(inside) and inside==true then return {insideTaskArea=true} end
     end
@@ -542,7 +542,7 @@ local function draw()
     travelDetail,mapRoute=nil,nil
     if not (frame and Minimap and AT.db and AT.db.enabled ~= false and AT.db.showQuestRoute ~= false) then
         if AT.CancelQuestWalking then AT.CancelQuestWalking() end
-        arrival,scopeQuest,scopeTurnIn,scopeMap,positionLost = nil,nil,nil,nil,nil
+        arrival,scopeQuest,scopeTurnIn,scopeGuide,scopeMap,positionLost = nil,nil,nil,nil,nil,nil
         routeStatus,statusQuest = "disabled",nil
         hide(); return
     end
@@ -551,9 +551,10 @@ local function draw()
     selectionSource=origin
     if not finite(quest) then quest=nil end
     local turnIn=quest and AT.IsQuestTurnInNavigation and AT.IsQuestTurnInNavigation(quest) or false
-    if quest~=scopeQuest or turnIn~=scopeTurnIn then
+    local guide=origin=="guide"
+    if quest~=scopeQuest or turnIn~=scopeTurnIn or guide~=scopeGuide then
         if AT.CancelQuestWalking then AT.CancelQuestWalking() end
-        arrival,scopeQuest,scopeTurnIn,scopeMap,positionLost = nil,quest,turnIn,nil,nil
+        arrival,scopeQuest,scopeTurnIn,scopeGuide,scopeMap,positionLost = nil,quest,turnIn,guide,nil,nil
     end
     statusQuest=quest
     if not finite(quest) or quest<=0 then routeStatus="no_quest"; hide(); return end

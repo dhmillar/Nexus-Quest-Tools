@@ -1135,7 +1135,7 @@ function AT.GetObservedQuestObjectiveSpots(id,map)
 end
 
 function AT.GetFocusedQuestRouteTargets(mapID)
-    local id = AT.GetQuestNavigationID()
+    local id,source = AT.GetQuestNavigationID()
     if not id then return end
     local ctx = mapContext()
     if not ctx or ctx.id ~= mapID then return id end
@@ -1155,6 +1155,15 @@ function AT.GetFocusedQuestRouteTargets(mapID)
         seen[key] = true
         into=into or targets
         into[#into+1] = {map=useMap, x=x, y=y}
+    end
+    -- An explicitly tracked Level Guide giver is a distinct destination.
+    -- Never walk to a native objective for an unaccepted guide quest.
+    if source=="guide" then
+        local ok,q,m,x,y=pcall(AT.GetLevelGuideRoutePoint)
+        if ok and validID(q) and q==id and validID(m) and zoneID(m)==m and zoneID(mapID)==mapID and call(IsInInstance)~=true then
+            capture(x,y,m)
+        end
+        return id,targets,backups
     end
     if AT.IsQuestTurnInNavigation(id) then
         local m,x,y=AT.GetQuestTurnInPoint(id,mapID)
