@@ -299,7 +299,7 @@ function AT.RenderWorldQuestRoute(status,quest,snapshot)
             a,b=u,v
         end
         if used>0 then
-            text=(path.observedApproach and "WALK TO OBSERVED QUEST AREA" or status=="road" and "ROAD-AWARE WALK" or "WALKING ROUTE")
+            text=(path.verifiedTurnInApproach and "WALK TO VERIFIED TURN-IN" or path.observedApproach and "WALK TO OBSERVED QUEST AREA" or status=="road" and "ROAD-AWARE WALK" or "WALKING ROUTE")
             if turnIn then
                 local _,_,_,provenance=call(AT.GetQuestRouteDisplayPoint,quest)
                 if provenance=="recorded NPC location" then text=text.."  |  RECORDED NPC" end

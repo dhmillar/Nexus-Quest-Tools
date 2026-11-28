@@ -49,3 +49,12 @@ req={};mockResult="unreachable";change={map=19,x=.8,y=.4}
 route=AT.GetFocusedQuestWalkingPath(focus,origin,1000,1000)
 assert(not route,"progress changing backup identity invalidates a stale route")
 print("PASS verified observed walking backup only after unmappable native path; native priority and stale-point guard")
+
+focus=focus+1
+AT.CancelQuestWalking()
+change=nil;observed={map=19,x=.68,y=.62}
+mockResult="offmesh";req={}
+function AT.IsQuestTurnInNavigation()return true end
+route,p=AT.GetFocusedQuestWalkingPath(focus,origin,1000,1000)
+assert(route and p==observed and route.verifiedTurnInApproach and not route.observedApproach and #req==2)
+print("PASS verified turn-in uses distinct fallback label and still tries native first")

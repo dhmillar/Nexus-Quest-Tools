@@ -109,7 +109,9 @@ local function acceptPath(job,path,why)
             if not goodPlace(point) then fail(job, "invalid"); return end
         end
         path.roadAware = job.road == true and path.roadAware == true
-        if job.usingBackup then path.observedApproach=true end
+        if job.usingBackup then
+            if job.turnIn then path.verifiedTurnInApproach=true else path.observedApproach=true end
+        end
         if latest.stale then job.waitingPath = path else job.path = path end
 end
 local function requestPath(job)
@@ -232,9 +234,10 @@ function AT.GetFocusedQuestWalkingPath(quest, from, width, height)
             or (state.retry and now >= state.retry) then clear() end
     end
     if not state and not cache.stale then
-        state = {quest=quest, from=from, api=api, nav=nav, targets=cache.points, backups=cache.backups, key=cache.key,
+        local turnIn=AT.IsQuestTurnInNavigation and AT.IsQuestTurnInNavigation(quest)
+        state = {quest=quest, from=from, api=api, nav=nav, targets=cache.points, backups=cache.backups, key=cache.key, turnIn=turnIn,
             started=now, phase=0, road=road}
-        if #cache.points==1 and AT.IsQuestTurnInNavigation and AT.IsQuestTurnInNavigation(quest) then
+        if #cache.points==1 and turnIn and (#cache.backups==0 or type(api.WalkBestPath)~="function") then
             state.best=cache.points[1]
             requestPath(state)
         elseif type(api.WalkBestPath)=="function" then

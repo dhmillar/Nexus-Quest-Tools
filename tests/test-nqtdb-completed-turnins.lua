@@ -50,3 +50,21 @@ end
 for _ in pairs(db) do n=n+1 end
 assert(n==#fixtures and not db[95982],"hold conflicting records or unmatched completions")
 print("PASS five previously display-only Riverglades completions now route, with native, locale, ready and faction guards")
+
+-- When a ready quest has a native pin plus a nearby exact verified
+-- hand-in, the observation is a different route candidate, not a new pin.
+function CreateVector2D(x,y)return {GetXY=function()return x,y end}end
+C_Map.GetWorldPosFromMapPos=function(_,p)local x,y=p:GetXY();return 0,CreateVector2D(x*5000,y*5000)end
+assert(AT.ToggleQuestHUDManualFocus(93443))
+pins[2548]={{questID=93443,isQuestStart=false,inProgress=false,x=.7718,y=.5295}}
+local id,primary,backup=AT.GetFocusedQuestRouteTargets(2548)
+assert(id==93443 and primary[1].x==.7718 and primary[1].y==.5295)
+assert(#backup==1 and backup[1].x==.7708 and backup[1].y==.5285)
+faction="Horde"
+local _,_,bad=AT.GetFocusedQuestRouteTargets(2548)
+assert(#bad==0)
+faction="Alliance"
+pins[2548][1].x=.7818
+_,_,bad=AT.GetFocusedQuestRouteTargets(2548)
+assert(#bad==0,"an observation beyond 30 yards must not change route target")
+print("PASS native pin remains first; exact nearby hand-in qualified separately, distance and faction checked")

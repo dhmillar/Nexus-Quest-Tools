@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.276 - 2026-11-28
+
+- Ready quests can use a verified hand-in location when the native pin cannot be routed. The backup must be for the same held quest, valid faction, same outdoor map, and within 30 yards of the native pin. Reachable native markers always win.
+
 ## 1.5.275 - 2026-11-28
 
 - Extended the same dry centerline and lower-floor transit support to Zephras Isle. Six previously disconnected pairs of observed positions now route in offline tests.

@@ -1100,7 +1100,23 @@ function AT.GetFocusedQuestRouteTargets(mapID)
     if AT.IsQuestTurnInNavigation(id) then
         local m,x,y=AT.GetQuestTurnInPoint(id,mapID)
         if m then capture(x,y,m) end
-        return id,targets
+        -- Only an independently verified same-quest turn-in near the native
+        -- destination can back up a hand-in. Never substitute an objective.
+        if #targets>0 and completed(id) and call(Q.IsOnQuest,id)==true
+            and call(IsInInstance)~=true and zoneID(m)==m then
+            local world,wx,wy=worldPosition(m,x,y)
+            if world~=nil then
+                for _,mode in ipairs({"observed","verified"}) do
+                    local reference=mode=="verified" and "verified" or nil
+                    local hit,hx,hy=observedTurnIn(id,m,x,y,reference,true)
+                    if hit==m then
+                        local w,px,py=worldPosition(m,hx,hy)
+                        if w==world and (wx-px)^2+(wy-py)^2<=30*30 then capture(hx,hy,m,backups) end
+                    end
+                end
+            end
+        end
+        return id,targets,backups
     end
     if AT.GetNativeQuestRoutePointForMap then
         local nx,ny=call(AT.GetNativeQuestRoutePointForMap,id,mapID)
