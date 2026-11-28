@@ -1236,14 +1236,27 @@ local function objectiveItemName(id)
     end
     return name
 end
-local function objectiveIcon(r,catalog)
+local function objectiveIcon(r,catalog,qid)
     local row=positive(r.npc) and catalog and catalog[r.npc]
     if r.kind=="kill" then
-        r.display=row and row[5] or (r.mob and safe(AT.GetQuestMobDisplayID,r.mob,true))
+        -- Resolve by the exact quest mob ID; unlike raw catalogue slot [5],
+        -- this sees NQTDB variants and independently verified Classic references.
+        local display=r.mob and safe(AT.GetQuestMobDisplayID,r.mob,true,qid,nil,r.npc)
+        r.display=positive(display) and display or row and positive(row[5]) and row[5] or nil
         r.icon=badges[1][3]
     elseif r.kind=="collect" then
         r.icon=positive(r.item) and (safe(C_Item and C_Item.GetItemIconByID,r.item) or safe(GetItemIcon,r.item)) or nil
         r.icon=r.icon or badges[2][3]
+        -- Match the same verified drop sources as Rank Quest. If no exact mob
+        -- portrait is known, keep the item's own art instead of guessing.
+        local drops=positive(r.item) and safe(AT.GetQuestDropMobNames,r.item,qid)
+        for _,name in ipairs(type(drops)=="table" and drops or {}) do
+            local display,npc=safe(AT.GetQuestMobDisplayID,name,true,qid,r.item)
+            if positive(display) and positive(npc) then
+                r.display,r.mob,r.npc=display,name,npc
+                break
+            end
+        end
     else
         r.icon=GUIDE_BOOK
     end
@@ -1263,13 +1276,13 @@ function AT.GetLevelGuideObjectiveRows(qid)
                 local subject=value:gsub("|c%x%x%x%x%x%x%x%x",""):gsub("|r","")
                     :gsub("^%s*%d+%s*/%s*%d+[%s:]+",""):gsub("[%s:(]*%d+%s*/%s*%d+%)?%s*$",""):gsub(":%s*$","")
                 local nativeNPC=field(o,"npcID") or field(o,"creatureID") or field(o,"monsterID")
-                local knownMob=safe(AT.GetQuestKillMobName,qid,o,value)
+                local knownMob,resolved=safe(AT.GetQuestKillMobName,qid,o,value)
                 local isKill=kind=="kill" or kind=="monster" and (knownMob or
                     subject:lower():match("%s+slain$") or subject:lower():match("^kill%s") or subject:lower():match("^defeat%s"))
                 local item=kind=="item" and (field(o,"itemID") or field(o,"itemId") or safe(AT.GetKnownQuestDropItem,qid,subject))
                 local done=field(o,"finished")==true
                 lines[#lines+1]=objectiveIcon({text=value,kind=isKill and "kill" or kind=="item" and "collect" or "other",
-                    npc=isKill and nativeNPC or nil,item=item,mob=knownMob,done=done},catalog)
+                    npc=isKill and (resolved or nativeNPC) or nil,item=item,mob=knownMob,done=done},catalog,qid)
             end
         end
     end
@@ -1288,7 +1301,7 @@ function AT.GetLevelGuideObjectiveRows(qid)
             end
             local line=("%s: 0/%d"):format(validName(name) and name or kind==1 and "Kills" or "Collect",n)
             lines[#lines+1]=objectiveIcon({text=line,kind=kind==1 and "kill" or "collect",
-                npc=kind==1 and id or nil,item=kind==2 and id or nil,mob=kind==1 and name or nil},catalog)
+                npc=kind==1 and id or nil,item=kind==2 and id or nil,mob=kind==1 and name or nil},catalog,qid)
         end
     end
     -- The client does not always supply objective details for quests not in the log.

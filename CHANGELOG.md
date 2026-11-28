@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.302 - 2026-11-28
+
+- Level Guide: show verified creature portraits alongside kill and collection objectives using the same bundled sources as Rank Quest. The guide keeps the live objective text and uses item art when a drop-source portrait is unknown.
+
 ## 1.5.301 - 2026-11-28
 
 - Walking: preserve the verified line across outdoor map boundaries for tracked objectives, turn-ins and Level Guide destinations when the target and terrain are unchanged. Changing quest or objective still clears the old route immediately.
