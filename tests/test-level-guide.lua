@@ -234,6 +234,24 @@ do
     assert(#g.art.services==0)
     AT.NQTDB,UnitFactionGroup=prior,nativeFaction
 end
+do
+    local realPack,prior,priorBase,nativeFaction={},AT.NQTDB,AT.LevelGuideNPCServices,UnitFactionGroup
+    assert(loadfile("NQT/NQTDB.lua"))("NQT",realPack)
+    local corrected=realPack.NQTDB.AdditionalGuideTrainerPins[1411][1]
+    assert(corrected[1]==4 and corrected[5]=="Kaplak" and corrected[6]==3170)
+    AT.NQTDB={AdditionalGuideTrainerPins={[1436]={corrected}}}
+    AT.LevelGuideNPCServices={[1436]={{5,2,corrected[3],corrected[4],corrected[5]}}}
+    UnitFactionGroup=function()return "Horde" end
+    g.npcChecks[4]:SetChecked(true);g.npcChecks[4].scripts.OnClick(g.npcChecks[4])
+    g.npcChecks[5]:SetChecked(true);g.npcChecks[5].scripts.OnClick(g.npcChecks[5])
+    assert(#g.art.services==1 and g.art.services[1].name=="Kaplak" and g.art.services[1].kind==4)
+    UnitFactionGroup=nativeFaction
+    g.npcChecks[4].scripts.OnClick(g.npcChecks[4])
+    assert(#g.art.services==0)
+    g.npcChecks[4]:SetChecked(false);g.npcChecks[4].scripts.OnClick(g.npcChecks[4])
+    g.npcChecks[5]:SetChecked(false);g.npcChecks[5].scripts.OnClick(g.npcChecks[5])
+    AT.NQTDB,AT.LevelGuideNPCServices=prior,priorBase
+end
 g.npcChecks[15]:SetChecked(true);g.npcChecks[15].scripts.OnClick(g.npcChecks[15]);assert(g.art.serviceStatus.text=="No enabled NPC services recorded here")
 g.npcChecks[15]:SetChecked(false);g.npcChecks[15].scripts.OnClick(g.npcChecks[15])
 g.npcButton.scripts.OnClick()

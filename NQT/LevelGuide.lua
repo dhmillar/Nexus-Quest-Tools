@@ -801,14 +801,27 @@ local function guideServicePoints(map,options)
             if kind then add(kind,r[4],r[5],row and row[1]) end
         end
     end
+    local trainerPack=AT.NQTDB and AT.NQTDB.AdditionalGuideTrainerPins
+    local trainers=trainerPack and trainerPack[map]
+    local function correctedTrainer(r)
+        if r[1]~=4 and r[1]~=5 and r[1]~=11 then return false end
+        for _,p in ipairs(trainers or {}) do
+            if r[1]~=p[1] and r[2]==p[2] and r[5]==p[5]
+                and (r[3]-p[3])^2+(r[4]-p[4])^2<.018^2 then return true end
+        end
+        return false
+    end
     for _,r in ipairs(AT.LevelGuideNPCServices and AT.LevelGuideNPCServices[map] or {}) do
-        if r[2]==0 or r[2]==side then
+        if (r[2]==0 or r[2]==side) and not correctedTrainer(r) then
             add(r[1],r[3],r[4],r[5])
             if r[1]==6 and validName(r[5]) and r[5]:match("^Innkeeper%s") then add(2,r[3],r[4],r[5]) end
         end
     end
     local verified=AT.NQTDB and AT.NQTDB.AdditionalGuideNPCServicePins
     for _,r in ipairs(verified and verified[map] or {}) do
+        if r[2]==0 or r[2]==side then add(r[1],r[3],r[4],r[5]) end
+    end
+    for _,r in ipairs(trainers or {}) do
         if r[2]==0 or r[2]==side then add(r[1],r[3],r[4],r[5]) end
     end
     do

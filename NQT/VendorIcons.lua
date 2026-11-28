@@ -151,9 +151,32 @@ local function labelRole(token,plate,guid)
     local id=type(guid)=="string" and tonumber(guid:match("^Creature%-%d+%-%d+%-%d+%-%d+%-(%d+)%-"))
     local catalog=AT.NQTDB and AT.NQTDB.VerifiedVendorServices
     local verified=id and catalog and catalog[id]
+    local faction
+    if id then faction=safe(UnitFactionGroup,"player") end
+    local trainers=AT.NQTDB and AT.NQTDB.VerifiedTrainerServices
+    local trainer=id and trainers and trainers[id]
+    local function allowed(side)
+        return side==0 or side==1 and faction=="Alliance" or side==2 and faction=="Horde"
+    end
+    if trainer and allowed(trainer[3]) and art[trainer[2]] then
+        local role=trainer[2]
+        if role=="class" or role=="profession" then
+            -- An exact open trainer window supplies the service kind even
+            -- when the source export lacks the specialty. Honor a live
+            -- class/profession subtitle when available.
+            local candidates=role=="class" and classes or professions
+            for _,specific in ipairs(candidates) do
+                if word(subtitle,specific) then role=specific;break end
+            end
+        end
+        local roles={role}
+        if verified and allowed(verified[3]) then roles[2]=verified[4] and "repair" or "vendor" end
+        return roles
+    elseif trainer and (faction=="Alliance" or faction=="Horde") then
+        return {}
+    end
     if verified then
-        local faction=safe(UnitFactionGroup,"player")
-        if verified[3]==0 or verified[3]==1 and faction=="Alliance" or verified[3]==2 and faction=="Horde" then
+        if allowed(verified[3]) then
             -- A discovered merchant ID works even when tooltip title/name data
             -- is unavailable. Classes/subtypes still use real service titles.
             local roles=classify(subtitle,name,nil)

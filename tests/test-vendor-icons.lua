@@ -129,3 +129,21 @@ check(repair,"Trade_BlackSmithing")
 event:event("NAME_PLATE_UNIT_REMOVED",verifiedToken)
 assert(not overlays[verified].shown)
 print("PASS exact vendor-ID fallback, faction, localized name, reagent/repair art, and no same-name alias")
+local _,rogue=npc(23,"Localized NPC",nil)
+local _,smith=npc(24,"Alphonse Dumas",nil)
+local _,weapon=npc(25,"Woo Ping",nil)
+local _,decoy=npc(26,"Woo Ping",nil)
+local prevGUID=UnitGUID
+function UnitGUID(t)
+    if t=="nameplate23" then return "Creature-0-0-0-0-3170-00123" end
+    if t=="nameplate24" then return "Creature-0-0-0-0-259250-00124" end
+    if t=="nameplate25" then return "Creature-0-0-0-0-11867-00125" end
+    return prevGUID(t)
+end
+AT.RefreshVendorIcons()
+check(rogue,"Ability_Rogue_SliceDice")
+assert(not overlays[smith] and not overlays[weapon] and not overlays[decoy])
+faction="Alliance";AT.RefreshVendorIcons()
+check(smith,"Trade_BlackSmithing");check(weapon,"INV_Sword_04")
+assert(not overlays[rogue].shown and not overlays[decoy])
+print("PASS actual verified trainer ID art without a subtitle: rogue, blacksmith, weapon trainer, faction and same-name decoy")

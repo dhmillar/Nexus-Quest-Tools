@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.292 - 2026-11-28
+
+- Overhead trainer icons recognize 178 verified NPCs, including 169 confirmed class, profession, or weapon specialties, even without a subtitle.
+- Added or corrected 17 optional Level Guide trainer pins across nine maps. No minimap pins were added.
+
 ## 1.5.291 - 2026-11-28
 
 - Track a quest giver in Level Guide to get a terrain-aware route before accepting the quest, including across outdoor zone borders in the same world.
