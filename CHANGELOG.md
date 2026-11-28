@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.293 - 2026-11-28
+
+- Walking: choose among a small set of alternate objective or turn-in locations without searching the whole box between them. Still selects the shortest validated walking route, not the closest point in a straight line.
+
 ## 1.5.292 - 2026-11-28
 
 - Overhead trainer icons recognize 178 verified NPCs, including 169 confirmed class, profession, or weapon specialties, even without a subtitle.

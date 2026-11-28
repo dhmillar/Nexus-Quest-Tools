@@ -227,11 +227,27 @@ local function search(D,sx,sy,tx,ty,callback,estimateOnly,goals)
         regionScores[k]=best
         return best
     end
-    -- The octile distance to the bounding box never exceeds the
-    -- shortest route to any goal, even if some of the goals are isolated.
+    -- A wide box between a few alternate destinations can have a zero
+    -- lower bound even when every actual destination is far away. For
+    -- small goal sets use the nearest actual cell in the relaxed grid.
+    -- Keep the constant-work bounding box for large search sets.
+    local max,min=math.max,math.min
+    local function octile(X,Y)
+        return UNIT*max(X,Y)+(DIAG-UNIT)*min(X,Y)
+    end
     local function heuristic(x,y)
-        local X,Y=math.max(lowX-x,0,x-highX),math.max(lowY-y,0,y-highY)
-        return math.max(lowerBound(x,y),UNIT*math.max(X,Y)+(DIAG-UNIT)*math.min(X,Y))
+        local geometric
+        if goals and #goals>=2 and #goals<=4 then
+            geometric=math.huge
+            for i=1,#goals do
+                local dest=goals[i]
+                local v=octile(abs(dest[1]-x),abs(dest[2]-y))
+                if v<geometric then geometric=v end
+            end
+        else
+            geometric=octile(max(lowX-x,0,x-highX),max(lowY-y,0,y-highY))
+        end
+        return max(lowerBound(x,y),geometric)
     end
     local source=encode(sx,sy)
     local g,parents,heap={[source]=0},{},{}

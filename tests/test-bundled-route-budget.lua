@@ -103,3 +103,21 @@ table.remove(queue,1)()
 assert(not delayed and #queue==1 and checks>=2)
 abort();drain();debugprofilestop=nil
 print("PASS known long connected route, time-budgeted slices and cancellable slow frames")
+
+-- A pair of alternate approaches can surround the player with a very
+-- large bounding box even though neither approach is close.
+AT.NQTDB.DryComponents=nil
+local D={world=world,cells=67,nx=2,ny=2,tx=0,ty=0,tiles={}}
+local tile=string.rep(string.char(255,0,0),67*67)
+for i=1,4 do D.tiles[i]=tile end
+AT.NQTDB.RouteWorlds[world]=D
+sx,sy=50.5*step,50.5*step
+local start,near,far=point(50,50),point(10,10),point(111,111)
+local result,count
+assert(api.WalkBestPath("widely spaced",start,{far,near},function(r,e)assert(not e);result=r end))
+count=0
+while #queue>0 do count=count+1;assert(count<100);table.remove(queue,1)() end
+assert(result and result.targetIndex==2,"closest actual approach wins, not first list entry")
+assert(math.abs(result.yards-40*step*math.sqrt(2))<.01,"route cost still exact")
+assert(count<=8,"small alternate-destination searches should not fill the whole goal box")
+print(("PASS %.0f yd alternate approach in %d timer slices"):format(result.yards,count))
