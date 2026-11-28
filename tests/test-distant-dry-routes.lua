@@ -31,3 +31,79 @@ local function check(world,sx,sy,gx,gy,expected)
 end
 check(0,-8869.4,-161.5,-10455.1,-3281.9,8079.5)
 check(1,-1731.7,3184.7,-897.7,-3765.6,11317.5)
+
+
+
+-- Re-run the exact same bundled data through the actual caller at 15 fps.
+-- A frame-paced stationary request takes longer than the old 35 s watchdog.
+AT.db={}
+local now,quest,selected,focusMap,target=0,11,true
+function GetTime()return now end
+C_Map.GetBestMapForUnit=function() return focusMap end
+C_Map.GetMapInfo=function()return {mapType=3} end
+C_Map.GetUserWaypoint=function()return selected and {uiMapID=target.map,position=vec(target.x,target.y)} end
+C_SuperTrack={IsSuperTrackingUserWaypoint=function()return selected end}
+function AT.GetQuestNavigationID()return quest,"hud" end
+function AT.GetFocusedQuestRouteTargets()return quest,{target} end
+assert(loadfile("NQT/Walking.lua"))("NQT",AT)
+local function paced(world,sx,sy,gx,gy,expected,isPin)
+ w,x,y,selected=world,sx,sy,isPin
+ quest=quest+1
+ focusMap=100+w
+ local from={map=focusMap,x=.5,y=.5}
+ target={map=focusMap,x=(gx-x)/50000+.5,y=(gy-y)/50000+.5}
+ local nav=AT.GetWalkingNavigationID()
+ local api=assert(AT.GetBundledWalkingAPI(from))
+ local method=isPin and "WalkPath" or "WalkBestPath"
+ local orig,requests=api[method],0
+ api[method]=function(...)requests=requests+1;return orig(...)end
+ AT.CancelQuestWalking()
+ now=0
+ local got=AT.GetFocusedQuestWalkingPath(nav,from,50000,50000)
+ local frame=0
+ while not got and frame<1000 do
+  frame=frame+1
+  now=frame/15
+  local callback=table.remove(q,1)
+  if callback then callback() end
+  got=AT.GetFocusedQuestWalkingPath(nav,from,50000,50000)
+ end
+ api[method]=orig
+ assert(got and requests==1 and now>35,"actively progressing request must not restart at 35 seconds: "..requests)
+ assert(math.abs(got.yards-expected)<1)
+ print(("PASS exact %.0f yd %s in %.1f modeled seconds at 15 fps without restarting"):format(got.yards,isPin and "waypoint" or "quest path",now))
+end
+paced(0,-8869.4,-161.5,-10455.1,-3281.9,8079.5,true)
+paced(1,-1731.7,3184.7,-897.7,-3765.6,11317.5,false)
+
+-- Change one pin without moving or allowing a previously queued callback
+-- to finish, then simulate a real scheduler stall on the new search.
+selected=true
+local from={map=focusMap,x=.5,y=.5}
+local api=assert(AT.GetBundledWalkingAPI(from))
+local orig=api.WalkPath
+local work,respond,cancelled,requests
+cancelled,requests=0,0
+api.WalkPath=function(_,p,t,cb,report)
+ work,respond=report,cb
+ requests=requests+1
+ return function()cancelled=cancelled+1 end
+end
+local nav=AT.GetWalkingNavigationID()
+AT.CancelQuestWalking()
+now=100
+assert(not AT.GetFocusedQuestWalkingPath(nav,from,50000,50000))
+local staleWork,staleResponse=assert(work),respond
+target={map=focusMap,x=target.x+.001,y=target.y}
+now=101
+assert(not AT.GetFocusedQuestWalkingPath(nav,from,50000,50000) and requests==2 and cancelled==1)
+now=130
+staleWork()
+staleResponse({yards=1,navVersion=api.NavVersion(),waypoints={from,target}})
+assert(not AT.GetFocusedQuestWalkingPath(nav,from,50000,50000) and requests==2)
+now=137
+assert(not AT.GetFocusedQuestWalkingPath(nav,from,50000,50000) and requests==3 and cancelled==2,
+ "stale activity cannot prevent recovery from a stalled new request")
+api.WalkPath=orig
+AT.CancelQuestWalking()
+print("PASS changed waypoint cancels immediately; a stalled replacement restarts and stale request activity cannot extend it")

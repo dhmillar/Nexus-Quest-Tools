@@ -165,7 +165,7 @@ local function transform(D,point,checkHeight,asOrigin)
     if checkHeight and not confirmOrigin(world,x,y,z,point.map) then return end
     return X,Y
 end
-local function search(D,sx,sy,tx,ty,callback,estimateOnly,goals)
+local function search(D,sx,sy,tx,ty,callback,estimateOnly,goals,onWork)
     local W=D.ny*D.cells
     local function encode(x,y)return x*W+y end
     local function unpackKey(k)return floor(k/W),k%W end
@@ -324,6 +324,7 @@ local function search(D,sx,sy,tx,ty,callback,estimateOnly,goals)
     end
     local function tick()
         if done or cancelled then return end
+        if onWork then onWork() end
         local start=call(debugprofilestop)
         for i=1,180 do
             if i%24==0 and finite(start) then
@@ -342,6 +343,7 @@ local function search(D,sx,sy,tx,ty,callback,estimateOnly,goals)
                     local keys={k}
                     local function trace()
                         if done or cancelled then return end
+                        if onWork then onWork() end
                         for step=1,512 do
                             local prev=parents[k]
                             if not prev then return finish(keys,c/UNIT*TILE/D.cells,winner) end
@@ -375,8 +377,8 @@ local function search(D,sx,sy,tx,ty,callback,estimateOnly,goals)
     return function()cancelled=true end
 end
 local verified=setmetatable({},{__mode="k"})
-local api={version=2,minor=7,NavVersion=function()return "NQTDB-dry-multiworld-1" end}
-function api.EstimateWalks(_,from,targets,callback)
+local api={version=2,minor=7,progressCallbacks=true,NavVersion=function()return "NQTDB-dry-multiworld-1" end}
+function api.EstimateWalks(_,from,targets,callback,onWork)
     local D=data(from)
     local sx,sy=transform(D,from,true,true)
     if not sx then return nil,"offmesh" end
@@ -386,6 +388,7 @@ function api.EstimateWalks(_,from,targets,callback)
     local stride=D.ny*D.cells
     local function nextGoal()
         if stop then return end
+        if onWork then onWork() end
         i=i+1
         local target=targets[i]
         if not target then callback(result);return end
@@ -403,7 +406,7 @@ function api.EstimateWalks(_,from,targets,callback)
             local cost=keys and yards or false
             result[i],estimated[cell]=cost,cost
             C_Timer.After(0,nextGoal)
-        end,true)
+        end,true,nil,onWork)
     end
     C_Timer.After(0,nextGoal)
     return function()stop=true;if cancel then cancel()end end
@@ -447,7 +450,7 @@ local function startCell(from)
     verified[from]=nil
     return D,sx,sy
 end
-local function beginPath(D,sx,sy,tx,ty,from,targets,callback,goals)
+local function beginPath(D,sx,sy,tx,ty,from,targets,callback,goals,onWork)
     local stopped
     local cancel=search(D,sx,sy,tx,ty,function(keys,yards,winner)
         if not keys then callback(nil,yards);return end
@@ -459,6 +462,7 @@ local function beginPath(D,sx,sy,tx,ty,from,targets,callback,goals)
         local lastHint=candidates[1]
         local function projectBatch()
             if stopped then return end
+            if onWork then onWork() end
             -- Small batches keep long multi-tile paths from blocking a frame.
             for _=1,48 do
                 if i<1 then
@@ -507,17 +511,17 @@ local function beginPath(D,sx,sy,tx,ty,from,targets,callback,goals)
             C_Timer.After(0,projectBatch)
         end
         projectBatch()
-    end,false,goals)
+    end,false,goals,onWork)
     return function() stopped=true;cancel() end
 end
-function api.WalkPath(_,from,to,callback)
+function api.WalkPath(_,from,to,callback,onWork)
     local D,sx,sy=startCell(from)
     local tx,ty=transform(D,to,false)
     if not(sx and tx) then return nil,"offmesh" end
     if differentComponent(D,sx,sy,tx,ty) then return nil,"unreachable" end
-    return beginPath(D,sx,sy,tx,ty,from,{to},callback)
+    return beginPath(D,sx,sy,tx,ty,from,{to},callback,nil,onWork)
 end
-function api.WalkBestPath(_,from,targets,callback)
+function api.WalkBestPath(_,from,targets,callback,onWork)
     local D,sx,sy=startCell(from)
     if not sx then return nil,"offmesh" end
     if #targets>256 then return nil,"budget" end
@@ -525,12 +529,13 @@ function api.WalkBestPath(_,from,targets,callback)
     local stride=D.ny*D.cells
     local function collect()
         if stopped then return end
+        if onWork then onWork() end
         for _=1,12 do
             i=i+1
             local target=targets[i]
             if not target then
                 if #goals==0 then callback(nil,projectable and "unreachable" or "offmesh");return end
-                cancel=beginPath(D,sx,sy,nil,nil,from,targets,callback,goals)
+                cancel=beginPath(D,sx,sy,nil,nil,from,targets,callback,goals,onWork)
                 return
             end
             local x,y=transform(D,target,false)

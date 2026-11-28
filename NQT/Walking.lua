@@ -143,12 +143,21 @@ local function request(job, method, target, callback, refused)
     job.phase = job.phase + 1
     local phase = job.phase
     job.cancel = NO_CANCEL
-    local ok, cancel, reason = pcall(method, OWNER, job.from, target, function(result, why)
+    local function completed(result, why)
         if not valid(job) or job.phase ~= phase then return end
         job.phase = job.phase + 1
         job.cancel = nil
         callback(result, why)
-    end)
+    end
+    local ok,cancel,reason
+    if not job.road and job.api.progressCallbacks==true then
+        job.lastWork=time()
+        ok,cancel,reason=pcall(method,OWNER,job.from,target,completed,function()
+            if state==job and job.phase==phase then job.lastWork=time() end
+        end)
+    else
+        ok,cancel,reason=pcall(method,OWNER,job.from,target,completed)
+    end
     if not valid(job) or job.phase ~= phase then
         if ok and type(cancel) == "function" then pcall(cancel) end
         return
@@ -406,7 +415,8 @@ function AT.GetFocusedQuestWalkingPath(quest, from, width, height)
         end
         if state.quest ~= quest or old.map ~= from.map or state.api ~= api or state.nav ~= nav
             or state.key ~= cache.key or moved
-            or (state.cancel and now - state.started > 35)
+            -- Stop a silent job, not a long search still consuming bounded frames.
+            or (state.cancel and now - (state.lastWork or state.started) > 35)
             or (state.retry and (now >= state.retry or not sameFailedStart(state.backoff,from,cache.key))) then clear() end
     end
     if not state and not cache.stale then

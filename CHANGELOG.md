@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.310 - 2026-11-28
+
+- Routing: a long standalone walking search is no longer reset while it is still doing work. Truly stalled requests still retry, and changing the selected quest or waypoint still cancels stale work. Two exact bundled routes completed once each in a 15 fps scheduler test past the previous 35-second cutoff.
+
 ## 1.5.309 - 2026-11-28
 
 - NQTDB: added 11 exact item requirements and verified reward details for five endgame quests. These entries fill missing details only after the game confirms the quest is already in the player's log; they never generate a suggested pickup or route on their own.
