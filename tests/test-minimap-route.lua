@@ -79,3 +79,20 @@ end
 AT.RefreshQuestRoute()
 assert(AT.worldStatus=="routed","follow the actual turn-in walk rather than declaring arrival across the wall")
 print("PASS ready-quest route can continue around an obstacle beside the hand-in")
+
+local scope=true
+AT.GetWalkingNavigationID=function()if scope then return -1,"waypoint" end end
+AT.GetSelectedUserWaypoint=function()return {map=20,x=.556,y=.5}end
+AT.IsQuestTurnInNavigation=function()error("waypoint leaked into quest API")end
+GetTaskInfo=function()error("waypoint leaked into task API")end
+AT.RefreshQuestRoute()
+assert(AT.worldStatus=="routed" and AT.snapshot.quest==-1)
+local status,id,details,source=AT.GetQuestRouteStatus()
+assert(status=="routed" and id==nil and source=="waypoint" and details:find("native waypoint",1,true))
+AT.GetFocusedQuestWalkingPath=function()return nil,nil,"offmesh"end
+AT.RefreshQuestRoute()
+assert(AT.worldStatus=="offmesh" and not bearing.shown and not AT.snapshot)
+scope=false
+AT.RefreshQuestRoute()
+assert(AT.worldStatus=="no_quest" and not meter.shown)
+print("PASS selected waypoint route bypasses quest/task state, tracks around walls and hides when cleared or unsupported")

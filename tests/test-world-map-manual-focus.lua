@@ -101,3 +101,19 @@ ready[11]=true
 AT.RefreshQuests()
 assert(not AT.GetQuestHUDManualFocus())
 print("PASS native world-map pin and log row preserve explicit turn-in tracking on map close; recycled pins, modifier clicks, replacements and cleanup")
+
+-- Placing and explicitly selecting a pin yields native auto-focus without
+-- deleting the pin; a later actual quest selection restores quest routing.
+assert(loadfile("NQT/Walking.lua"))("NQT",AT)
+local selected=true
+local waypoint={uiMapID=1,position={GetXY=function()return .7,.8 end}}
+C_Map.GetUserWaypoint=function()return waypoint end
+C_SuperTrack.IsSuperTrackingUserWaypoint=function()return selected end
+C_SuperTrack.SetSuperTrackedUserWaypoint=function(value)selected=value end
+current=0
+AT.RefreshQuests()
+local _,origin=AT.GetWalkingNavigationID()
+assert(current==0 and origin=="waypoint","periodic auto-focus must not steal a tracked waypoint")
+assert(AT.FocusQuestFromWorldMap(12))
+assert(not selected and AT.GetWalkingNavigationID()==12 and C_Map.GetUserWaypoint()==waypoint)
+print("PASS native auto-focus respects the user's tracked waypoint; clicking a quest stops tracking, not placement")

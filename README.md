@@ -14,7 +14,7 @@ Nexus Quest Tools is a World of Warcraft: Forever addon that organizes your ques
 
 - **Nearby quest focus.** Automatically watches eligible nearby quests. It sticks with the current quest while you’re in range, looks for the next one after completion or when you move on, and can unwatch finished objectives without removing the quest from your log. Right-click a quest to exclude it from automatic tracking.
 - **Your order comes first.** Ctrl-click to build a numbered queue of up to 10 quests. The queue takes priority over nearby tracking and advances as quests are completed. You can also pin one quest directly or reset the queue from the quest menu.
-- **Navigation on both maps.** Follow the focused quest or a pinned turn-in on the minimap and world map. Covered areas can use a walking route from a compatible navigation addon; road-aware routing requires a provider that supports it. Otherwise, when reliable positions are available, the addon can show an estimated direction. Directions hide when you reach the objective area.
+- **Navigation on both maps.** Follow the focused quest, a turn-in, or a tracked Blizzard map waypoint on the minimap and world map. NQT includes its own outdoor walking terrain; no other addon is required. Where a valid walking path is unavailable, quest guidance can show a clearly labeled estimated direction. A map waypoint shows no walking line until it has a valid route.
 
 ### Rank Quest
 

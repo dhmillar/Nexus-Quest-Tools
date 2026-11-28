@@ -119,3 +119,25 @@ assert(layer.legendText=="WALK TO QUEST START")
 AT.RenderWorldQuestRoute("planning",20,nil)
 assert(layer.legendText=="QUEST START  |  NO WALKING LINE ON THIS MAP","keep selected giver when terrain route is unavailable")
 print("PASS Level Guide world overlay preserves explicit quest-giver destination")
+
+-- A tracked user waypoint shares routed geometry on stock and MapWise,
+-- but no fit/POI failure should manufacture a straight line.
+local waypoint,scope={map=120,x=.48,y=.55},true
+AT.GetWalkingNavigationID=function()if scope then return -1,"waypoint" end end
+AT.GetSelectedUserWaypoint=function()return waypoint end
+AT.IsQuestTurnInNavigation=function()error("waypoint must not query quest status")end
+local snap={quest=-1,path=route.path,segment=1,fraction=0,selected=waypoint}
+WorldMapFrame.IsVisible=function()return true end
+MapWiseAPI.UI.frame.hidden=true
+AT.RenderWorldQuestRoute("routed",-1,snap)
+local native=assert(overlays[stock])
+assert(native.shown and native.parts[1].shown and native.legendText=="WALK TO WAYPOINT")
+MapWiseAPI.UI.frame.hidden=false
+AT.RenderWorldQuestRoute("routed",-1,snap)
+assert(overlay.shown and overlay.parts[1].shown and overlay.legendText=="WALK TO WAYPOINT")
+AT.RenderWorldQuestRoute("offmesh",-1,nil)
+assert(overlay.shown and not overlay.parts[1].shown and overlay.legendText=="WAYPOINT  |  NO WALKING LINE ON THIS MAP")
+scope=false
+AT.RenderWorldQuestRoute("no_quest",nil,nil)
+assert(not native.shown and not overlay.shown)
+print("PASS a tracked map waypoint shares verified walking geometry on both world map styles, and never shows fallback bearing")

@@ -3,7 +3,7 @@ local frame, lines, caption, elapsed = nil, nil, nil, 0
 local refreshPeriod, enterAreaYards, leaveAreaYards = 0.3, 35, 52
 local previewYards, renderLimit, offPathYards = 90, 30, 24
 local currentPath, cursor, projected, arrival
-local scopeQuest, scopeTurnIn, scopeGuide, scopeMap, positionLost, routeStatus, statusQuest
+local scopeQuest, scopeTurnIn, scopeGuide, scopeWaypoint, scopeMap, positionLost, routeStatus, statusQuest
 local meter, metadata, travelDetail, measure, mapRoute
 local bearing, bearingStatus, distanceSource, selectionSource, drawFailure
 
@@ -39,11 +39,11 @@ local function data(quest)
     local maps = C_Map
     if not (maps and maps.GetBestMapForUnit and maps.GetPlayerMapPosition and maps.GetMapWorldSize
         ) then return nil,"position" end
-    if not scopeTurnIn and not scopeGuide and type(GetTaskInfo) == "function" then
+    if not scopeTurnIn and not scopeGuide and not scopeWaypoint and type(GetTaskInfo) == "function" then
         local ok, inside = pcall(GetTaskInfo, quest)
         if ok and ordinary(inside) and inside == true then return {insideTaskArea=true} end
     end
-    if not scopeTurnIn and not scopeGuide and C_Minimap and C_Minimap.IsInsideQuestBlob then
+    if not scopeTurnIn and not scopeGuide and not scopeWaypoint and C_Minimap and C_Minimap.IsInsideQuestBlob then
         local ok,inside=pcall(C_Minimap.IsInsideQuestBlob,quest)
         if ok and ordinary(inside) and inside==true then return {insideTaskArea=true} end
     end
@@ -164,8 +164,8 @@ local function insideObjectiveArea(d, x, y, distance)
         local dx, dy = (arrival.x-x)*d.w, (arrival.y-y)*d.h
         same = dx*dx + dy*dy <= 4
     end
-    -- An NPC is a point, not a 35-yard objective area.
-    local limit = scopeTurnIn and (same and 12 or 8) or (same and leaveAreaYards or enterAreaYards)
+    -- A turn-in NPC or waypoint is a point, not a 35-yard objective area.
+    local limit = (scopeTurnIn or scopeWaypoint) and (same and 12 or 8) or (same and leaveAreaYards or enterAreaYards)
     if distance > limit then
         arrival = nil
         return false
@@ -343,6 +343,10 @@ local function nativeOrParentPoint(quest)
 end
 
 local function metaFor(quest)
+    if scopeWaypoint and quest==scopeQuest then
+        local p=AT.GetSelectedUserWaypoint and AT.GetSelectedUserWaypoint()
+        return p and {map=p.map,x=p.x,y=p.y,source="native waypoint"} or {}
+    end
     local now=GetTime and GetTime() or 0
     local turnIn=AT.IsQuestTurnInNavigation and AT.IsQuestTurnInNavigation(quest) or false
     if metadata and metadata.quest==quest and metadata.turnIn==turnIn and now-metadata.when<.5
@@ -412,7 +416,7 @@ local function distanceStatus()
     end
     local ok,yards=pcall(yardEstimate,metaFor(statusQuest))
     if ok and finite(yards) then distanceSource="map coordinates"; return yards,true end
-    if not scopeTurnIn and not (IsIndoors and IsIndoors()) and C_QuestLog then
+    if not scopeTurnIn and not scopeWaypoint and not (IsIndoors and IsIndoors()) and C_QuestLog then
         local sq,same=call(C_QuestLog.GetDistanceSqToQuest,statusQuest)
         if finite(sq) and sq>0 and ordinary(same) and same==true then
             distanceSource="native quest distance"
@@ -500,7 +504,7 @@ end
 local function drawBearing()
     if bearing then bearing:Hide() end
     bearingStatus="hidden (" .. (routeStatus or "no status") .. ")"
-    if routeStatus=="arrival" or routeStatus=="interior" or routeStatus=="disabled"
+    if scopeWaypoint or routeStatus=="arrival" or routeStatus=="interior" or routeStatus=="disabled"
         or routeStatus=="routed" or routeStatus=="road" or not finite(statusQuest) then return end
     local m=metaFor(statusQuest)
     if not m.map then bearingStatus="no objective coordinates"; return end
@@ -542,22 +546,23 @@ local function draw()
     travelDetail,mapRoute=nil,nil
     if not (frame and Minimap and AT.db and AT.db.enabled ~= false and AT.db.showQuestRoute ~= false) then
         if AT.CancelQuestWalking then AT.CancelQuestWalking() end
-        arrival,scopeQuest,scopeTurnIn,scopeGuide,scopeMap,positionLost = nil,nil,nil,nil,nil,nil
+        arrival,scopeQuest,scopeTurnIn,scopeGuide,scopeWaypoint,scopeMap,positionLost = nil,nil,nil,nil,nil,nil,nil
         routeStatus,statusQuest = "disabled",nil
         hide(); return
     end
-    local source=AT.GetQuestNavigationID or AT.GetFocusedQuestID
+    local source=AT.GetWalkingNavigationID or AT.GetQuestNavigationID or AT.GetFocusedQuestID
     local quest,origin=call(source)
     selectionSource=origin
     if not finite(quest) then quest=nil end
-    local turnIn=quest and AT.IsQuestTurnInNavigation and AT.IsQuestTurnInNavigation(quest) or false
+    local waypoint=origin=="waypoint"
+    local turnIn=not waypoint and quest and AT.IsQuestTurnInNavigation and AT.IsQuestTurnInNavigation(quest) or false
     local guide=origin=="guide"
-    if quest~=scopeQuest or turnIn~=scopeTurnIn or guide~=scopeGuide then
+    if quest~=scopeQuest or turnIn~=scopeTurnIn or guide~=scopeGuide or waypoint~=scopeWaypoint then
         if AT.CancelQuestWalking then AT.CancelQuestWalking() end
-        arrival,scopeQuest,scopeTurnIn,scopeGuide,scopeMap,positionLost = nil,quest,turnIn,guide,nil,nil
+        arrival,scopeQuest,scopeTurnIn,scopeGuide,scopeWaypoint,scopeMap,positionLost = nil,quest,turnIn,guide,waypoint,nil,nil
     end
     statusQuest=quest
-    if not finite(quest) or quest<=0 then routeStatus="no_quest"; hide(); return end
+    if not waypoint and (not finite(quest) or quest<=0) then routeStatus="no_quest"; hide(); return end
     if turnIn and not metaFor(quest).map then routeStatus="turnin_missing"; hide(); return end
     local ok,d,reason=pcall(data,quest)
     if not ok or not d then
@@ -601,18 +606,18 @@ local function draw()
     routeStatus=d.path.roadAware and "road" or "routed"
     clearLines(count+1)
     if caption then
-        caption:SetText(d.path.roadAware and "ROAD-AWARE WALK" or "WALK ROUTE")
+        caption:SetText(scopeWaypoint and "WALK TO WAYPOINT" or d.path.roadAware and "ROAD-AWARE WALK" or "WALK ROUTE")
         if scopeTurnIn then caption:SetTextColor(.31,1,.35,.9) else caption:SetTextColor(1,.88,.19,.9) end
     end
     frame:Show()
 end
 
 function AT.GetQuestRouteStatus()
-    local m=metadata and metadata.quest==statusQuest and metadata or nil
+    local m=scopeWaypoint and metaFor(statusQuest) or metadata and metadata.quest==statusQuest and metadata or nil
     local details=string.format("quest source: %s; location: %s; distance: %s; minimap: %s%s",
         selectionSource or "none",m and m.source or "unavailable",distanceSource or "unavailable",
         bearingStatus or "unavailable",drawFailure and ("; rendering error: " .. drawFailure) or "")
-    return routeStatus,statusQuest,details
+    return routeStatus,not scopeWaypoint and statusQuest or nil,details,selectionSource
 end
 local function refresh()
     local perf=AT.PerfBegin and AT.PerfBegin()

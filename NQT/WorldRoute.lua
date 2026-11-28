@@ -228,8 +228,10 @@ function AT.HideWorldQuestRoute()
 end
 
 function AT.RenderWorldQuestRoute(status,quest,snapshot)
+    local nav,kind=call(AT.GetWalkingNavigationID or AT.GetQuestNavigationID)
+    local waypoint=kind=="waypoint" and finite(nav) and nav==quest
     local map=WorldMapFrame
-    if not (CreateFrame and C_Map and finite(quest) and quest>0)
+    if not (CreateFrame and C_Map and finite(quest) and (quest>0 or waypoint))
         or status=="arrival" or status=="disabled" or status=="no_quest" then
         AT.HideWorldQuestRoute()
         return
@@ -299,9 +301,8 @@ function AT.RenderWorldQuestRoute(status,quest,snapshot)
     legend:ClearAllPoints()
     legend:SetPoint("TOP",canvas,"TOPLEFT",w*(viewBounds[1]+viewBounds[2])/2,-h*viewBounds[3]-15)
     local used,x,y,text=0
-    local nav,kind=call(AT.GetQuestNavigationID)
     local guide=finite(nav) and nav==quest and kind=="guide"
-    local turnIn=AT.IsQuestTurnInNavigation and AT.IsQuestTurnInNavigation(quest)
+    local turnIn=not waypoint and AT.IsQuestTurnInNavigation and AT.IsQuestTurnInNavigation(quest)
     if snapshot and snapshot.quest==quest and (status=="routed" or status=="road") then
         local path=snapshot.path
         if path~=projectedPath or id~=projectedMap then
@@ -332,7 +333,7 @@ function AT.RenderWorldQuestRoute(status,quest,snapshot)
             a,b=u,v
         end
         if used>0 then
-            text=(guide and "WALK TO QUEST START" or path.verifiedTurnInApproach and "WALK TO VERIFIED TURN-IN" or path.observedApproach and "WALK TO OBSERVED QUEST AREA" or status=="road" and "ROAD-AWARE WALK" or "WALKING ROUTE")
+            text=(waypoint and "WALK TO WAYPOINT" or guide and "WALK TO QUEST START" or path.verifiedTurnInApproach and "WALK TO VERIFIED TURN-IN" or path.observedApproach and "WALK TO OBSERVED QUEST AREA" or status=="road" and "ROAD-AWARE WALK" or "WALKING ROUTE")
             if turnIn then
                 local _,_,_,provenance=call(AT.GetQuestRouteDisplayPoint,quest)
                 if provenance=="recorded NPC location" then text=text.."  |  RECORDED NPC" end
@@ -358,9 +359,14 @@ function AT.RenderWorldQuestRoute(status,quest,snapshot)
     end
     if used==0 then
         local source,provenance
-        x,y,source,provenance=objective(quest,id,guide)
+        if waypoint then
+            local p=call(AT.GetSelectedUserWaypoint)
+            if p then x,y=project(p.map,p.x,p.y,id,false) end
+        else
+            x,y,source,provenance=objective(quest,id,guide)
+        end
         if x then
-            text=(turnIn and (provenance=="recorded NPC location" and "RECORDED TURN-IN NPC" or "TURN-IN LOCATION") or guide and "QUEST START" or "QUEST OBJECTIVE") .. "  |  NO WALKING LINE ON THIS MAP"
+            text=(waypoint and "WAYPOINT" or turnIn and (provenance=="recorded NPC location" and "RECORDED TURN-IN NPC" or "TURN-IN LOCATION") or guide and "QUEST START" or "QUEST OBJECTIVE") .. "  |  NO WALKING LINE ON THIS MAP"
             local player=call(C_Map.GetBestMapForUnit,"player")
             local comparable=player==source
             -- A cross-zone turn-in may be visible on a shared parent map.
@@ -370,7 +376,7 @@ function AT.RenderWorldQuestRoute(status,quest,snapshot)
                 local kinds=Enum and Enum.UIMapType
                 comparable=mapWise~=nil or root and (root.mapType==(kinds and kinds.Continent or 2))
             end
-            if status~="interior" and finite(player) and comparable and outdoor(player)
+            if not waypoint and status~="interior" and finite(player) and comparable and outdoor(player)
                 and not (IsIndoors and IsIndoors()) and C_Map.GetPlayerMapPosition then
                 local p=C_Map.GetPlayerMapPosition(player,"player")
                 if clean(p) and p then

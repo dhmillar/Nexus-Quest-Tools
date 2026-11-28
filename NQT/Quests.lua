@@ -648,11 +648,19 @@ function AT.GetQuestHUDManualFocus()
         return manualHUDQuest
     end
 end
+local function yieldNativeWaypoint()
+    if S and AT.GetSelectedUserWaypoint and AT.GetSelectedUserWaypoint() then
+        -- Selecting a quest is explicit. Keep the placed pin, but stop
+        -- super-tracking it so the quest selection takes effect at once.
+        call(S.SetSuperTrackedUserWaypoint,false)
+    end
+end
 function AT.ToggleQuestHUDManualFocus(id)
     if manualHUDQuest==id and validID(id) then
         retiringManual,manualHUDQuest,manualWasReady,manualFromMap=manualHUDQuest,nil,nil,nil
     elseif manualEligible(id) then
         manualHUDQuest,manualWasReady,manualFromMap=id,completed(id),nil
+        yieldNativeWaypoint()
     else return false end
     AT.RefreshQuests()
     if AT.RefreshQuestRoute then AT.RefreshQuestRoute() end
@@ -663,7 +671,11 @@ end
 -- selection; closing the map must not cancel explicit navigation.
 function AT.FocusQuestFromWorldMap(id)
     if not manualEligible(id,true) then return false end
-    if manualHUDQuest==id and manualFromMap and AT.GetQuestHUDManualFocus() then return true end
+    yieldNativeWaypoint()
+    if manualHUDQuest==id and manualFromMap and AT.GetQuestHUDManualFocus() then
+        if AT.RefreshQuestRoute then AT.RefreshQuestRoute() end
+        return true
+    end
     manualHUDQuest,manualWasReady,manualFromMap=id,completed(id),true
     AT.RefreshQuests()
     if AT.RefreshQuestRoute then AT.RefreshQuestRoute() end
@@ -674,6 +686,7 @@ local function run()
     local db = AT.db
     if not db or not Q or (InCombatLockdown and InCombatLockdown()) then return end
     if not db.enabled then manualHUDQuest,manualWasReady,retiringManual,manualFromMap=nil,nil,nil,nil; release(); return end
+    if AT.GetSelectedUserWaypoint and AT.GetSelectedUserWaypoint() then return end
     if AT.GetLevelGuideRoutePoint and call(AT.GetLevelGuideRoutePoint)
         and not (manualFromMap and AT.GetQuestHUDManualFocus()) then return end
     if manualHUDQuest and not AT.GetQuestHUDManualFocus() then

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.294 - 2026-11-28
+
+- Walking: an actively tracked Blizzard map waypoint now uses NQT’s standalone route on the minimap and both world-map styles. Placing a pin alone does not override quests; changing or clearing the tracked pin discards stale geometry. Does not draw unverified straight lines to unsupported pins.
+- Level Guide: use exact Forever drop evidence for the selected Solo, Duo, or Trio mode and avoid double-counting kills in overlapping objectives.
+
 ## 1.5.293 - 2026-11-28
 
 - Walking: choose among a small set of alternate objective or turn-in locations without searching the whole box between them. Still selects the shortest validated walking route, not the closest point in a straight line.

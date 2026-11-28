@@ -15,12 +15,44 @@ local function goodPlace(p)
         and finite(p.x) and finite(p.y) and p.x >= 0 and p.x <= 1 and p.y >= 0 and p.y <= 1
 end
 
+local WAYPOINT_ID = -1 -- Internal navigation key; never passed to native quest APIs.
+local function clean(v)
+    return not issecretvalue or not issecretvalue(v)
+end
+
+function AT.GetSelectedUserWaypoint()
+    local map,track=C_Map,C_SuperTrack
+    if not (map and type(map.GetUserWaypoint)=="function" and track
+        and type(track.IsSuperTrackingUserWaypoint)=="function") then return end
+    local ok,id,x,y=pcall(function()
+        local selected=track.IsSuperTrackingUserWaypoint()
+        if not clean(selected) or selected~=true then return end
+        local pin=map.GetUserWaypoint()
+        if not clean(pin) or not pin then return end
+        local pos=pin.position
+        if not clean(pos) or not pos then return end
+        local x,y=pos:GetXY()
+        return pin.uiMapID,x,y
+    end)
+    local point={map=id,x=x,y=y}
+    if ok and goodPlace(point) then return point end
+end
+
+function AT.GetWalkingNavigationID()
+    local source=AT.GetQuestNavigationID or AT.GetFocusedQuestID
+    local id,kind
+    if source then id,kind=source() end
+    if kind=="guide" then return id,kind end
+    if AT.GetSelectedUserWaypoint() then return WAYPOINT_ID,"waypoint" end
+    return id,kind
+end
+
 local function time()
     return GetTime and GetTime() or 0
 end
 
 local function isTurnIn(quest)
-    return AT.IsQuestTurnInNavigation and AT.IsQuestTurnInNavigation(quest)==true or false
+    return quest~=WAYPOINT_ID and AT.IsQuestTurnInNavigation and AT.IsQuestTurnInNavigation(quest)==true or false
 end
 
 local spatialFailure={offmesh=true,unreachable=true,projection=true,budget=true}
@@ -55,8 +87,7 @@ end
 
 local function active(quest)
     return AT.db and AT.db.enabled ~= false and AT.db.showQuestRoute ~= false
-        and (AT.GetQuestNavigationID or AT.GetFocusedQuestID)
-        and (AT.GetQuestNavigationID or AT.GetFocusedQuestID)() == quest
+        and AT.GetWalkingNavigationID()==quest
 end
 
 local function clear()
@@ -191,6 +222,24 @@ local function chooseWalkingPath(job)
 end
 
 currentTargets = function(quest, map, force)
+    if quest==WAYPOINT_ID then
+        -- Read on every waypoint job validation so replacement/clear never
+        -- publishes geometry for the previous pin or reuses quest POIs.
+        local p=AT.GetSelectedUserWaypoint()
+        if p and IsInInstance then
+            local ok,inInstance=pcall(IsInInstance)
+            if not ok or not clean(inInstance) or inInstance==true then p=nil end
+        end
+        if p and C_Map.GetMapInfo then
+            local ok,info=pcall(C_Map.GetMapInfo,p.map)
+            local kind=ok and clean(info) and info and info.mapType
+            local types=Enum and Enum.UIMapType
+            if not finite(kind) or kind==(types and types.Dungeon or 4)
+                or kind==(types and types.Micro or 5) or kind==(types and types.Orphan or 6) then p=nil end
+        end
+        local key=p and ("W:"..p.map..":"..p.x..":"..p.y) or "W:"
+        return {quest=quest,map=map,turnIn=false,points=p and {p} or {},backups={},key=key}
+    end
     local turnIn=isTurnIn(quest)
     -- The same quest ID (even at identical coordinates) can change stage
     -- while a path is being calculated. Never show the old objective route.
@@ -254,7 +303,7 @@ end
 
 function AT.GetFocusedQuestWalkingPath(quest, from, width, height)
     if not active(quest) or not goodPlace(from) or not (finite(width) and width > 0 and finite(height) and height > 0)
-        or not AT.GetFocusedQuestRouteTargets then
+        or (quest~=WAYPOINT_ID and not AT.GetFocusedQuestRouteTargets) then
         AT.CancelQuestWalking()
         return nil,nil,"position"
     end
@@ -288,7 +337,7 @@ function AT.GetFocusedQuestWalkingPath(quest, from, width, height)
         local turnIn=cache.turnIn
         state = {quest=quest, from=from, api=api, nav=nav, targets=cache.points, backups=cache.backups, key=cache.key, turnIn=turnIn,
             started=now, phase=0, road=road,width=width,height=height}
-        if #cache.points==1 and turnIn and (#cache.backups==0 or type(api.WalkBestPath)~="function") then
+        if #cache.points==1 and (turnIn or quest==WAYPOINT_ID) and (#cache.backups==0 or type(api.WalkBestPath)~="function") then
             state.best=cache.points[1]
             requestPath(state)
         elseif type(api.WalkBestPath)=="function" then

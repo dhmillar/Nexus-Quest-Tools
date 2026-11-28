@@ -98,12 +98,38 @@ local function maskHas(mask,id)
     return not usable or not positive(id) or id>53 or floor(mask/2^(id-1))%2==1
 end
 local function probability(q,item,size)
-    local sample=AT.ForeverQuestDropSamples and AT.ForeverQuestDropSamples[q]
+    local grouped=positive(size) and size>1
+    local mode=grouped and 1 or 0
     local best,mob
-    for _,r in ipairs(sample and sample[item] or {}) do
-        if positive(r[2]) then
-            local p=min(1,r[2]/10000)
-            if not best or p>best then best,mob=p,r[1] end
+    local function offer(n,p)
+        if positive(p) and p<=1 and (not best or p>best) then best,mob=p,n end
+    end
+    if not grouped then
+        local sample=AT.ForeverQuestDropSamples and AT.ForeverQuestDropSamples[q]
+        for _,r in ipairs(sample and sample[item] or {}) do
+            if positive(r[2]) then offer(r[1],min(1,r[2]/10000)) end
+        end
+        if best then return best,mob end
+    end
+    local corpse=AT.NQTDB and AT.NQTDB.ExactQuestCorpseRates
+    local perQuest=corpse and corpse[q]
+    local perItem=perQuest and perQuest[item]
+    for _,r in ipairs(perItem and perItem[mode] or {}) do
+        -- Exact quest/item/mode, corrected for known empty deaths.
+        offer(r[1],r[2]*r[4]/(r[3]*r[5]))
+    end
+    if best then return best,mob end
+    local function windows(n,drops,opened)
+        if positive(drops) and positive(opened) and drops<=opened then offer(n,drops/opened) end
+    end
+    local pack=AT.ForeverSoloQuestWindowSamples
+    if grouped then pack=AT.ForeverGroupedQuestDropSamples end
+    local samples=pack and pack[q]
+    for _,r in ipairs(samples and samples[item] or {}) do windows(r[1],r[2],r[3]) end
+    if not best then
+        local early=AT.ForeverEarlyDropSamples and AT.ForeverEarlyDropSamples[q]
+        for _,r in ipairs(early or {}) do
+            if r[1]==item and r[7]==mode then windows(r[2],r[3],r[4]) end
         end
     end
     if best then return best,mob end
@@ -151,13 +177,17 @@ local function readObjectives(q,data,held)
             local backup=byKind[kind][ordinal[kind]]
             local a,b
             if validName(line) then a,b=line:match("(%d+)%s*/%s*(%d+)") end
-            local amount=tonumber(b) or (backup and backup[3]) or 1
-            local id=kind==2 and (field(o,"itemID") or field(o,"objectID")) or field(o,"objectID")
+            local needed,fulfilled=field(o,"numRequired"),field(o,"numFulfilled")
+            local amount=positive(needed) and needed or tonumber(b) or (backup and backup[3]) or 1
+            local id=field(o,"objectID") or field(o,"objectId")
+            if kind==2 then id=field(o,"itemID") or field(o,"itemId") or id
+            elseif kind==1 then id=field(o,"npcID") or field(o,"creatureID") or field(o,"monsterID") or id end
             if kind==2 and not positive(id) and validName(line) then
                 id=safe(AT.GetKnownQuestDropItem,q,line)
             end
             if not positive(id) and backup and #byKind[kind]==1 then id=backup[2] end
-            local remaining=field(o,"finished")==true and 0 or max(0,amount-(tonumber(a) or 0))
+            local current=type(fulfilled)=="number" and fulfilled>=0 and fulfilled%1==0 and fulfilled or tonumber(a) or 0
+            local remaining=field(o,"finished")==true and 0 or max(0,amount-current)
             add(kind,id or 0,amount,remaining)
         end
         return out

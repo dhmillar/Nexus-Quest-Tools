@@ -313,6 +313,8 @@ Rank Quest can show separately corroborated outdoor turn-in labels for held, rea
 
 The standalone route engine can also use repeated outdoor object-loot approach positions for held, unfinished item objectives. It matches the quest, item and required amount against Forever records; each contributing loot window contains only the matching quest item. Native waypoints always go first. These are nearby observed pickup locations, not exact object pins.
 
+Level Guide uses exact quest/item drop evidence in the selected Solo, Duo or Trio mode before generic item evidence. Solo estimates are not reused as party measurements. The work score treats opened-window-only records as a planning proxy, not an exact count of kills or time.
+
 NQTDB also includes exact quest-conditioned Forever corpse rate estimates where compatible current-mode rates were absent. Efficient Games has at least 12 matching opened loot windows and 12 known corpses, with a minimum of two unshared recorded drops; each estimate is computed from one build's measurements and checked against the publisher's documented formula. We do not synthesize odds for unobserved quest items or reuse solo figures for this batch in party mode. Reproduce the gap input using `lua tools/audit-nqtdb-loot.lua rates-before.tsv "" "" before-exact-rates`, then run the pinned exact rates importer.
 
 Vendor Icons can recognize verified Forever merchants by creature ID when the client omits the subtitle. Repair availability comes from observed merchant windows, and Level Guide adds opt-in vendor/repair pins only for matched outdoor merchant locations and known faction. These lookups exclude world objects disguised as NPCs and do not modify default minimap pins.

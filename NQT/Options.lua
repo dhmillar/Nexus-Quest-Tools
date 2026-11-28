@@ -476,8 +476,8 @@ function AT.InitOptions()
             end
         elseif command == "gps" then
             if AT.RefreshQuestRoute then AT.RefreshQuestRoute() end
-            local status,quest,details
-            if AT.GetQuestRouteStatus then status,quest,details=AT.GetQuestRouteStatus() end
+            local status,quest,details,source
+            if AT.GetQuestRouteStatus then status,quest,details,source=AT.GetQuestRouteStatus() end
             local messages={
                 provider_missing="No compatible walking-route provider is loaded for this map.",
                 objective_missing="No usable objective coordinates on this walking map.",
@@ -491,7 +491,7 @@ function AT.InitOptions()
                 routed="Walking route ready.",
                 road="Road-aware walking route ready.",
             }
-            AT.Say("GPS" .. (quest and (" quest #" .. quest) or "") .. ": " ..
+            AT.Say("GPS" .. (source=="waypoint" and " waypoint" or quest and (" quest #" .. quest) or "") .. ": " ..
                 (messages[status] or ("No walking route available" .. (status and (" (" .. status .. ").") or "."))))
             if details then AT.Say(details) end
         elseif command == "order" then
