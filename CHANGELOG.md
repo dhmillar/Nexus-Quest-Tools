@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.281 - 2026-11-28
+
+- Added 55 verified outdoor pickup approaches for 22 objectives across 16 quests. NQT can route toward them when a held, unfinished objective has no usable native route point.
+- Keeps native waypoints first and does not invent object pins, turn-in coordinates, or drop rates.
+
 ## 1.5.280 - 2026-11-28
 
 - Rank Quest now names 103 more verified quest-item sources, including gathered objects and containers opened with a quest interaction.

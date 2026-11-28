@@ -1049,29 +1049,36 @@ end
 -- Public observations are fallback approach spots, not quest turn-ins or live pins.
 -- Require the same unfinished objective type/count and exact target ID if exposed.
 function AT.GetObservedQuestObjectiveSpots(id,map)
-    local refs=AT.NQTDB and AT.NQTDB.ObjectiveSpots[id]
-    if not refs or call(Q.IsOnQuest,id)~=true or completed(id) then return end
+    local db=AT.NQTDB
+    local refs=db and db.ObjectiveSpots and db.ObjectiveSpots[id]
+    local objects=db and db.ObjectPickupApproaches and db.ObjectPickupApproaches[id]
+    if not (refs or objects) or call(Q.IsOnQuest,id)~=true or completed(id) then return end
     local inside,kind=call(IsInInstance)
     if inside==true and kind~="none" or zoneID(map)~=map then return end
     local live=call(Q.GetQuestObjectives,id)
     if not isType(live,"table") then return end
     local points={}
-    for index,r in pairs(refs) do
-        local o=field(live,index)
-        if field(o,"type")==r[1] and field(o,"numRequired")==r[3] and field(o,"finished")==false then
-            local explicit=field(o,"itemID") or field(o,"itemId") or field(o,"npcID")
-                or field(o,"creatureID") or field(o,"monsterID") or field(o,"objectID") or field(o,"objectId")
-            local matching=0
-            for _,entry in ipairs(live) do
-                if field(entry,"type")==r[1] and field(entry,"numRequired")==r[3] then matching=matching+1 end
-            end
-            if explicit==r[2] or explicit==nil and matching==1 then
-                for _,p in ipairs(r[4]) do
-                    if p[1]==map and xyValid(p[2],p[3]) then points[#points+1]=p end
+    local function collect(rows,isObject)
+        for index,r in pairs(rows or {}) do
+            local o=field(live,index)
+            if (not isObject or not (refs and refs[index])) and field(o,"type")==r[1]
+                and field(o,"numRequired")==r[3] and field(o,"finished")==false then
+                local explicit=field(o,"itemID") or field(o,"itemId") or field(o,"npcID")
+                    or field(o,"creatureID") or field(o,"monsterID") or field(o,"objectID") or field(o,"objectId")
+                local matching=0
+                for _,entry in ipairs(live) do
+                    if field(entry,"type")==r[1] and field(entry,"numRequired")==r[3] then matching=matching+1 end
+                end
+                if explicit==r[2] or explicit==nil and matching==1 then
+                    for _,p in ipairs(r[4]) do
+                        if p[1]==map and xyValid(p[2],p[3]) then points[#points+1]=p end
+                    end
                 end
             end
         end
     end
+    collect(refs,false)
+    collect(objects,true)
     return points
 end
 
