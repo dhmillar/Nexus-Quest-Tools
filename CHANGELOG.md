@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.308 - 2026-11-28
+
+- Walking routes no longer disappear just because a short passage crosses a third outdoor map between the start and destination. NQT accepts the intervening chart only when its coordinates independently round-trip to the same point in the same world.
+
 ## 1.5.307 - 2026-11-28
 
 - Level Guide: no longer recommend explicitly tagged internal placeholder quests from the historical catalog alone. Quests held by the character or confirmed by a live offer are still shown.

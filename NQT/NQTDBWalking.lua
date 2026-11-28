@@ -487,6 +487,19 @@ local function beginPath(D,sx,sy,tx,ty,from,targets,callback,goals)
                         end
                     end
                 end
+                if not point then
+                    -- A path may pass through an outdoor chart other than
+                    -- the start, destination or an available parent. Ask
+                    -- the client for that chart and verify its round trip.
+                    local native=projectOut(D.world,x,y,nil)
+                    local info=native and call(C_Map.GetMapInfo,native.map)
+                    if (not issecretvalue or not issecretvalue(info)) and type(info)=="table" then
+                        local kind=info.mapType
+                        if finite(kind) and kind==(Enum and Enum.UIMapType and Enum.UIMapType.Zone or 3) then
+                            point,lastHint=native,native.map
+                        end
+                    end
+                end
                 if not point then callback(nil,"projection");return end
                 points[#points+1]=point
                 i=nextIndex
