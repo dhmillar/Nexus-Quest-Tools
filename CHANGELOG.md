@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.288 - 2026-11-28
+
+- Walking search now skips redundant terrain reads without changing the path or raising the search budget.
+- On the verified 4,983-yard offline fixture, terrain reads fell from 288,859 to 84,596 with the same walking cost.
+
 ## 1.5.287 - 2026-11-28
 
 - Filled ten previously blank solo quest drop rates using observed Forever loot and kill records for the exact quests and items.

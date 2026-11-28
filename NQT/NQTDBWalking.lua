@@ -299,13 +299,14 @@ local function search(D,sx,sy,tx,ty,callback,estimateOnly,goals)
                 if mask then for d=1,8 do
                     if floor(mask/powers[d])%2==1 then
                         local X,Y=x+dx[d],y+dy[d]
-                        if bits(D,X,Y) then
-                            local nextKey,v=encode(X,Y),c+costs[d]
-                            if g[nextKey]==nil or v<g[nextKey] then
-                                g[nextKey]=v
-                                if not estimateOnly then parents[nextKey]=k end
-                                push(nextKey,v,v+heuristic(X,Y))
-                            end
+                        local nextKey,v=encode(X,Y),c+costs[d]
+                        local old=g[nextKey]
+                        -- Reject already dominated relaxations before reading
+                        -- the terrain tile; improving moves still check it.
+                        if (old==nil or v<old) and bits(D,X,Y) then
+                            g[nextKey]=v
+                            if not estimateOnly then parents[nextKey]=k end
+                            push(nextKey,v,v+heuristic(X,Y))
                         end
                     end
                 end end

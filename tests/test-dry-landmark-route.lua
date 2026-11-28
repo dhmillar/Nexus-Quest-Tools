@@ -20,17 +20,26 @@ local samples=AT.NQTDB.DryLandmarks
 local from={map=100,x=.5,y=.5}
 local goal={map=100,x=(gx-x)/50000+.5,y=(gy-y)/50000+.5}
 local api=assert(AT.GetBundledWalkingAPI(from))
+local originalByte=string.byte
 local function run(atlas)
  AT.NQTDB.DryLandmarks=atlas
  local got
- local n=0
+ local n,reads=0,0
+ string.byte=function(s,i,j)
+   if i and j==i+2 then reads=reads+1 end
+   return originalByte(s,i,j)
+ end
  assert(api.WalkPath("real fixture",from,goal,function(x,e)assert(not e);got=x end))
  while #q>0 do n=n+1;assert(n<650);table.remove(q,1)() end
  assert(got and got.yards>4900 and #got.waypoints>=2)
- return got,n
+ string.byte=originalByte
+ return got,n,reads
 end
 local baseline,before=run(nil)
-local result,after=run(samples)
+local result,after,reads=run(samples)
 assert(math.abs(baseline.yards-result.yards)<.01,"lower bound must not change the optimal path cost")
 assert(after<before*.8,"representative long route should process at least 20% fewer timer slices")
 print(("PASS %.0f yd real terrain route; unchanged optimal cost, %d → %d timer slices"):format(result.yards,before,after))
+
+assert(reads<100000,"already dominated relaxations should not reread terrain")
+print(("PASS %d terrain reads in the fixed 4983 yd route (was 288859)"):format(reads))
