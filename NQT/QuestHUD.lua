@@ -1259,6 +1259,7 @@ local function questItemList(qid,index)
     addVerifiedUses(AT.ForeverObservedQuestUses)
     addVerifiedUses(AT.ForeverProvidedQuestUses)
     addVerifiedUses(AT.ForeverInstructedQuestUses)
+    addVerifiedUses(AT.NQTDB and AT.NQTDB.QuestUses)
     local held=liveQuestBagActions()[qid]
     if held then
         local ids={}

@@ -350,6 +350,7 @@ local function chooseGiver(q,p,side,fallback)
         consider(AT.LevelGuideMoreOffers and AT.LevelGuideMoreOffers[q])
         if not known then known,ambiguous=prior,wasAmbiguous end
     end
+    if not known and AT.NQTDB then consider(AT.NQTDB.Starts[q]) end
     -- ForeverVerifiedEndpointReferences describes turn-ins, never quest starts.
     if known and not ambiguous then return known end
     local pickup=chooseItemStart(q,p,side)

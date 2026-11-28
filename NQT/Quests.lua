@@ -896,6 +896,7 @@ observedTurnIn=function(id,map,x,y,reference,skipName)
             or (AT.ForeverATTQuestNPCReferences and AT.ForeverATTQuestNPCReferences[id])
             or (AT.ForeverVerifiedEndpointReferences and AT.ForeverVerifiedEndpointReferences[id])
             or (AT.ForeverSupplementalTurnInReferences and AT.ForeverSupplementalTurnInReferences[id])
+            or (AT.NQTDB and AT.NQTDB.TurnIns[id])
     else
         source=AT.ObservedQuestTurnIns and AT.ObservedQuestTurnIns[id]
     end
@@ -976,7 +977,9 @@ resolveTurnInPoint=function(id,viewMap,wantName,lookup)
         end
         if not queryHints(AT.ObservedQuestTurnIns) and not queryHints(referenceTurnIns)
             and not queryHints(AT.ForeverQuestNPCReferences) and not queryHints(AT.ForeverATTQuestNPCReferences) then
-            if not queryHints(AT.ForeverVerifiedEndpointReferences) then queryHints(AT.ForeverSupplementalTurnInReferences) end
+            if not queryHints(AT.ForeverVerifiedEndpointReferences) and not queryHints(AT.ForeverSupplementalTurnInReferences) then
+                queryHints(AT.NQTDB and AT.NQTDB.TurnIns)
+            end
         end
     end
     if m then rememberTurnInMap(id,m) end
@@ -1000,7 +1003,8 @@ recordedTurnInPoint=function(id)
     if inside==true and kind~="none" then return end
     local m,x,y=observedTurnIn(id,nil,nil,nil,"verified",true)
     if m and zoneID(m)==m then return m,x,y,"verified turn-in" end
-    local rows=AT.ForeverSupplementalTurnInReferences and AT.ForeverSupplementalTurnInReferences[id]
+    local rows=(AT.ForeverSupplementalTurnInReferences and AT.ForeverSupplementalTurnInReferences[id])
+        or (AT.NQTDB and AT.NQTDB.TurnIns[id])
     if not isType(rows,"table") or #rows~=1 then return end
     local r=rows[1]
     local faction=call(UnitFactionGroup,"player")
@@ -1040,6 +1044,35 @@ end
 
 -- A routing backend compares all verified, currently available points on
 -- this UI map. Quest choice remains with the tracker or the ordered queue.
+-- Public observations are fallback approach spots, not quest turn-ins or live pins.
+-- Require the same unfinished objective type/count and exact target ID if exposed.
+function AT.GetObservedQuestObjectiveSpots(id,map)
+    local refs=AT.NQTDB and AT.NQTDB.ObjectiveSpots[id]
+    if not refs or call(Q.IsOnQuest,id)~=true or completed(id) then return end
+    local inside,kind=call(IsInInstance)
+    if inside==true and kind~="none" or zoneID(map)~=map then return end
+    local live=call(Q.GetQuestObjectives,id)
+    if not isType(live,"table") then return end
+    local points={}
+    for index,r in pairs(refs) do
+        local o=field(live,index)
+        if field(o,"type")==r[1] and field(o,"numRequired")==r[3] and field(o,"finished")==false then
+            local explicit=field(o,"itemID") or field(o,"itemId") or field(o,"npcID")
+                or field(o,"creatureID") or field(o,"monsterID") or field(o,"objectID") or field(o,"objectId")
+            local matching=0
+            for _,entry in ipairs(live) do
+                if field(entry,"type")==r[1] and field(entry,"numRequired")==r[3] then matching=matching+1 end
+            end
+            if explicit==r[2] or explicit==nil and matching==1 then
+                for _,p in ipairs(r[4]) do
+                    if p[1]==map and xyValid(p[2],p[3]) then points[#points+1]=p end
+                end
+            end
+        end
+    end
+    return points
+end
+
 function AT.GetFocusedQuestRouteTargets(mapID)
     local id = AT.GetQuestNavigationID()
     if not id then return end
@@ -1077,6 +1110,9 @@ function AT.GetFocusedQuestRouteTargets(mapID)
     for _, poi in ipairs(ctx.points or {}) do
         if field(poi, "questID") == id then capture(field(poi, "x"), field(poi, "y")) end
     end
+    if #targets==0 then
+        for _,p in ipairs(AT.GetObservedQuestObjectiveSpots(id,mapID) or {}) do capture(p[2],p[3],p[1]) end
+    end
     table.sort(targets, function(a,b)
         if a.map~=b.map then
             if a.map==mapID then return true end
@@ -1111,6 +1147,17 @@ function AT.GetFocusedQuestRoutePoint()
     end
     if validID(waypointMap) and xyValid(waypointX, waypointY) then
         return focus, waypointMap, waypointX, waypointY
+    end
+    if ctx then
+        local px,py=mapPlayer(ctx)
+        local best,cost
+        if xyValid(px,py) then
+            for _,p in ipairs(AT.GetObservedQuestObjectiveSpots(focus,ctx.id) or {}) do
+                local d=(p[2]-px)^2+(p[3]-py)^2
+                if not cost or d<cost then best,cost=p,d end
+            end
+        end
+        if best then return focus,best[1],best[2],best[3],"observed objective area" end
     end
     return focus
 end

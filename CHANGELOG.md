@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.262 - 2026-11-28
+
+- Bundles NQTDB inside NQT. No Questie installation required.
+- Adds observed fallback approach points for 661 objectives across 571 quests when the game does not provide a pin. Also adds one quest giver, two turn-ins, and one confirmed usable quest item.
+- Existing game pins take priority. Unmatched, already completed, remote-zone, and instance objectives do not use the new approach points.
+
 ## 1.5.261 - 2026-11-28
 
 - Adds creature portraits to 134 previously uncovered kill objectives and 449 collect objectives in the bundled catalog audit.
