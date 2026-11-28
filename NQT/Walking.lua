@@ -19,6 +19,10 @@ local function time()
     return GetTime and GetTime() or 0
 end
 
+local function isTurnIn(quest)
+    return AT.IsQuestTurnInNavigation and AT.IsQuestTurnInNavigation(quest)==true or false
+end
+
 local function apiForWalking(from, quest, snapshot)
     local now=time()
     local lastFailure
@@ -27,7 +31,7 @@ local function apiForWalking(from, quest, snapshot)
             or type(api.EstimateWalks) ~= "function" or type(api.WalkPath) ~= "function"
             or type(api.NavVersion) ~= "function" then return end
         local failure=providerBackoff[api]
-        if failure and failure.quest==quest and failure.map==from.map and now<failure.untilTime then
+        if failure and failure.quest==quest and failure.map==from.map and failure.turnIn==isTurnIn(quest) and now<failure.untilTime then
             lastFailure=lastFailure or failure.reason
             return
         end
@@ -58,7 +62,7 @@ function AT.CancelQuestWalking()
 end
 
 local function valid(job)
-    if state ~= job or not active(job.quest) then return false end
+    if state ~= job or not active(job.quest) or isTurnIn(job.quest)~=job.turnIn then return false end
     local api, nav = apiForWalking(job.from, job.quest,true)
     if api ~= job.api or nav ~= job.nav then return false end
     if C_Map and C_Map.GetBestMapForUnit then
@@ -72,7 +76,7 @@ local function fail(job, reason)
     job.cancel = nil
     job.failure = type(reason) == "string" and reason or "unavailable"
     job.retry = time() + ((reason == "loading" or reason == "combat") and 3 or 18)
-    providerBackoff[job.api] = {quest=job.quest,map=job.from.map,untilTime=job.retry,reason=job.failure}
+    providerBackoff[job.api] = {quest=job.quest,map=job.from.map,turnIn=job.turnIn,untilTime=job.retry,reason=job.failure}
 end
 
 local function request(job, method, target, callback, refused)
@@ -176,11 +180,14 @@ local function chooseWalkingPath(job)
 end
 
 currentTargets = function(quest, map, force)
-    if not force and candidateCache and candidateCache.quest == quest and candidateCache.map == map
+    local turnIn=isTurnIn(quest)
+    -- The same quest ID (even at identical coordinates) can change stage
+    -- while a path is being calculated. Never show the old objective route.
+    if not force and candidateCache and candidateCache.turnIn==turnIn and candidateCache.quest == quest and candidateCache.map == map
         and time() < candidateCache.at + SAMPLE_SECONDS then return candidateCache end
     local ok,id,points,backup = pcall(AT.GetFocusedQuestRouteTargets,map)
     if not ok or id~=quest or type(points)~="table" then points,backup={},nil end
-    local list,signature,backups={},{},{}
+    local list,signature,backups={},{turnIn and "turn-in" or "objective"},{}
     for _, point in ipairs(points) do
         if goodPlace(point) then
             list[#list+1] = point
@@ -194,12 +201,12 @@ currentTargets = function(quest, map, force)
         end
     end
     local now=time()
-    if #list==0 and lastGoodTargets and lastGoodTargets.quest==quest and lastGoodTargets.map==map
+    if #list==0 and lastGoodTargets and lastGoodTargets.quest==quest and lastGoodTargets.map==map and lastGoodTargets.turnIn==turnIn
         and now-lastGoodTargets.at < 2 then
-        candidateCache={quest=quest,map=map,at=now,points=lastGoodTargets.points,backups=lastGoodTargets.backups,key=lastGoodTargets.key,stale=true}
+        candidateCache={quest=quest,map=map,at=now,turnIn=turnIn,points=lastGoodTargets.points,backups=lastGoodTargets.backups,key=lastGoodTargets.key,stale=true}
         return candidateCache
     end
-    candidateCache = {quest=quest, map=map, at=now, points=list, backups=backups, key=table.concat(signature, "|")}
+    candidateCache = {quest=quest, map=map, at=now, turnIn=turnIn, points=list, backups=backups, key=table.concat(signature, "|")}
     if #list>0 then lastGoodTargets=candidateCache end
     return candidateCache
 end
@@ -266,7 +273,7 @@ function AT.GetFocusedQuestWalkingPath(quest, from, width, height)
             or (state.retry and now >= state.retry) then clear() end
     end
     if not state and not cache.stale then
-        local turnIn=AT.IsQuestTurnInNavigation and AT.IsQuestTurnInNavigation(quest)
+        local turnIn=cache.turnIn
         state = {quest=quest, from=from, api=api, nav=nav, targets=cache.points, backups=cache.backups, key=cache.key, turnIn=turnIn,
             started=now, phase=0, road=road}
         if #cache.points==1 and turnIn and (#cache.backups==0 or type(api.WalkBestPath)~="function") then

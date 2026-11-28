@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.279 - 2026-11-28
+
+- Refresh the walking route as soon as a tracked quest becomes ready to turn in, even if its map coordinates have not changed.
+- Show Plagued Hatchling in Scholomance as the verified Healthy Dragon Scale pickup source in Level Guide and Share Verify, with no guessed map pin.
+
 ## 1.5.278 - 2026-11-28
 
 - Added distance bounds for long walking routes on the largest dry areas of Eastern Kingdoms and Kalimdor. Search still follows only verified terrain edges.

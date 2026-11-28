@@ -4383,3 +4383,15 @@ db.NamedObjectPickups={
  [97196]={[276916]={{660624,"The Coldbringer's Eye"}}},
 }
 -- END NQTDB named object pickups
+-- BEGIN NQTDB unmappable starter witnesses (generated)
+-- Quest-linked loot witnesses and Forever creature identities from Efficient Games, CC BY 4.0.
+-- https://github.com/JIVESCORP/eg-link-output-wowf/tree/c1bf99bc2835bbe1b2dad82fb99f994c0cfffe33/data/wowf
+-- https://efficient.games | https://creativecommons.org/licenses/by/4.0/
+-- Numeric starter and instance comparisons: pinned CMaNGOS Classic-DB, GPL-3.0-only.
+-- https://github.com/cmangos/classic-db/tree/04bc47631b680b99cdfeee88488dafb5e871c207
+-- SQL SHA-256 4f92db520868ab4e566726f68b5b2e380ae781209beaf22237b4f7f04600d0c0; notices in ClassicDB.COPYRIGHT.md and ClassicDB.LICENSE.md.
+-- A witnessed pickup without a confirmed location is never a route point or a probability.
+db.ItemStarterWitnesses={
+ [5582]={13920,1,10678,"Plagued Hatchling","Scholomance",289}, -- 1.60.1.71139
+}
+-- END NQTDB unmappable starter witnesses

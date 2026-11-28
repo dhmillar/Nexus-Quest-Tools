@@ -309,6 +309,17 @@ local function chooseItemStart(q,p,side)
         local rank=positive(map) and validPoint(a[2],a[3]) and ((map==p.artMap or map==p.map or positive(p.map) and outdoor(map)==p.map) and 3 or 2) or 1
         if visible(a) and (not bestRank or rank>bestRank) then best,bestRank=a,rank end
     end
+    if not best then
+        local witnesses=AT.NQTDB and AT.NQTDB.ItemStarterWitnesses
+        local evidence=witnesses and witnesses[q]
+        local locale=safe(GetLocale)
+        if evidence and evidence[1]==r[1] and (locale=="enUS" or locale=="enGB") then
+            -- The exact drop and dungeon are known; its pickup position is
+            -- not. Do not use a dungeon entrance or an outdoor placeholder.
+            return {pickup=true,item=r[1],sourceKind=evidence[2],source=evidence[3],
+                sourceName=evidence[4],sourceArea=evidence[5],areas={}}
+        end
+    end
     local areas={}
     if best and positive(best[1]) and validPoint(best[2],best[3]) then
         areas[1]={x=best[2],y=best[3],radius=best[4]}
@@ -1379,7 +1390,7 @@ function AT.GetShareQuestStart(q,origin,dungeon)
     local locale=safe(GetLocale)
     local english=not locale or locale=="enUS" or locale=="enGB"
     local area=positive(g.map) and field(mapInfo(g.map),"name")
-    if not positive(g.map) and positive(origin) then area=field(mapInfo(origin),"name") end
+    if not positive(g.map) and positive(origin) and not validName(g.sourceArea) then area=field(mapInfo(origin),"name") end
     if g.pickup then
         local item=safe(C_Item and C_Item.GetItemNameByID,g.item) or safe(GetItemInfo,g.item)
         if not validName(item) and not requestedItems[g.item] then
