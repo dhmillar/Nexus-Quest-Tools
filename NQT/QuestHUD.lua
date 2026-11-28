@@ -1810,7 +1810,15 @@ local function renderObjectives(b,row,width,theme,hasItem,hasDetail)
                 elseif kill then addObjectiveWithMobs(bullet..label,{kill},done,nil,killNpc)
                 elseif names and #names>0 then addObjectiveWithMobs(bullet..label,names,done,item)
                 elseif done then add(bullet..label,0,.64,.78,.68)
-                else add(bullet..label,0) end
+                else
+                    local object=call(AT.GetQuestLootObjectName,row.id,item)
+                    if is(object,"string") and object~="" then
+                        -- The in-game item often shares its object's name.
+                        local detail=label:find(object,1,true) and "Loot object" or "Loot: "..object
+                        label=label.."  |cff9bd6d4"..detail.."|r"
+                    end
+                    add(bullet..label,0)
+                end
             end
         end
     end

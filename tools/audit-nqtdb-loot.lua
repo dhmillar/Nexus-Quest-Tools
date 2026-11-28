@@ -6,13 +6,14 @@ function IsInGroup()return grouped end
 function GetLocale()return "enUS" end
 for _,name in ipairs({"LevelGuideData","ForeverQuestFacts","QuestMobData","EverlootDrops",
     "ClassicQuestDropReferences","ClassicQuestMobReferences","NQTDB","QuestMobs","QuestHUD"}) do
-    local path=(name=="EverlootDrops" and arg and arg[2]) or ("NQT/"..name..".lua")
+    local path=(name=="EverlootDrops" and arg and arg[2]~="" and arg[2]) or ("NQT/"..name..".lua")
     assert(loadfile(path))("NQT",AT)
 end
 local output=arg and arg[1] and assert(io.open(arg[1],"w"))
 if output then
     output:write("quest_id\tobjective_item_id\tmob_source\tobject_witness\tknown_vendor\tshown_solo_without_classic\tshown_party_without_classic\tclassic_fallback\n")
 end
+local baseline=arg and arg[3]=="baseline"
 local totals={quests=0,items=0,mobs=0,objects=0,merchants=0,solo=0,group=0,classicOnly=0,unresolvedSource=0,unresolvedRate=0}
 local ordered={}
 for q in pairs(AT.ForeverLevelGuideQuests) do ordered[#ordered+1]=q end
@@ -35,6 +36,7 @@ for _,q in ipairs(ordered) do
         for _,o in ipairs(AT.ObservedQuestDrops.items[item] or {}) do
             if o[6]==1 then object=true end
         end
+        if not baseline and AT.GetQuestLootObjectName and AT.GetQuestLootObjectName(q,item) then object=true end
         local merchants=AT.NQTDB.VendorObjectives and AT.NQTDB.VendorObjectives[q]
         local vendor=merchants and merchants[item] or false
         AT.db.rankQuestLegacyDropRates=false

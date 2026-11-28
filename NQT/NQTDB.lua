@@ -4361,3 +4361,25 @@ db.VerifiedCompletionTurnIns={
  [95984]={{2548,0.5945,0.6394,1,259352,1,"Watcher Cornelius"}}, -- 1.60.1.71139
 }
 -- END NQTDB completed turn-ins
+-- BEGIN NQTDB named object pickups (generated)
+-- Everloot source-item witnesses, CC BY-SA 4.0 (adapted dataset retains that license).
+-- Data from Everloot (https://everloot.app), CC BY-SA 4.0.
+-- https://creativecommons.org/licenses/by-sa/4.0/
+-- Everloot public snapshot 2026-11-28T04:50:48.942Z; concatenated page SHA-256 e4e4c96e0da7faff9dec5c66282bf84b6c27500b0448f2f6da20e7ca93f11d35
+-- Independently observed source-item links and exact object names from Efficient Games, CC BY 4.0.
+-- https://github.com/JIVESCORP/eg-link-output-wowf/tree/c1bf99bc2835bbe1b2dad82fb99f994c0cfffe33/data/wowf
+-- https://efficient.games | https://creativecommons.org/licenses/by/4.0/
+-- These are named loot sources, never a drop chance, route pin, or NPC targeting action.
+db.NamedObjectPickups={
+ [207]={[2007]={{52,"Fall of Gurubashi"}}},
+ [81949]={[220346]={{441248,"Book"}}},
+ [95124]={[268506]={{629472,"Admiral's Treasure Chest"}}},
+ [95748]={[2007]={{52,"Fall of Gurubashi"}}},
+ [95775]={[270308]={{642943,"The First Tablet of I'lalai"}},[270309]={{642944,"The Second Tablet of I'lalai"}},[270310]={{642945,"The Third Tablet of I'lalai"}},[270311]={{642946,"The Fourth Tablet of I'lalai"}}},
+ [95787]={[270308]={{642943,"The First Tablet of I'lalai"}},[270309]={{642944,"The Second Tablet of I'lalai"}},[270310]={{642945,"The Third Tablet of I'lalai"}},[270311]={{642946,"The Fourth Tablet of I'lalai"}}},
+ [96010]={[255656]={{607122,"Pylon Shard"}},[255657]={{607123,"Pylon Shard"}}},
+ [96018]={[255662]={{584729,"Mana Sieve"}}},
+ [96773]={[276916]={{660624,"The Coldbringer's Eye"}}},
+ [97196]={[276916]={{660624,"The Coldbringer's Eye"}}},
+}
+-- END NQTDB named object pickups

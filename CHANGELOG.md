@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.275 - 2026-11-28
+
+- Extended the same dry centerline and lower-floor transit support to Zephras Isle. Six previously disconnected pairs of observed positions now route in offline tests.
+- Added verified named loot objects for 17 previously unresolved objectives across 10 quests. No guessed rate, map pin, or NPC targeting action.
+- Added a development audit for explicit upper-floor links, landing sets and clearance. Upper-floor routing and water are not enabled by this release.
+
 ## 1.5.274 - 2026-11-28
 
 - Updated Forever drop observations: 77 added source/item records, 14 refreshed samples, and 18 exact quest-item objectives with newly measured rates. Two item objectives gained observed object sources.

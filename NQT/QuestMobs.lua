@@ -321,6 +321,17 @@ function AT.GetKnownQuestDropItem(qid,label)
     end
     return match
 end
+-- Object loot cannot be macro-targeted like an NPC. Only use an exact,
+-- qualified current objective item and a single observed named object.
+function AT.GetQuestLootObjectName(qid,item)
+    if not english() or not pos(qid) or not pos(item) then return end
+    local catalog=AT.NQTDB and AT.NQTDB.NamedObjectPickups
+    local objectives=catalog and catalog[qid]
+    local rows=objectives and objectives[item]
+    if not rows or #rows~=1 then return end
+    local r=rows[1]
+    return r[2],r[1]
+end
 local itemNames,itemSources,itemNamesPack,itemNamesData
 function AT.GetQuestDropMobNames(item,qid)
     if not english() or not pos(item) then return end

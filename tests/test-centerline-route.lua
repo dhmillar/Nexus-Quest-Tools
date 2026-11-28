@@ -1,7 +1,12 @@
 -- Real observed Forever approach positions, Efficient Games, CC BY 4.0:
 -- https://github.com/JIVESCORP/eg-link-output-wowf/tree/c1bf99bc2835bbe1b2dad82fb99f994c0cfffe33/data/wowf
--- Each pair was split across distinct 1.5.272 dry graph components.
+-- Each pair was split across distinct earlier dry graph components.
 local fixtures={
+ [2991]={
+  {1998.8,942.9,2169.7,767.1},{1998.8,942.9,2244.4,945.8},
+  {2425.4,1172.2,2244.4,945.8},{1998.1,945.4,1940,1244.6},
+  {3161.1,1724.9,2872.2,1627.2},{1998.1,945.4,1939.1,1245.2},
+ },
  [0]={
   {547.3,1593.1,518,1599.7},{1858.1,1601.8,1840,1625.8},
   {-51.5,-919.7,-21.4,-918.9},{516.1,1601.2,546.1,1603.9},
@@ -29,10 +34,10 @@ C_Timer={After=function(_,f)q[#q+1]=f end}
 local function drain()
  local n=0 while #q>0 do n=n+1;assert(n<350);table.remove(q,1)()end
 end
-for _,s in ipairs({"NQTDBRouteWorld0","NQTDBRouteWorld1","NQTDBDryComponents","NQTDBWalking"})do
+for _,s in ipairs({"NQTDBRouteWorld0","NQTDBRouteWorld1","NQTDBRouteTiles","NQTDBDryComponents","NQTDBWalking"})do
  assert(loadfile("NQT/"..s..".lua"))("NQT",AT)
 end
-for w=0,1 do
+for _,w in ipairs({0,1,2991}) do
  world=w
  local hit=0
  for _,r in ipairs(fixtures[w]) do

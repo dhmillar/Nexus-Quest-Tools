@@ -558,6 +558,30 @@ do
     local testRow=find("Acquired in Stranglethorn"); for i=#testRow.objectives,3,-1 do testRow.objectives[i]=nil end
     print("PASS actual Rank Quest rows both themes, current amount kept, bundled rates, range/partial coverage, exact linked item, ambiguous/non-item/absent excluded, toggle")
 end
+do
+    local priorDB,priorLocale,priorObjectives=AT.NQTDB,GetLocale,C_QuestLog.GetQuestObjectives
+    local priorObject=AT.GetQuestLootObjectName
+    GetLocale=function()return "enUS" end
+    local source={NQTDB={NamedObjectPickups={[12]={[999371]={{629472,"Admiral's Treasure Chest"}}}}}}
+    assert(loadfile("NQT/QuestMobs.lua"))("NQT",source)
+    AT.GetQuestLootObjectName=source.GetQuestLootObjectName
+    C_QuestLog.GetQuestObjectives=function(q)
+        if q==12 or q==11 then return {{type="item",itemID=999371,text="Lamora's Loot: 0/1"}} end
+        return priorObjectives(q)
+    end
+    AT.RefreshQuestHUD()
+    local a,other=find("Acquired in Stranglethorn"),find("A flight to Duskwood")
+    assert(a.objectives[1].text:find("Loot: Admiral's Treasure Chest",1,true))
+    assert(not a.objectives[1].text:find("%%") and not other.objectives[1].text:find("Treasure Chest",1,true),
+        "no inferred rate or cross-quest label: "..a.objectives[1].text.." / "..other.objectives[1].text)
+    GetLocale=function()return "koKR" end
+    AT.RefreshQuestHUD()
+    assert(not a.objectives[1].text:find("Treasure Chest",1,true),"no unlocalized source label")
+    AT.NQTDB,GetLocale,C_QuestLog.GetQuestObjectives=priorDB,priorLocale,priorObjectives
+    AT.GetQuestLootObjectName=priorObject
+    AT.RefreshQuestHUD()
+    print("PASS exact named object loot sources on matching Rank Quest rows without percentages")
+end
 local hud=objs[1]
 assert(hud.shown and find("Acquired in Stranglethorn") and find("A flight to Duskwood") and not find("Only in Duskwood"))
 local row=find("Acquired in Stranglethorn")

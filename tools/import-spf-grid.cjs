@@ -236,7 +236,7 @@ const lines=["-- SPDX-License-Identifier: GPL-3.0-or-later","-- Derived from Sho
  "-- NQT conversion: dry reciprocal base steps only. This module contains derived grid facts, not upstream code.",
  "local _,AT=...","AT.NQTDB=AT.NQTDB or {}","AT.NQTDB.RouteTiles={",
  " world=2991, cells="+n+", nx="+nx+", ny="+ny+", tx="+cx+", ty="+cy+",",
- " navigationBuild=71037, "+(transit?"layerTransit=true, ":"")+"tiles={"];
+ " navigationBuild=71037, "+(transit?"layerTransit=true, ":"")+(centerline?"centerline=true, ":"")+"tiles={"];
 for(const [key,b] of Object.entries(payload)){
  const fragments=[];
  for(let i=0;i<b.length;i+=1500)fragments.push(lua(b.subarray(i,i+1500)));
@@ -244,5 +244,5 @@ for(const [key,b] of Object.entries(payload)){
 }
 lines.push(" }}","");
 fs.writeFileSync(out,lines.join("\n"));
-console.log({tiles:Object.keys(payload).length,nodes,edges});
+console.log({tiles:Object.keys(payload).length,nodes,layerNodes,centerOnlyNodes,narrowEdges,edges});
 }
