@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.261 - 2026-11-28
+
+- Adds creature portraits to 134 previously uncovered kill objectives and 449 collect objectives in the bundled catalog audit.
+- Uses exact Classic quest and item matches only as a fallback; existing Forever sources and models retain priority.
+
 ## 1.5.260 - 2026-11-28
 
 - Rank Quest preserves the creature ID from confirmed kill objectives through portrait lookup.

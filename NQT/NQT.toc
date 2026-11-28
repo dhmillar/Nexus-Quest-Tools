@@ -3,7 +3,7 @@
 ## IconTexture: Interface\AddOns\NQT\MinimapAT.tga
 ## Notes: Closest-quest tracking and a reusable named-target macro.
 ## Author: Dennis
-## Version: 1.5.260
+## Version: 1.5.261
 ## SavedVariables: AutoTrackDB
 ## SavedVariablesPerCharacter: AutoTrackCharDB
 ## OptionalDeps: ForeverDungeonJournal
@@ -26,6 +26,7 @@ DungeonCatalog.lua
 EverlootDrops.lua
 ForeverQuestFacts.lua
 ClassicQuestDropReferences.lua
+ClassicQuestMobReferences.lua
 QuestMobData.lua
 QuestMobs.lua
 MacroMobTooltip.lua

@@ -22,7 +22,15 @@ end
 local exactDropSources={[266148]=256952,[266252]=259258}
 local function mob(id)
     local data=AT.QuestMobData
-    return data and data.creatures[id]
+    local row=data and data.creatures[id]
+    if row and pos(row[5]) then return row end
+    local classic=AT.ClassicQuestCreatureProfiles
+    local ref=classic and classic[id]
+    if row and ref and normalize(row[1])==normalize(ref[1]) and pos(ref[5]) then
+        -- Use the exact ID's model without changing the live name or level.
+        return {row[1],row[2],row[3],row[4],ref[5]}
+    end
+    return row or ref
 end
 -- Exact Forever quest/item/merchant relationships. Not a general item-vendor
 -- table: a vendor who merely resells an item is not necessarily a quest source.
@@ -224,6 +232,23 @@ function AT.GetQuestKillMobName(qid,objective,label)
         end
     end
     if found then return found end
+    -- The exported Forever objectives name the precise target IDs even if
+    -- the older label index has no entry for this quest.
+    local live=AT.ForeverLevelGuideQuests and AT.ForeverLevelGuideQuests[qid]
+    local checked={}
+    local named,resolved
+    for _,o in ipairs(live and live[10] or {}) do
+        local npc=o[2]
+        if o[1]==1 and pos(npc) and not checked[npc] then
+            checked[npc]=true
+            local e=mob(npc)
+            if e and matches(e[1],subject) then
+                if resolved and resolved~=npc then return end
+                named,resolved=e[1],npc
+            end
+        end
+    end
+    if named then return named,resolved end
     -- A live objective explicitly calling for a kill can safely use an
     -- exact unique database name. Never turn an unknown plural into a name.
     indexed(subject)
@@ -258,7 +283,9 @@ function AT.GetQuestDropMobNames(item,qid)
     end
     local byQuest=pos(qid) and AT.ObservedQuestCorpseSources and AT.ObservedQuestCorpseSources[qid]
     local direct=byQuest and byQuest[item]
-    local key=direct and qid..":"..item or item
+    local inferred=pos(qid) and AT.ClassicQuestCollectNPCs and AT.ClassicQuestCollectNPCs[qid]
+    local classic=inferred and inferred[item]
+    local key=(direct or classic) and qid..":"..item or item
     if itemNames[key]~=nil then return itemNames[key] or nil end
     local rows=pack and pack.items and pack.items[item]
     local names,seen={},{}
@@ -278,6 +305,7 @@ function AT.GetQuestDropMobNames(item,qid)
         for _,npc in ipairs(data and data.dropMobs and data.dropMobs[item] or {}) do add(npc) end
         if exactDropSources[item] then add(exactDropSources[item]) end
     end
+    if #names==0 then for _,npc in ipairs(classic or {}) do add(npc) end end
     table.sort(names)
     itemNames[key]=#names>0 and names or false
     return itemNames[key] or nil

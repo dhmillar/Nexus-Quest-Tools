@@ -108,3 +108,25 @@ do
     assert(not AT.GetQuestDropMobNames(999900,18))
     print("PASS added real kill and collect portraits, enGB, exact NPC and quest/item identity")
 end
+
+do
+    GetLocale=function()return "enUS" end
+    assert(loadfile("NQT/ClassicQuestMobReferences.lua"))("NQT",AT)
+    local profile=assert(AT.ClassicQuestCreatureProfiles[8444])
+    local name,npc=AT.GetQuestKillMobName(3385,{type="monster",npcID=8444},profile[1].." slain: 0/1")
+    assert(name==profile[1] and npc==8444)
+    local d,actual=AT.GetQuestMobDisplayID(name,true,3385,nil,npc)
+    assert(d>0 and actual==8444)
+    assert(not AT.GetQuestKillMobName(3385,{type="monster",npcID=8444},"Speak to "..profile[1]))
+    local list=assert(AT.GetQuestDropMobNames(10467,3385))
+    assert(#list>0)
+    local valid
+    for _,mobName in ipairs(list) do
+        if AT.GetQuestMobDisplayID(mobName,true,3385,10467) then valid=true end
+    end
+    assert(valid,"verified matching Classic quest and item provides a visible model")
+    assert(not AT.GetQuestDropMobNames(10467,999999),"Classic links do not leak to unrelated quests")
+    local sources=AT.GetQuestDropMobNames(752,18)
+    assert(#sources==1 and sources[1]=="Defias Thug","existing matching Forever observations still win")
+    print("PASS exact Classic kill and collect portrait fallback, no talk objective or unrelated quest leakage")
+end
