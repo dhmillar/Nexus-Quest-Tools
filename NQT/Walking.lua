@@ -23,7 +23,16 @@ local function isTurnIn(quest)
     return AT.IsQuestTurnInNavigation and AT.IsQuestTurnInNavigation(quest)==true or false
 end
 
-local function apiForWalking(from, quest, snapshot)
+local spatialFailure={offmesh=true,unreachable=true,projection=true,budget=true}
+local function sameFailedStart(failure,from,key)
+    if not spatialFailure[failure.reason] then return true end
+    if key~=failure.key then return false end
+    local dx=(from.x-failure.from.x)*failure.width
+    local dy=(from.y-failure.from.y)*failure.height
+    return dx*dx+dy*dy<=24^2
+end
+
+local function apiForWalking(from, quest, snapshot, key)
     local now=time()
     local lastFailure
     local function checked(api, road)
@@ -31,7 +40,7 @@ local function apiForWalking(from, quest, snapshot)
             or type(api.EstimateWalks) ~= "function" or type(api.WalkPath) ~= "function"
             or type(api.NavVersion) ~= "function" then return end
         local failure=providerBackoff[api]
-        if failure and failure.quest==quest and failure.map==from.map and failure.turnIn==isTurnIn(quest) and now<failure.untilTime then
+        if failure and failure.quest==quest and failure.map==from.map and failure.turnIn==isTurnIn(quest) and now<failure.untilTime and sameFailedStart(failure,from,key) then
             lastFailure=lastFailure or failure.reason
             return
         end
@@ -63,7 +72,7 @@ end
 
 local function valid(job)
     if state ~= job or not active(job.quest) or isTurnIn(job.quest)~=job.turnIn then return false end
-    local api, nav = apiForWalking(job.from, job.quest,true)
+    local api, nav = apiForWalking(job.from, job.quest,true,job.key)
     if api ~= job.api or nav ~= job.nav then return false end
     if C_Map and C_Map.GetBestMapForUnit then
         local ok, map = pcall(C_Map.GetBestMapForUnit, "player")
@@ -76,7 +85,9 @@ local function fail(job, reason)
     job.cancel = nil
     job.failure = type(reason) == "string" and reason or "unavailable"
     job.retry = time() + ((reason == "loading" or reason == "combat") and 3 or 18)
-    providerBackoff[job.api] = {quest=job.quest,map=job.from.map,turnIn=job.turnIn,untilTime=job.retry,reason=job.failure}
+    job.backoff={quest=job.quest,map=job.from.map,turnIn=job.turnIn,untilTime=job.retry,reason=job.failure,
+        from=job.from,width=job.width,height=job.height,key=job.key}
+    providerBackoff[job.api] = job.backoff
 end
 
 local function request(job, method, target, callback, refused)
@@ -247,14 +258,15 @@ function AT.GetFocusedQuestWalkingPath(quest, from, width, height)
         AT.CancelQuestWalking()
         return nil,nil,"position"
     end
-    local api, nav, road, why = apiForWalking(from, quest)
+    local cache = currentTargets(quest, from.map)
+    local api, nav, road, why = apiForWalking(from, quest,nil,cache.key)
     if not api then
         local carried,target,status=carryCenterline(quest,from,width,height)
         if carried then return carried,target,status end
-        AT.CancelQuestWalking()
+        clear()
+        lastPublished=nil
         return nil,nil,why or "provider_missing"
     end
-    local cache = currentTargets(quest, from.map)
     if #cache.points == 0 then
         clear()
         lastPublished=nil
@@ -270,12 +282,12 @@ function AT.GetFocusedQuestWalkingPath(quest, from, width, height)
         if state.quest ~= quest or old.map ~= from.map or state.api ~= api or state.nav ~= nav
             or state.key ~= cache.key or dx*dx + dy*dy > limit*limit
             or (state.cancel and now - state.started > 35)
-            or (state.retry and now >= state.retry) then clear() end
+            or (state.retry and (now >= state.retry or not sameFailedStart(state.backoff,from,cache.key))) then clear() end
     end
     if not state and not cache.stale then
         local turnIn=cache.turnIn
         state = {quest=quest, from=from, api=api, nav=nav, targets=cache.points, backups=cache.backups, key=cache.key, turnIn=turnIn,
-            started=now, phase=0, road=road}
+            started=now, phase=0, road=road,width=width,height=height}
         if #cache.points==1 and turnIn and (#cache.backups==0 or type(api.WalkBestPath)~="function") then
             state.best=cache.points[1]
             requestPath(state)

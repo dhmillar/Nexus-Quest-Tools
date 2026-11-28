@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.282 - 2026-11-28
+
+- If a walking route fails, recompute when you move far enough to try a different approach or the quest target changes, instead of waiting out the previous failure.
+- Keep the cooldown for repeated searches from the same spot and for client restrictions.
+
 ## 1.5.281 - 2026-11-28
 
 - Added 55 verified outdoor pickup approaches for 22 objectives across 16 quests. NQT can route toward them when a held, unfinished objective has no usable native route point.
