@@ -86,3 +86,20 @@ assert(api.WalkBestPath("component disjoint",start,{point(350,0)},function(r,e)a
 assert(#queue==1);table.remove(queue,1)()
 assert(err=="unreachable" and #queue==0,"multi-goal avoids expanding an impossible component")
 print("PASS packaged component format makes provably disconnected pins fail without search")
+
+-- A known reachable route is allowed a longer scan than unknown geometry.
+AT.NQTDB.DryComponents[world][4]=span(57,0)..span(1,1)..span(4095,0)..span(336,0)
+walked,err=nil,nil
+assert(api.WalkPath("known long",start,goal,function(r,e)walked,err=r,e end));drain()
+assert(walked and not err and math.abs(walked.yards-39128*step)<.05)
+-- Simulate the client timing budget. One slice yields rather than consume
+-- all the nominal expansion allowance when a frame is already expensive.
+local checks=0
+debugprofilestop=function()checks=checks+1;return checks*2 end
+local delayed
+local abort=api.WalkPath("slow frame",start,point(50,0),function(r)delayed=r end)
+assert(abort and #queue==1)
+table.remove(queue,1)()
+assert(not delayed and #queue==1 and checks>=2)
+abort();drain();debugprofilestop=nil
+print("PASS known long connected route, time-budgeted slices and cancellable slow frames")

@@ -1,11 +1,12 @@
 -- NQT's independent, cooperative walking search for the bundled dry grid.
 local _,AT=...
 local dx,dy={1,-1,0,0,1,1,-1,-1},{0,0,1,-1,1,-1,1,-1}
-local costs={1,1,1,1,1.414213562373,1.414213562373,1.414213562373,1.414213562373}
+local UNIT,DIAG=1000000,1414214
+local costs={UNIT,UNIT,UNIT,UNIT,DIAG,DIAG,DIAG,DIAG}
 local powers={1,2,4,8,16,32,64,128}
 local floor,abs,sqrt=math.floor,math.abs,math.sqrt
 local TILE=1600/3
-local MAX_VISITS=36000
+local MAX_VISITS,KNOWN_CONNECTED_VISITS=36000,90000
 local function finite(v) return (not issecretvalue or not issecretvalue(v)) and type(v)=="number" and v==v and abs(v)<math.huge end
 local function call(f,...)
     if type(f)~="function" then return end
@@ -169,18 +170,28 @@ local function search(D,sx,sy,tx,ty,callback,estimateOnly,goals)
             highY=not highY and y or math.max(highY,y)
         end
     else cells[encode(tx,ty)]=1 end
+    local limit=MAX_VISITS
+    local group=component(D,sx,sy)
+    if group then
+        if goals then
+            for _,g in ipairs(goals) do
+                if component(D,g[1],g[2])==group then limit=KNOWN_CONNECTED_VISITS;break end
+            end
+        elseif component(D,tx,ty)==group then limit=KNOWN_CONNECTED_VISITS end
+    end
     -- The octile distance to the bounding box never exceeds the
     -- shortest route to any goal, even if some of the goals are isolated.
     local function heuristic(x,y)
         local X,Y=math.max(lowX-x,0,x-highX),math.max(lowY-y,0,y-highY)
-        return math.max(X,Y)+.414213562373*math.min(X,Y)
+        return UNIT*math.max(X,Y)+(DIAG-UNIT)*math.min(X,Y)
     end
     local source=encode(sx,sy)
     local g,parents,heap={[source]=0},{},{}
+    local function better(f,c,b) return f<b[3] or (f==b[3] and c>b[2]) end
     local function push(k,c,f)
         local i=#heap+1
         while i>1 do
-            local p=floor(i/2);if heap[p][3]<=f then break end
+            local p=floor(i/2);if not better(f,c,heap[p]) then break end
             heap[i]=heap[p];i=p
         end
         heap[i]={k,c,f}
@@ -191,8 +202,8 @@ local function search(D,sx,sy,tx,ty,callback,estimateOnly,goals)
             local i=1
             while i*2<=#heap do
                 local ch=i*2
-                if heap[ch+1] and heap[ch+1][3]<heap[ch][3] then ch=ch+1 end
-                if last[3]<=heap[ch][3] then break end
+                if heap[ch+1] and better(heap[ch+1][3],heap[ch+1][2],heap[ch]) then ch=ch+1 end
+                if not better(heap[ch][3],heap[ch][2],last) then break end
                 heap[i]=heap[ch];i=ch
             end
             heap[i]=last
@@ -208,22 +219,27 @@ local function search(D,sx,sy,tx,ty,callback,estimateOnly,goals)
     end
     local function tick()
         if done or cancelled then return end
-        for _=1,180 do
+        local start=call(debugprofilestop)
+        for i=1,180 do
+            if i%24==0 and finite(start) then
+                local now=call(debugprofilestop)
+                if finite(now) and now-start>1.5 then break end
+            end
             if #heap==0 then return finish(nil,"unreachable") end
-            if visits>=MAX_VISITS then return finish(nil,"budget") end
+            if visits>=limit then return finish(nil,"budget") end
             local row=pop()
             local k,c=row[1],row[2]
             visits=visits+1
             if c==g[k] then
                 local winner=cells[k]
                 if winner then
-                    if estimateOnly then return finish(true,c*TILE/D.cells) end
+                    if estimateOnly then return finish(true,c/UNIT*TILE/D.cells) end
                     local keys={k}
                     local function trace()
                         if done or cancelled then return end
                         for step=1,512 do
                             local prev=parents[k]
-                            if not prev then return finish(keys,c*TILE/D.cells,winner) end
+                            if not prev then return finish(keys,c/UNIT*TILE/D.cells,winner) end
                             keys[#keys+1]=prev;k=prev
                         end
                         C_Timer.After(0,trace)

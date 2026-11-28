@@ -1480,6 +1480,8 @@ local function objectiveDropSuffix(qid,item)
     return " ("..(a==b and a or a.."\226\128\147"..b)..")"
 end
 
+AT.GetRankQuestDropRateSuffix=objectiveDropSuffix
+
 local objectiveMobTip
 local function liveMobPortrait(owner,texture)
     if not is(owner.mobName,"string") or not SetPortraitTexture then return false end

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.274 - 2026-11-28
+
+- Updated Forever drop observations: 77 added source/item records, 14 refreshed samples, and 18 exact quest-item objectives with newly measured rates. Two item objectives gained observed object sources.
+- Improved long dry routes with more search time only for known connected terrain, better tie-breaking, and a per-frame time guard.
+
 ## 1.5.273 - 2026-11-28
 
 - Reconnect narrow, demonstrably dry centerline paths in Eastern Kingdoms and Kalimdor. Water and steps without a straight dry centerline are still excluded. Narrow-only and stacked cells remain transit, not assumed endpoints.
