@@ -218,6 +218,22 @@ g.npcChecks[3]:SetChecked(true);g.npcChecks[3].scripts.OnClick(g.npcChecks[3]);a
 assert(g.npcCheckLabels[3].text=="Repair (1)" and g.art.serviceStatus.text=="1 NPC icon")
 assert(g.art.serviceMarks[1]:GetFrameLevel()>g.art:GetFrameLevel()+4)
 g.npcChecks[3]:SetChecked(false);g.npcChecks[3].scripts.OnClick(g.npcChecks[3]);assert(#g.art.services==0 and not g.art.serviceMarks[1].shown)
+do
+    local realPack,prior,nativeFaction={},AT.NQTDB,UnitFactionGroup
+    assert(loadfile("NQT/NQTDB.lua"))("NQT",realPack)
+    local real=realPack.NQTDB.AdditionalGuideNPCServicePins[1438]
+    assert(real[1][5]=="Jeena Featherbow" and real[1][6]==3610)
+    AT.NQTDB={AdditionalGuideNPCServicePins={[1436]=real}}
+    g.npcChecks[3]:SetChecked(true);g.npcChecks[3].scripts.OnClick(g.npcChecks[3])
+    assert(#g.art.services==2 and g.art.services[2].name=="Jeena Featherbow")
+    assert(g.npcCheckLabels[3].text=="Repair (2)")
+    UnitFactionGroup=function()return "Horde" end
+    g.npcChecks[3].scripts.OnClick(g.npcChecks[3])
+    assert(#g.art.services==1 and g.art.services[1].name=="Other faction repair")
+    g.npcChecks[3]:SetChecked(false);g.npcChecks[3].scripts.OnClick(g.npcChecks[3])
+    assert(#g.art.services==0)
+    AT.NQTDB,UnitFactionGroup=prior,nativeFaction
+end
 g.npcChecks[15]:SetChecked(true);g.npcChecks[15].scripts.OnClick(g.npcChecks[15]);assert(g.art.serviceStatus.text=="No enabled NPC services recorded here")
 g.npcChecks[15]:SetChecked(false);g.npcChecks[15].scripts.OnClick(g.npcChecks[15])
 g.npcButton.scripts.OnClick()

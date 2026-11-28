@@ -103,3 +103,29 @@ AT.db.vendorIcons=true;AT.RefreshVendorIcons()
 check(p,"INV_Misc_Bag_10")
 AT.db.enabled=false;AT.RefreshVendorIcons();assert(not overlays[p].shown)
 print("PASS overhead vendor icons default on, service roles, plate visibility and recycling, per-option disable, protected frames ignored")
+local verified,fake,repair
+local verifiedToken
+verifiedToken,verified=npc(20,"Marla Bell",nil)
+_,fake=npc(21,"Marla Bell",nil)
+_,repair=npc(22,"Localized Repair Name",nil)
+assert(loadfile("NQT/NQTDB.lua"))("NQT",AT)
+local db=AT.NQTDB.VerifiedVendorServices
+assert(not db[256575],"a Basket of Textile Supplies is not an NPC")
+assert(db[272437][2]=="Reagent Vendor" and db[263440][4])
+local faction="Alliance"
+function UnitFactionGroup()return faction end
+local pre=UnitGUID
+function UnitGUID(t)
+    if t=="nameplate20" then return "Creature-0-0-0-0-272437-00121" end
+    if t=="nameplate22" then return "Creature-0-0-0-0-263440-00122" end
+    return pre(t)
+end
+AT.db.enabled=true;AT.RefreshVendorIcons()
+check(verified,"INV_Misc_Dust_02")
+assert(not overlays[fake] and not overlays[repair],"ID and faction gates")
+faction="Horde";AT.RefreshVendorIcons()
+assert(not overlays[verified].shown and not overlays[fake])
+check(repair,"Trade_BlackSmithing")
+event:event("NAME_PLATE_UNIT_REMOVED",verifiedToken)
+assert(not overlays[verified].shown)
+print("PASS exact vendor-ID fallback, faction, localized name, reagent/repair art, and no same-name alias")

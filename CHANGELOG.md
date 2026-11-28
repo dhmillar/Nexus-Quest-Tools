@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.290 - 2026-11-28
+
+- Vendor Icons recognize 363 verified merchant NPCs, including 116 repair vendors, even when a nameplate subtitle is missing or localized.
+- The Level Guide adds 12 optional vendor and repair pins. Map pins remain off by default, and nothing is added to the minimap.
+
 ## 1.5.289 - 2026-11-28
 
 - Match known quest pickup and objective routes by the exact live objective, even when the game lists objectives in a different order.

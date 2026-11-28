@@ -807,6 +807,10 @@ local function guideServicePoints(map,options)
             if r[1]==6 and validName(r[5]) and r[5]:match("^Innkeeper%s") then add(2,r[3],r[4],r[5]) end
         end
     end
+    local verified=AT.NQTDB and AT.NQTDB.AdditionalGuideNPCServicePins
+    for _,r in ipairs(verified and verified[map] or {}) do
+        if r[2]==0 or r[2]==side then add(r[1],r[3],r[4],r[5]) end
+    end
     do
         local nodes=safe(C_TaxiMap and C_TaxiMap.GetTaxiNodesForMap,map)
         for _,node in ipairs(type(nodes)=="table" and nodes or {}) do

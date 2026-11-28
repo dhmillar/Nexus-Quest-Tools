@@ -148,6 +148,25 @@ local function labelRole(token,plate,guid)
         return v
     end
     local subtitle=title(field(field(lines,index),"leftText"))
+    local id=type(guid)=="string" and tonumber(guid:match("^Creature%-%d+%-%d+%-%d+%-%d+%-(%d+)%-"))
+    local catalog=AT.NQTDB and AT.NQTDB.VerifiedVendorServices
+    local verified=id and catalog and catalog[id]
+    if verified then
+        local faction=safe(UnitFactionGroup,"player")
+        if verified[3]==0 or verified[3]==1 and faction=="Alliance" or verified[3]==2 and faction=="Horde" then
+            -- A discovered merchant ID works even when tooltip title/name data
+            -- is unavailable. Classes/subtypes still use real service titles.
+            local roles=classify(subtitle,name,nil)
+            if #roles==0 then roles=classify(clean(verified[2]),clean(verified[1]),{vendor=true,repair=verified[4]}) end
+            if #roles==0 then roles[1]="vendor" end
+            if verified[4] then
+                local shown=false
+                for _,role in ipairs(roles) do if role=="repair" then shown=true;break end end
+                if not shown then roles[#roles+1]="repair" end
+            end
+            return roles
+        elseif faction=="Alliance" or faction=="Horde" then return {} end
+    end
     local roles=classify(subtitle,name,known)
     if #roles>0 then return roles end
     if guid and tooltip and tooltip.GetHyperlink then
