@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.300 - 2026-11-28
+
+- Walking: recover longer routes when the terrain proves start and destination are connected. Two formerly capped outdoor test walks now finish at 8,079 and 11,317 yards; per-frame limits and uncertain-floor checks stay unchanged.
+- NQTDB: add two independently verified Stagnant Oasis approach points for the Dried Seeds objective. Native directions take priority; fallback requires the quest, unfinished objective and item in your bag.
+
 ## 1.5.299 - 2026-11-28
 
 - Walking: tighten and pack NQTDB’s outdoor route search hints without changing terrain or route cost. The same 4,983-yard test route dropped from 205 to 109 scheduler slices; existing obstacle, zone-boundary and floor guards still apply.

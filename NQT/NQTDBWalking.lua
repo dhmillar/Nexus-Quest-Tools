@@ -6,7 +6,7 @@ local costs={UNIT,UNIT,UNIT,UNIT,DIAG,DIAG,DIAG,DIAG}
 local powers={1,2,4,8,16,32,64,128}
 local floor,abs,sqrt=math.floor,math.abs,math.sqrt
 local TILE=1600/3
-local MAX_VISITS,KNOWN_CONNECTED_VISITS=36000,90000
+local MAX_VISITS,KNOWN_CONNECTED_VISITS,DISTANT_CONNECTED_VISITS=36000,90000,132000
 local function finite(v) return (not issecretvalue or not issecretvalue(v)) and type(v)=="number" and v==v and abs(v)<math.huge end
 local function call(f,...)
     if type(f)~="function" then return end
@@ -295,7 +295,13 @@ local function search(D,sx,sy,tx,ty,callback,estimateOnly,goals)
         end
         return first
     end
-    push(source,0,heuristic(sx,sy))
+    local initial=heuristic(sx,sy)
+    -- A long route in a proven connected component can need more search.
+    -- Keep the original frame budget, and never extend a speculative search.
+    if limit==KNOWN_CONNECTED_VISITS and initial/UNIT*TILE/D.cells>=3000 then
+        limit=DISTANT_CONNECTED_VISITS
+    end
+    push(source,0,initial)
     local done,cancelled,visits
     visits=0
     local function finish(a,b,c)

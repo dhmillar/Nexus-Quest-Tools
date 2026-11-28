@@ -5890,3 +5890,13 @@ db.AdditionalGuideTrainerPins={
  [1456]={{4,2,0.252,0.205,"Thurston Xane",3049}},
 }
 -- END NQTDB exact trainer services
+-- BEGIN NQTDB targeted item approaches (generated)
+-- Exact quest objective and successful targeted item casts: Efficient Games Forever, CC BY 4.0.
+-- https://github.com/JIVESCORP/eg-link-output-wowf/tree/c1bf99bc2835bbe1b2dad82fb99f994c0cfffe33/data/wowf
+-- https://efficient.games | https://creativecommons.org/licenses/by/4.0/
+-- Source must successfully use one item against that exact objective entity, across multiple builds.
+-- Locations are actual player approach points, not the target's exact placement.
+db.TargetedItemApproaches={
+ [877]={[1]={"object",3737,1,{{1413,0.5555,0.4268},{1413,0.5562,0.4276}},5068}},
+}
+-- END NQTDB targeted item approaches

@@ -1091,7 +1091,8 @@ function AT.GetObservedQuestObjectiveSpots(id,map)
     local db=AT.NQTDB
     local refs=db and db.ObjectiveSpots and db.ObjectiveSpots[id]
     local objects=db and db.ObjectPickupApproaches and db.ObjectPickupApproaches[id]
-    if not (refs or objects) or call(Q.IsOnQuest,id)~=true or completed(id) then return end
+    local uses=db and db.TargetedItemApproaches and db.TargetedItemApproaches[id]
+    if not (refs or objects or uses) or call(Q.IsOnQuest,id)~=true or completed(id) then return end
     local inside,kind=call(IsInInstance)
     if inside==true and kind~="none" or zoneID(map)~=map then return end
     local live=call(Q.GetQuestObjectives,id)
@@ -1101,10 +1102,15 @@ function AT.GetObservedQuestObjectiveSpots(id,map)
     local function signature(typ,required)
         return observedObjectiveIDs[typ] and validID(required) and typ..":"..required or nil
     end
-    local function remember(observations,fallback)
+    local function remember(observations,fallback,requiresItem)
         for index,r in pairs(observations or {}) do
             local key=signature(r[1],r[3])
-            if key and (not fallback or not (refs and refs[index])) then
+            local available=true
+            if requiresItem then
+                local count=validID(r[5]) and call(C_Item and C_Item.GetItemCount or GetItemCount,r[5],false,false)
+                available=validID(count) and not (objects and objects[index])
+            end
+            if key and available and (not fallback or not (refs and refs[index])) then
                 rows[#rows+1]={index=index,record=r,key=key}
                 counts[key]=(counts[key] or 0)+1
             end
@@ -1112,9 +1118,11 @@ function AT.GetObservedQuestObjectiveSpots(id,map)
     end
     remember(refs,false)
     remember(objects,true)
+    remember(uses,true,true)
     table.sort(rows,function(a,b)return a.index<b.index end)
     for _,o in ipairs(live) do
         local typ=field(o,"type")
+        if typ=="gameObject" then typ="object" end
         local key=signature(typ,field(o,"numRequired"))
         if key and counts[key] then
             local typed,blocked=liveObjectiveID(id,o,typ)

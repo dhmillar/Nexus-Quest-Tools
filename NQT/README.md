@@ -311,6 +311,8 @@ A starter drop can be verified even when its exact pickup position is not. In th
 
 Rank Quest can show separately corroborated outdoor turn-in labels for held, ready quests when no better source is available. Exact Forever NPC hand-in links, faction and close recorded positions are independently checked against Classic quest-recipient facts. Without a same-build completion witness these records are display hints and native-map lookup hints only, not standalone GPS destinations.
 
+When a quest requires using a held item on a specific object, the route engine can fall back to recorded approach locations if no usable native waypoint is available. NQT requires repeat successful casts on the exact objective target in more than one Forever build, and checks that the quest is held, the objective is unfinished and the usable item is in the bags.
+
 The standalone route engine can also use repeated outdoor object-loot approach positions for held, unfinished item objectives. It matches the quest, item and required amount against Forever records; each contributing loot window contains only the matching quest item. Native waypoints always go first. These are nearby observed pickup locations, not exact object pins.
 
 Level Guide uses exact quest/item drop evidence in the selected Solo, Duo or Trio mode before generic item evidence. Solo estimates are not reused as party measurements. The work score treats opened-window-only records as a planning proxy, not an exact count of kills or time.
