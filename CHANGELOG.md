@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.296 - 2026-11-28
+
+- Rank Quest: the quest-start popup now uses exact verified NQTDB starter links when the bag API omits the quest ID, such as Healthy Dragon Scale. Held or completed quests and ambiguous or restricted metadata do not trigger the fallback. The item still requires a click and the quest is not auto-accepted.
+
 ## 1.5.295 - 2026-11-28
 
 - Walking: keep the verified path while the player follows it instead of restarting the search every 80 yards. When the player leaves the path, discard rejected geometry without cancelling a replacement search already underway.

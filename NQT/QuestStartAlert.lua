@@ -23,12 +23,42 @@ local function field(t,k)
 end
 local function locked() return InCombatLockdown and InCombatLockdown() end
 local function enabled() return AT.db and AT.db.enabled and AT.db.questStartItemAlert ~= false end
-local function questFor(bag,slot)
-    local info=call(bags.GetContainerItemQuestInfo,bag,slot)
+local starterIndex, indexedWitnesses
+local function verifiedQuestForItem(item)
+    local witnesses=AT.NQTDB and AT.NQTDB.ItemStarterWitnesses
+    if witnesses~=indexedWitnesses or not starterIndex then
+        starterIndex,indexedWitnesses={},witnesses
+        for q,row in pairs(witnesses or {}) do
+            local id=field(row,1)
+            if positive(q) and positive(id) then
+                local prior=starterIndex[id]
+                starterIndex[id]=(prior==nil or prior==q) and q or false
+            end
+        end
+    end
+    return starterIndex[item] or nil
+end
+local function questFor(bag,slot,item)
+    local info
+    if type(bags.GetContainerItemQuestInfo)=="function" then
+        local ok,raw=pcall(bags.GetContainerItemQuestInfo,bag,slot)
+        if not ok or issecretvalue and issecretvalue(raw) then return end
+        info=raw
+        if readable(info,"table") and issecretvalue and
+            (issecretvalue(info.questID) or issecretvalue(info.isActive)) then return end
+    end
     local quest=field(info,"questID")
-    if positive(quest) and not accepted[quest] and field(info,"isActive")~=true
-        and call(quests.IsOnQuest,quest)~=true
-        and call(quests.IsQuestFlaggedCompleted,quest)~=true then return quest end
+    if field(info,"isActive")==true then return end
+    if positive(quest) then
+        if not accepted[quest] and call(quests.IsOnQuest,quest)~=true
+            and call(quests.IsQuestFlaggedCompleted,quest)~=true then return quest end
+        return
+    end
+    -- Use only independently proven item-start links, not generic quest
+    -- objectives or Level Guide leads. Missing status is not permission.
+    quest=verifiedQuestForItem(item)
+    if quest and not accepted[quest] and call(quests.IsOnQuest,quest)==false
+        and call(quests.IsQuestFlaggedCompleted,quest)==false then return quest end
 end
 local function snapshot(check)
     local totals, starters = {}, {}
@@ -41,7 +71,7 @@ local function snapshot(check)
                 local qty=field(info,"stackCount")
                 totals[item]=(totals[item] or 0)+(positive(qty) and qty or 1)
                 if check and check(item) and not starters[item] then
-                    local quest=questFor(bag,slot)
+                    local quest=questFor(bag,slot,item)
                     if quest then
                         starters[item]={item=item,quest=quest,texture=field(info,"iconFileID"),
                             link=field(info,"hyperlink"),bag=bag,slot=slot}

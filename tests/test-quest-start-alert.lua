@@ -87,3 +87,37 @@ bag();assert(b.shown and b.attrs.item1=="item:7")
 AT.db.questStartItemAlert=false;AT.RefreshQuestStartItemAlert()
 assert(not b.shown and b.attrs.item1==nil,"turning off clears a live offer")
 print("PASS new eligible starter, delayed metadata, click vs accept, move/stack, dismissal, queue, combat, stale item, and toggle")
+-- Existing bundled data contains a separately verified actual item starter.
+-- Fall back only with authoritative public held and completion booleans.
+assert(loadfile("NQT/NQTDB.lua"))("NQT",AT)
+assert(AT.NQTDB.ItemStarterWitnesses[5582][1]==13920)
+local shadow=AT.NQTDB.ItemStarterWitnesses
+AT.db.questStartItemAlert=true;AT.RefreshQuestStartItemAlert()
+contents[10]=item(13920,nil,139200);bag();assert(not b.shown,"unknown status cannot show")
+owned[5582],finished[5582]=false,true
+bag();assert(not b.shown,"previously completed quest")
+owned[5582],finished[5582]=true,false
+bag();assert(not b.shown,"held quest")
+owned[5582]=false
+local secret={}
+function issecretvalue(v)return v==secret end
+contents[10].quest=secret
+bag();assert(not b.shown,"do not substitute for restricted native quest metadata")
+contents[10].quest=nil
+contents[10].active=true
+bag();assert(not b.shown,"native active flag blocks")
+contents[10].active=false
+AT.NQTDB.ItemStarterWitnesses={[5582]=shadow[5582],[5583]=shadow[5582]}
+bag();assert(not b.shown,"ambiguous standalone item evidence cannot show")
+AT.NQTDB.ItemStarterWitnesses=shadow
+bag();assert(b.shown and b.attrs.item1=="item:13920","exact published starter renders with no native ID")
+contents[10].quest=5584
+click("LeftButton")
+assert(not b.shown and use==1,"new authoritative client ID invalidates a fallback click")
+AT.db.questStartItemAlert=false;AT.RefreshQuestStartItemAlert();contents[10]=nil
+AT.db.questStartItemAlert=true;AT.RefreshQuestStartItemAlert()
+contents[10]=item(13920,nil,139200);bag()
+assert(b.shown and b.attrs.item1=="item:13920")
+click("LeftButton");assert(use==2 and accepts==0,"use held verified item, never auto-accept")
+event("QUEST_ACCEPTED",5582);assert(not b.shown and not b.attrs.item1)
+print("PASS exact NQTDB fallback reaches the real secure starter button only for an unheld, unfinished, unrestricted exact item")
