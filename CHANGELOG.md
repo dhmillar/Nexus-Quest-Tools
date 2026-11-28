@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.269 - 2026-11-28
+
+- NQTDB adds 301 likely quest starts. Level Guide and Share Verify label historical starter relationships as likely, use only independently observed Forever positions, and preserve confirmed start sources.
+- One terrain search can pick the shortest reachable walk among multiple quest pins. Longer routes retain checked turns, and the engine distinguishes search limits from disconnected terrain.
+- Covered single-floor overworld interiors can route when the client supplies a matching ground height. Instances, water and stacked floors remain guarded.
+
 ## 1.5.268 - 2026-11-28
 
 - NQTDB adds 3,380 exact-match quest reward records from captured Forever quest metadata. The Level Guide shows recorded money, guaranteed items, choices, and currency.

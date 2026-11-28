@@ -155,3 +155,55 @@ local err
 assert(api.WalkPath("wrong parent",start,goal,function(r,e)assert(not r);err=e end));drain()
 assert(err=="projection","do not draw routes via a mismatched parent world")
 print("PASS cross-zone projections preserve every waypoint; bad world and stale cached projection rejected")
+
+brokenParent=false
+local nearby=fromWorld(201,spawnX+8*step,spawnY)
+local blocked=fromWorld(201,spawnX,spawnY+step)
+local goals={goal,blocked,nearby,nearby}
+local picked
+assert(api.WalkBestPath("multi",start,goals,function(r)picked=r end));drain()
+assert(picked and picked.targetIndex==3 and #picked.waypoints==9
+ and math.abs(picked.yards-8*step)<.01,"one search chooses the nearest reachable POI, skips masked and keeps first same-cell candidate")
+local finish=api.WalkBestPath("cancel multi",start,goals,function()error("cancelled goal setup delivered")end)
+assert(type(finish)=="function");finish();drain()
+AT.db={enabled=true,showQuestRoute=true}
+function AT.GetQuestNavigationID() return 1948 end
+function AT.GetFocusedQuestRouteTargets() return 1948,goals end
+C_Map.GetBestMapForUnit=function()return 201 end
+assert(loadfile("NQT/Walking.lua"))("NQT",AT)
+local estimates=api.EstimateWalks
+api.EstimateWalks=function()error("avoid repeated per-POI search")end
+local no,which,status=AT.GetFocusedQuestWalkingPath(1948,start,440,1000)
+assert(not no and not which and status=="planning");drain()
+local walked,chosen,done=AT.GetFocusedQuestWalkingPath(1948,start,440,1000)
+assert(walked and chosen==nearby and done=="routed")
+api.EstimateWalks=estimates
+print("PASS native quest route uses one bounded multi-goal search, preserves winner identity")
+
+-- Planner compares walk distance, not the target's distance as the crow flies.
+local edges={}
+local function addEdge(x,y,X,Y,d,b)
+ local k,K=x*67+y,X*67+Y
+ edges[k]=(edges[k] or 0)+d
+ edges[K]=(edges[K] or 0)+b
+end
+for y=8,13 do addEdge(8,y,8,y+1,4,8);addEdge(10,y,10,y+1,4,8) end
+for x=8,9 do addEdge(x,14,x+1,14,1,2) end
+for x=3,7 do addEdge(x,8,x+1,8,1,2) end
+local dry={}
+for k=0,4488 do dry[#dry+1]=string.char(edges[k] or 0,0,0) end
+D[world]={world=world,cells=67,nx=1,ny=1,tx=0,ty=0,tiles={table.concat(dry)}}
+spawnX,spawnY=8.5*step,8.5*step
+start=fromWorld(201,spawnX,spawnY)
+local tempting,quick=fromWorld(201,10.5*step,spawnY),fromWorld(201,3.5*step,spawnY)
+IsIndoors=function()return true end
+assert(AT.GetBundledWalkingAPI(start),"verified single-floor grid can be available in overworld interiors")
+picked=nil
+assert(api.WalkBestPath("obstacle",start,{tempting,quick},function(r)picked=r end));drain()
+assert(picked and picked.targetIndex==2 and math.abs(picked.yards-5*step)<.01)
+IsInInstance=function()return true end
+assert(not AT.GetBundledWalkingAPI(start),"no instanced path exposed")
+IsInInstance=nil
+spawnZ=12
+assert(not AT.GetBundledWalkingAPI(start),"single-floor overworld interiors still require observed height")
+print("PASS obstacle-aware target ranking and strict floor verification for overworld interiors")

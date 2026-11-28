@@ -5,6 +5,7 @@ local costs={1,1,1,1,1.414213562373,1.414213562373,1.414213562373,1.414213562373
 local powers={1,2,4,8,16,32,64,128}
 local floor,abs,sqrt=math.floor,math.abs,math.sqrt
 local TILE=1600/3
+local MAX_VISITS=36000
 local function finite(v) return (not issecretvalue or not issecretvalue(v)) and type(v)=="number" and v==v and abs(v)<math.huge end
 local function call(f,...)
     if type(f)~="function" then return end
@@ -105,15 +106,30 @@ local function transform(D,point,checkHeight)
     end
     return X,Y
 end
-local function search(D,sx,sy,tx,ty,callback,estimateOnly)
+local function search(D,sx,sy,tx,ty,callback,estimateOnly,goals)
     local W=D.ny*D.cells
     local function encode(x,y)return x*W+y end
     local function unpackKey(k)return floor(k/W),k%W end
+    local lowX,highX,lowY,highY=tx,tx,ty,ty
+    local cells={}
+    if goals then
+        for _,g in ipairs(goals) do
+            local x,y=g[1],g[2]
+            local k=encode(x,y)
+            if not cells[k] then cells[k]=g[3] end
+            lowX=not lowX and x or math.min(lowX,x)
+            highX=not highX and x or math.max(highX,x)
+            lowY=not lowY and y or math.min(lowY,y)
+            highY=not highY and y or math.max(highY,y)
+        end
+    else cells[encode(tx,ty)]=1 end
+    -- The octile distance to the bounding box never exceeds the
+    -- shortest route to any goal, even if some of the goals are isolated.
     local function heuristic(x,y)
-        local X,Y=abs(x-tx),abs(y-ty)
+        local X,Y=math.max(lowX-x,0,x-highX),math.max(lowY-y,0,y-highY)
         return math.max(X,Y)+.414213562373*math.min(X,Y)
     end
-    local source,target=encode(sx,sy),encode(tx,ty)
+    local source=encode(sx,sy)
     local g,parents,heap={[source]=0},{},{}
     local function push(k,c,f)
         local i=#heap+1
@@ -140,23 +156,33 @@ local function search(D,sx,sy,tx,ty,callback,estimateOnly)
     push(source,0,heuristic(sx,sy))
     local done,cancelled,visits
     visits=0
-    local function finish(a,b)
+    local function finish(a,b,c)
         done=true
-        if not cancelled then callback(a,b) end
+        if not cancelled then callback(a,b,c) end
     end
     local function tick()
         if done or cancelled then return end
         for _=1,180 do
-            if #heap==0 or visits>=24000 then return finish(nil,"unreachable") end
+            if #heap==0 then return finish(nil,"unreachable") end
+            if visits>=MAX_VISITS then return finish(nil,"budget") end
             local row=pop()
             local k,c=row[1],row[2]
             visits=visits+1
             if c==g[k] then
-                if k==target then
+                local winner=cells[k]
+                if winner then
                     if estimateOnly then return finish(true,c*TILE/D.cells) end
                     local keys={k}
-                    while parents[k] do k=parents[k];keys[#keys+1]=k end
-                    return finish(keys,c*TILE/D.cells)
+                    local function trace()
+                        if done or cancelled then return end
+                        for step=1,512 do
+                            local prev=parents[k]
+                            if not prev then return finish(keys,c*TILE/D.cells,winner) end
+                            keys[#keys+1]=prev;k=prev
+                        end
+                        C_Timer.After(0,trace)
+                    end
+                    return trace()
                 end
                 local x,y=unpackKey(k)
                 local mask=bits(D,x,y)
@@ -197,6 +223,7 @@ function api.EstimateWalks(_,from,targets,callback)
         local x,y=transform(D,target,false)
         if not x then result[i]=false;C_Timer.After(0,nextGoal);return end
         cancel=search(D,sx,sy,x,y,function(keys,yards)
+            if not keys and yards=="budget" then callback(nil,"budget");return end
             result[i]=keys and yards or false
             C_Timer.After(0,nextGoal)
         end,true)
@@ -225,14 +252,14 @@ local function mapCandidates(from,to)
 end
 local function projectOut(world,x,y,hint)
     local map,p=call(C_Map.GetMapPosFromWorldPos,world,CreateVector2D(x,y),hint)
-    if not finite(map) or not p or issecretvalue and issecretvalue(p) then return end
+    if not finite(map) or map<1 or not p or issecretvalue and issecretvalue(p) then return end
     local u,v=call(p.GetXY,p)
     if not(finite(u) and finite(v) and u>=0 and u<=1 and v>=0 and v<=1) then return end
     local result={map=map,x=u,y=v}
     local w,rx,ry=project(result)
     if w==world and (rx-x)^2+(ry-y)^2<=1 then return result end
 end
-function api.WalkPath(_,from,to,callback)
+local function startCell(from)
     local D=data(from)
     local sx,sy=transform(D,from,true)
     local now=call(GetTime)
@@ -241,11 +268,13 @@ function api.WalkPath(_,from,to,callback)
         sx,sy=previous[1],previous[2]
     end
     verified[from]=nil
-    local tx,ty=transform(D,to,false)
-    if not(sx and tx) then return nil,"offmesh" end
+    return D,sx,sy
+end
+local function beginPath(D,sx,sy,tx,ty,from,targets,callback,goals)
     local stopped
-    local cancel=search(D,sx,sy,tx,ty,function(keys,yards)
+    local cancel=search(D,sx,sy,tx,ty,function(keys,yards,winner)
         if not keys then callback(nil,yards);return end
+        local to=targets[winner]
         local points={}
         local W=D.ny*D.cells
         local i=#keys
@@ -256,10 +285,20 @@ function api.WalkPath(_,from,to,callback)
             -- Small batches keep long multi-tile paths from blocking a frame.
             for _=1,48 do
                 if i<1 then
-                    callback({waypoints=points,yards=yards,navVersion=api.NavVersion(),roadAware=false})
+                    callback({waypoints=points,yards=yards,navVersion=api.NavVersion(),roadAware=false,targetIndex=winner})
                     return
                 end
                 local k=keys[i]
+                local nextIndex=i-1
+                if #keys>512 and i>=3 then
+                    -- Merge identical directions only, following already validated
+                    -- edges. Keep periodic vertices and never skip a turn.
+                    local delta=keys[i-1]-k
+                    for j=i-2,math.max(1,i-48),-1 do
+                        if keys[j]-keys[j+1]~=delta then break end
+                        nextIndex=j
+                    end
+                end
                 local x=(D.tx+(floor(k/W)+.5)/D.cells)*TILE
                 local y=(D.ty+(k%W+.5)/D.cells)*TILE
                 local point=projectOut(D.world,x,y,lastHint)
@@ -273,21 +312,49 @@ function api.WalkPath(_,from,to,callback)
                 end
                 if not point then callback(nil,"projection");return end
                 points[#points+1]=point
-                i=i-1
+                i=nextIndex
             end
             C_Timer.After(0,projectBatch)
         end
         projectBatch()
-    end)
+    end,false,goals)
     return function() stopped=true;cancel() end
+end
+function api.WalkPath(_,from,to,callback)
+    local D,sx,sy=startCell(from)
+    local tx,ty=transform(D,to,false)
+    if not(sx and tx) then return nil,"offmesh" end
+    return beginPath(D,sx,sy,tx,ty,from,{to},callback)
+end
+function api.WalkBestPath(_,from,targets,callback)
+    local D,sx,sy=startCell(from)
+    if not sx then return nil,"offmesh" end
+    if #targets>256 then return nil,"budget" end
+    local goals,i,cancel,stopped={},0
+    local function collect()
+        if stopped then return end
+        for _=1,12 do
+            i=i+1
+            local target=targets[i]
+            if not target then
+                if #goals==0 then callback(nil,"offmesh");return end
+                cancel=beginPath(D,sx,sy,nil,nil,from,targets,callback,goals)
+                return
+            end
+            local x,y=transform(D,target,false)
+            if x then goals[#goals+1]={x,y,i} end
+        end
+        C_Timer.After(0,collect)
+    end
+    C_Timer.After(0,collect)
+    return function() stopped=true;if cancel then cancel() end end
 end
 function AT.GetBundledWalkingAPI(origin,snapshot)
     local D=data(origin)
     if not D or not C_Timer or type(C_Timer.After)~="function" or not C_Map or not C_Map.GetMapPosFromWorldPos then return end
     local _,build=call(GetBuildInfo)
     if not (build=="71037" or build=="71139") then return end
-    local indoors=call(IsIndoors)
-    if indoors==true or call(IsInInstance)==true or call(IsSwimming)==true
+    if call(IsInInstance)==true or call(IsSwimming)==true
         or call(IsFlying)==true or call(UnitOnTaxi,"player")==true then return end
     -- The base grid has no reliable position on top of a second floor.
     if transform(D,origin,not snapshot) then return api end

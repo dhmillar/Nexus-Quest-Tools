@@ -361,6 +361,13 @@ local function chooseGiver(q,p,side,fallback)
     if fallback and positive(fallback.map) and validPoint(fallback.x,fallback.y) then
         return fallback
     end
+    -- Historically recorded start relationships, joined to a currently
+    -- observed location of the exact NPC. This is a lead, not a live offer.
+    -- Do not use it to replace a competing giver, a map pin, or an item area.
+    if not known and AT.NQTDB and AT.NQTDB.ClassicStarts then
+        consider(AT.NQTDB.ClassicStarts[q])
+        if known and not ambiguous then known.startReference=true;return known end
+    end
     return pickup
 end
 function AT.BuildLevelGuide(playerLevel,size)
@@ -1357,6 +1364,7 @@ startDescription=function(g)
         return g.source and ("Drop: "..what)..(mapName and ("  |  "..mapName) or "") or ("Starts with "..what)
     end
     local who=validName(g.name) and g.name or "Quest start"
+    if g.startReference then who="Likely: "..who end
     if not validPoint(g.x,g.y) then return who.."  |  Location not recorded" end
     return ("%s  |  %s %.1f, %.1f"):format(who,mapName or "Map",g.x*100,g.y*100)
 end
@@ -1389,7 +1397,7 @@ function AT.GetShareQuestStart(q,origin,dungeon)
     local name=english and validName(g.name) and g.name
     if not name and not validName(area) then return end
     local coords=validName(area) and validPoint(g.x,g.y) and ("%s %.1f, %.1f"):format(area,g.x*100,g.y*100)
-    return "Starts at: "..(name or coords or area)..(name and (coords or area) and ("  |  "..(coords or area)) or "")
+    return (g.startReference and "Likely starts at: " or "Starts at: ")..(name or coords or area)..(name and (coords or area) and ("  |  "..(coords or area)) or "")
 end
 
 local function currentQuestView(p,mode,hideHeld)

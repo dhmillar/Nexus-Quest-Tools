@@ -1,0 +1,65 @@
+-- Synthetic reciprocal snake forces a deterministic number of visited cells.
+local AT={NQTDB={RouteWorlds={}}}
+local step=1600/3/67
+local sx,sy,world,map=.5*step,.5*step,99,701
+local function vec(x,y)return {GetXY=function()return x,y end}end
+CreateVector2D=vec
+function GetBuildInfo()return "1.60.1","71139" end
+function GetTime()return 100 end
+function UnitPosition()return sx,sy,0,world end
+C_Map={
+ GetWorldPosFromMapPos=function(m,p)local x,y=p:GetXY();assert(m==map);return world,vec(x*5000,y*5000)end,
+ GetMapPosFromWorldPos=function(w,p,m)local x,y=p:GetXY();assert(w==world);return m,vec(x/5000,y/5000)end,
+}
+local queue={}
+C_Timer={After=function(_,f)queue[#queue+1]=f end}
+local function drain()
+ local n=0
+ while #queue>0 do n=n+1;assert(n<350,"per-frame work or callback loop regressed");table.remove(queue,1)()end
+end
+local function point(x,y)return {map=map,x=(x+.5)*step/5000,y=(y+.5)*step/5000}end
+local function install(rows)
+ local masks={}
+ local function add(x,y,X,Y,a,b)
+  local p,P=x*268+y,X*268+Y
+  masks[p]=(masks[p] or 0)+a;masks[P]=(masks[P] or 0)+b
+ end
+ for row=0,rows-1 do
+  local y=row*2
+  for x=0,298 do add(x,y,x+1,y,1,2)end
+  if row<rows-1 then
+   local x=row%2==0 and 299 or 0
+   add(x,y,x,y+1,4,8);add(x,y+1,x,y+2,4,8)
+  end
+ end
+ add(350,0,351,0,1,2)  -- disconnected but walkable control
+ local D={world=world,cells=67,nx=6,ny=4,tx=0,ty=0,tiles={}}
+ for X=0,5 do for Y=0,3 do
+  local bytes={}
+  for x=0,66 do for y=0,66 do
+   bytes[#bytes+1]=string.char(masks[(X*67+x)*268+Y*67+y] or 0,0,0)
+  end end
+  D.tiles[X*4+Y+1]=table.concat(bytes)
+ end end
+ AT.NQTDB.RouteWorlds[world]=D
+ return point(rows%2==0 and 0 or 299,(rows-1)*2)
+end
+assert(loadfile("NQT/NQTDBWalking.lua"))("NQT",AT)
+local start,goal=point(0,0),install(100)
+local api=assert(AT.GetBundledWalkingAPI(start))
+local walked,err
+assert(api.WalkPath("long",start,goal,function(r,e)walked,err=r,e end));drain()
+assert(walked and not err and math.abs(walked.yards-30098*step)<.02,"connected path past old 24,000-pop ceiling")
+assert(#walked.waypoints<1000 and #walked.waypoints>200,"long straight spans merged without removing turns")
+for i=2,#walked.waypoints do
+ local a,b=walked.waypoints[i-1],walked.waypoints[i]
+ assert(math.abs(a.x-b.x)<.000001 or math.abs(a.y-b.y)<.000001,"no diagonal through a serpentine wall")
+end
+assert(api.WalkPath("disconnected",start,point(350,0),function(r,e)assert(not r);err=e end));drain()
+assert(err=="unreachable","an empty frontier is genuinely unreachable")
+goal=install(130)
+assert(api.WalkPath("budget",start,goal,function(r,e)assert(not r);err=e end));drain()
+assert(err=="budget","do not report a capped connected path as unreachable")
+assert(api.EstimateWalks("budget",start,{goal},function(r,e)assert(not r);err=e end));drain()
+assert(err=="budget","do not rank an unfinished route as a known unreachable candidate")
+print("PASS 30,099-cell snake, geometry-preserving compression, disconnected control, and truthful search-budget propagation")

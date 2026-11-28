@@ -98,9 +98,7 @@ local function request(job, method, target, callback, refused)
     end
 end
 
-local function requestPath(job)
-    if not job.best then fail(job, "unreachable"); return end
-    request(job, job.api.WalkPath, job.best, function(path, why)
+local function acceptPath(job,path,why)
         -- Quest progress can replace objective POIs without changing the quest ID.
         local latest = currentTargets(job.quest, job.from.map, true)
         if latest.key ~= job.key then clear(); return end
@@ -112,7 +110,10 @@ local function requestPath(job)
         end
         path.roadAware = job.road == true and path.roadAware == true
         if latest.stale then job.waitingPath = path else job.path = path end
-    end)
+end
+local function requestPath(job)
+    if not job.best then fail(job, "unreachable"); return end
+    request(job,job.api.WalkPath,job.best,function(path,why) acceptPath(job,path,why) end)
 end
 
 local function estimateNext(job, first)
@@ -144,6 +145,20 @@ local function estimateNext(job, first)
         end
         estimateNext(job, final + 1)
     end, skipCrossMap)
+end
+
+local function chooseWalkingPath(job)
+    local function budget(why)
+        if why~="budget" then return false end
+        estimateNext(job,1)
+        return true
+    end
+    request(job,job.api.WalkBestPath,job.targets,function(path,why)
+        if budget(why) then return end
+        if type(path)=="table" and finite(path.targetIndex) then job.best=job.targets[path.targetIndex] end
+        if not job.best then fail(job,why);return end
+        acceptPath(job,path,why)
+    end,budget)
 end
 
 currentTargets = function(quest, map, force)
@@ -204,6 +219,8 @@ function AT.GetFocusedQuestWalkingPath(quest, from, width, height)
         if #cache.points==1 and AT.IsQuestTurnInNavigation and AT.IsQuestTurnInNavigation(quest) then
             state.best=cache.points[1]
             requestPath(state)
+        elseif type(api.WalkBestPath)=="function" then
+            chooseWalkingPath(state)
         else
             estimateNext(state, 1)
         end

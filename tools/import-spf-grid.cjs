@@ -1,6 +1,6 @@
 "use strict";
 const fs=require("node:fs"), z=require("node:zlib"), path=require("node:path");
-const [src,out,arg]=process.argv.slice(2);
+const [src,out,arg,explain]=process.argv.slice(2);
 const world=arg===undefined?2991:Number(arg);
 if(![0,1,2991].includes(world))throw Error("unsupported world");
 const prefix="Nav"+world;
@@ -146,6 +146,45 @@ for(const [key,t] of Object.entries(tiles)){
  if(bin.some(Boolean)||world===2991)payload[key]=bin;
 }
 if((world===2991&&Object.keys(payload).length!==25)||edges<20000||nodes<4000)throw Error("unexpected converted coverage: "+[Object.keys(payload).length,nodes,edges]);
+if(explain){
+ const summary={},T=1600/3;
+ const evidence=JSON.parse(fs.readFileSync(explain,"utf8")).evidence;
+ for(const r of evidence){
+  if(r.world!==world)continue;
+  const [wx,wy]=r.raw;
+  const X=Math.floor(wx/T*n-cx*n),Y=Math.floor(wy/T*n-cy*n);
+  let reason="outOfBounds";
+  if(X>=0&&Y>=0&&X<H&&Y<W){
+   const k=Math.floor(X/n)*ny+Math.floor(Y/n)+1,j=(X%n)*n+Y%n,t=tiles[k];
+   if(!t)reason="sourceTileAbsent";
+   else if(t.floors.has(j))reason="stackedLayers";
+   else if(t.values[j]>>8===2)reason="water";
+   else if(t.values[j]>>8!==1)reason="blocked";
+   else if(payload[k]?.[j*3])reason="auditMismatch";
+   else{
+    const bits=t.values[j]&255;
+    const candidates=[0,0,0,0]; // missing dry neighbor, reciprocal, clearance, height
+    for(let d=0;d<8;d++)if(bits&(1<<d)){
+     const dst=slot(X+dx[d],Y+dy[d]);
+     if(!dst)candidates[0]++;
+     else{
+      const [q,i]=dst;
+      if(!(q.values[i]&(1<<back[d])))candidates[1]++;
+      else if((t.clear[j]&(1<<d))||(q.clear[i]&(1<<back[d])))candidates[2]++;
+      else if(Math.abs(t.heights[j]-q.heights[i])>2)candidates[3]++;
+      else throw Error("Inconsistent audited edge");
+     }
+    }
+    const max=Math.max(...candidates);
+    reason=max===0?"noBaseEdges":["noDryNeighbor","oneWay","restrictedClearance","heightStep"][candidates.indexOf(max)];
+   }
+  }
+  const b=summary[r.kind]??={};
+  b[reason]=(b[reason]??0)+1;
+ }
+ if(Object.values(summary).some(x=>x.auditMismatch))throw Error("Audit does not match imported grid");
+ console.log(JSON.stringify({world,maskedObservations:summary}));
+}
 if(world!==2991){
  // Format nq1: 0 + two digits = empty span; nonzero mask high digit + low
  // digit + a signed delta digit (or escape and an absolute 3-digit zigzag).
