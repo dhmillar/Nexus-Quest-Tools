@@ -325,6 +325,8 @@ Verified trainer windows also add exact NPC-ID icons and opt-in Level Guide pins
 
 The optional quest-start item popup can use an exact NQTDB starter witness if the bag has the item but the client omits its quest ID. A known native quest ID always wins. The fallback works only when the game confirms the exact quest is neither in the log nor completed; it does not accept quests automatically or make up an item’s origin.
 
+The pinned November 27 Forever client export corrects Treaty Obligations and Fledgling Rescue from level 51 to level 41. Both retain minimum level 40, their exact objective IDs and their client faction masks. Their verified coin rewards are now available in Level Guide. The two numeric corrections can be reproduced with `tools/reconcile-forever-hinterlands-levels.cjs` and the existing quest-rewards importer.
+
 Level Guide objective details now use the same verified monster portraits as Rank Quest for kill and collection objectives, while keeping the original item icon when no exact drop-source portrait is available.
 
 If a quest mob lacks a portrait, NQTDB can supply an actual model listed for that exact Forever creature ID. Where a mob has several equally common appearances, the log shows one of those appearances until a live target portrait is available. Hidden quest-credit units are excluded.

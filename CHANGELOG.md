@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.304 - 2026-11-28
+
+- Routing: keep land-distance bounds separate for two to four alternate approaches instead of treating them as one broad region. The two bundled terrain benchmarks keep the same optimal routes, with 259 to 114 and 51 to 32 search slices.
+- Rank Quest and Level Guide: corrected Treaty Obligations and Fledgling Rescue to quest level 41 (minimum 40), and added their verified rewards for this Forever build.
+
 ## 1.5.303 - 2026-11-28
 
 - Routing: try the independently verified turn-in or objective approach when the fallback per-map search finds no reachable native destination or when the final path cannot be projected. Keep the native destination when it routes; never switch just because combat or a search budget delayed planning.

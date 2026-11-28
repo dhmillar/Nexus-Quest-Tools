@@ -44,3 +44,21 @@ print(("PASS %.0f yd real terrain route; unchanged optimal cost, %d → %d timer
 
 assert(reads<56000,"tighter landmark intervals should avoid revisiting the broad terrain fringe")
 print(("PASS %d terrain reads in the fixed 4983 yd route (was 288859)"):format(reads))
+
+
+-- Nearby-looking alternatives can be separated by a real terrain detour.
+-- Keep the best objective and exact cost without searching the collapsed
+-- interval between two destinations. Coordinates below are mesh probes.
+local function multi(otherX,otherY,expected,cost,ceiling)
+ local target={map=100,x=(otherX-x)/50000+.5,y=(otherY-y)/50000+.5}
+ local got
+ assert(api.WalkBestPath("paired terrain probes",from,{goal,target},function(p,e)assert(not e);got=p end))
+ local n=0
+ while #q>0 do n=n+1;assert(n<500);table.remove(q,1)()end
+ assert(got and got.targetIndex==expected and math.abs(got.yards-cost)<.01,"independent bounds changed the winning route")
+ assert(n<=ceiling,"intervals of alternative destinations were collapsed")
+ return n
+end
+local n1=multi(-436,-843,1,4983.159,125)
+local n2=multi(1838,2166,2,1565.622,38)
+print(("PASS exact real-terrain multi-goal routes with separate landmark intervals: 259 to %d and 51 to %d timer slices"):format(n1,n2))

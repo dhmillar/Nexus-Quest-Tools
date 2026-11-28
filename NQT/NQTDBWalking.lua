@@ -194,6 +194,9 @@ local function search(D,sx,sy,tx,ty,callback,estimateOnly,goals)
     local atlas=AT.NQTDB and AT.NQTDB.DryLandmarks
     atlas=atlas and atlas[D.world]
     local destinations,regionScores={},{}
+    -- With a few goals, keep their intervals separate. The union can
+    -- bridge an entire watershed and remove useful bounds in between.
+    local perGoal=goals and #goals>=2 and #goals<=4 and {} or nil
     local function region(x,y)
         return floor(x/atlas.step)*atlas.groups+floor(y/atlas.step)+1
     end
@@ -214,6 +217,7 @@ local function search(D,sx,sy,tx,ty,callback,estimateOnly,goals)
             if component(D,x,y)~=group then atlas=nil;return end
             local r=rangeAt(region(x,y))
             if not r then atlas=nil;return end
+            if perGoal then perGoal[#perGoal+1]=r;return end
             for i=1,#r,2 do
                 destinations[i]=destinations[i] and math.min(destinations[i],r[i]) or r[i]
                 destinations[i+1]=destinations[i+1] and math.max(destinations[i+1],r[i+1]) or r[i+1]
@@ -224,20 +228,27 @@ local function search(D,sx,sy,tx,ty,callback,estimateOnly,goals)
         end
         else include(tx,ty) end
     else atlas=nil end
+    local function intervalBound(a,b)
+        local best=0
+        if a and b then for i=1,#b,2 do
+            best=math.max(best,b[i]-a[i+1],a[i]-b[i+1])
+        end end
+        return best*1000
+    end
     local function lowerBound(x,y)
         if not atlas then return 0 end
         local k=region(x,y)
         if regionScores[k] then return regionScores[k] end
         local r=rangeAt(k)
-        local best=0
-        if r then for i=1,#destinations,2 do
-            best=math.max(best,destinations[i]-r[i+1],r[i]-destinations[i+1])
-        end end
         -- Distances were computed with no greater costs; interval
         -- separation cannot exceed the true cost to any accepted goal.
-        best=best*1000
-        regionScores[k]=best
-        return best
+        local bound
+        if perGoal then
+            bound={}
+            for i=1,#perGoal do bound[i]=intervalBound(r,perGoal[i]) end
+        else bound=intervalBound(r,destinations) end
+        regionScores[k]=bound
+        return bound
     end
     -- A wide box between a few alternate destinations can have a zero
     -- lower bound even when every actual destination is far away. For
@@ -249,13 +260,16 @@ local function search(D,sx,sy,tx,ty,callback,estimateOnly,goals)
     end
     local function heuristic(x,y)
         local geometric
-        if goals and #goals>=2 and #goals<=4 then
+        if perGoal then
+            local bounds=atlas and lowerBound(x,y)
             geometric=math.huge
             for i=1,#goals do
                 local dest=goals[i]
                 local v=octile(abs(dest[1]-x),abs(dest[2]-y))
+                if bounds then v=max(v,bounds[i]) end
                 if v<geometric then geometric=v end
             end
+            return geometric
         else
             geometric=octile(max(lowX-x,0,x-highX),max(lowY-y,0,y-highY))
         end
