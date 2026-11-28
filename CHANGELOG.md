@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.306 - 2026-11-28
+
+- Routing: plan or measure a terrain destination only once when multiple objective pins fall in the same walkable cell. Keep each original pin's distance and the existing first-match tie order. A bundled terrain benchmark kept the same winning route while reducing search slices from 370 to 114 and repeated distance estimates from 2,296 to 468.
+
 ## 1.5.305 - 2026-11-28
 
 - Quest starters: correctly interpret both Skyborne race IDs and apply known race restrictions to recorded world-map start pins as well as Level Guide recommendations. Keep live offers ahead of recorded starters and preserve the Guide's explicit faction gates.

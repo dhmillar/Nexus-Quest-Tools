@@ -382,17 +382,26 @@ function api.EstimateWalks(_,from,targets,callback)
     if not sx then return nil,"offmesh" end
     local now=call(GetTime)
     if finite(now) then verified[from]={sx,sy,now,D} end
-    local result,i,stop,cancel={},0,nil,nil
+    local result,estimated,i,stop,cancel={},{},0,nil,nil
+    local stride=D.ny*D.cells
     local function nextGoal()
         if stop then return end
         i=i+1
         local target=targets[i]
         if not target then callback(result);return end
         local x,y=transform(D,target,false)
-        if not x or differentComponent(D,sx,sy,x,y) then result[i]=false;C_Timer.After(0,nextGoal);return end
+        if not x then result[i]=false;C_Timer.After(0,nextGoal);return end
+        local cell=x*stride+y
+        local prior=estimated[cell]
+        if prior~=nil then result[i]=prior;C_Timer.After(0,nextGoal);return end
+        if differentComponent(D,sx,sy,x,y) then
+            result[i],estimated[cell]=false,false
+            C_Timer.After(0,nextGoal);return
+        end
         cancel=search(D,sx,sy,x,y,function(keys,yards)
             if not keys and yards=="budget" then callback(nil,"budget");return end
-            result[i]=keys and yards or false
+            local cost=keys and yards or false
+            result[i],estimated[cell]=cost,cost
             C_Timer.After(0,nextGoal)
         end,true)
     end
@@ -499,7 +508,8 @@ function api.WalkBestPath(_,from,targets,callback)
     local D,sx,sy=startCell(from)
     if not sx then return nil,"offmesh" end
     if #targets>256 then return nil,"budget" end
-    local goals,i,cancel,stopped,projectable={},0
+    local goals,seen,i,cancel,stopped,projectable={},{},0
+    local stride=D.ny*D.cells
     local function collect()
         if stopped then return end
         for _=1,12 do
@@ -513,7 +523,13 @@ function api.WalkBestPath(_,from,targets,callback)
             local x,y=transform(D,target,false)
             if x then
                 projectable=true
-                if not differentComponent(D,sx,sy,x,y) then goals[#goals+1]={x,y,i} end
+                local cell=x*stride+y
+                -- Multiple pins in one terrain cell share one graph destination.
+                -- Retain the first caller index (the previous exact tie behavior).
+                if not seen[cell] then
+                    seen[cell]=true
+                    if not differentComponent(D,sx,sy,x,y) then goals[#goals+1]={x,y,i} end
+                end
             end
         end
         C_Timer.After(0,collect)

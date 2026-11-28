@@ -62,3 +62,32 @@ end
 local n1=multi(-436,-843,1,4983.159,125)
 local n2=multi(1838,2166,2,1565.622,38)
 print(("PASS exact real-terrain multi-goal routes with separate landmark intervals: 259 to %d and 51 to %d timer slices"):format(n1,n2))
+
+
+
+-- Repeated native/objective positions in the same two cells must not turn
+-- a small alternate search into the loose large-goal bounds case.
+local t0={map=100,x=(-436-x)/50000+.5,y=(-843-y)/50000+.5}
+local repeated={t0,goal}
+for i=1,8 do
+ local p=repeated[(i-1)%2+1]
+ repeated[#repeated+1]={map=p.map,x=p.x,y=p.y}
+end
+local result
+assert(api.WalkBestPath("overlapping objective candidates",from,repeated,function(p,e)assert(not e);result=p end))
+local ticks=0
+while #q>0 do ticks=ticks+1;assert(ticks<650);table.remove(q,1)()end
+assert(ticks<=125,"repeat cells overwhelmed the multi-goal search bounds")
+assert(result and result.targetIndex==2 and math.abs(result.yards-4983.159)<.01,"same winner and earliest original goal index")
+local function estimate(targets)
+ local costs,n
+ assert(api.EstimateWalks("overlapping estimates",from,targets,function(c,e)assert(not e);costs=c end))
+ n=0
+ while #q>0 do n=n+1;assert(n<2500);table.remove(q,1)()end
+ return costs,n
+end
+local two,n0=estimate({t0,goal})
+local repeatedCosts,n1=estimate(repeated)
+for i=1,#repeated do assert(repeatedCosts[i]==two[(i-1)%2+1],"cost array follows original target order") end
+assert(n1<=n0+10,"duplicate cells should not trigger fresh distance searches")
+print(("PASS repeated-candidate route 370 to %d slices and estimates 2296 to %d; exact index and distance"):format(ticks,n1))
