@@ -94,9 +94,12 @@ local function startPoints(map,includeKnown)
             local row=catalog and catalog[q]
             local eligibleRace=not row or not allows or allows(row[5],race,side)
             -- These are recorded NPC/object offers, not blanket quest-giver markers.
-            -- Suppress accepted and completed quests; other prerequisites may still apply.
-            if eligibleLevel and eligibleRace and (access==0 or access==side) and exact(Q and Q.IsOnQuest,q)==false
-                and exact(Q and Q.IsQuestFlaggedCompleted,q)==false then add(q,x,y,true) end
+            -- Keep the native pins authoritative. Historical locations alone
+            -- cannot prove that a known follow-up is unlocked.
+            if not seen[q] and eligibleLevel and eligibleRace and (access==0 or access==side)
+                and exact(Q and Q.IsOnQuest,q)==false and exact(Q and Q.IsQuestFlaggedCompleted,q)==false
+                and (not AT.RecordedQuestPrerequisitesMet or AT.RecordedQuestPrerequisitesMet(q,Q and Q.IsQuestFlaggedCompleted))
+                then add(q,x,y,true) end
         end
     end
     return points

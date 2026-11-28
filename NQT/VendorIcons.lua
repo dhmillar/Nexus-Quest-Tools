@@ -103,7 +103,13 @@ local eventFrame
 local function clear(token)
     epochs[token]=(epochs[token] or 0)+1
     local old=overlays[token]
-    if old then old.frame:Hide();overlays[token]=nil end
+    if old then
+        overlays[token]=nil
+        if old.token==token then
+            old.token=nil
+            old.frame:Hide()
+        end
+    end
 end
 local function tokenOK(token)
     return plain(token) and type(token)=="string" and token:match("^nameplate%d+$")~=nil
@@ -253,10 +259,14 @@ local function frameFor(plate)
 end
 local function update(token)
     if not active() or not tokenOK(token) then return false end
-    local npc,guid=isNPC(token)
-    if not npc then return false end
     local plate=safe(C_NamePlate and C_NamePlate.GetNamePlateForUnit,token)
     if not plate or safe(plate.IsForbidden,plate)~=false then return false end
+    -- Evict a previous pool owner before classification, even when the
+    -- replacement is not a vendor. Also invalidate that owner's retries.
+    local cached=plateCache[plate]
+    if cached and cached.token and cached.token~=token then clear(cached.token) end
+    local npc,guid=isNPC(token)
+    if not npc then return false end
     local roles=labelRole(token,plate,guid)
     if #roles==0 then return false end
     local entry=frameFor(plate)
@@ -267,7 +277,13 @@ local function update(token)
         if i<=n then c.icon:SetTexture(base..art[roles[i]]);c.icon:Show();c.border:Show()
         else c.icon:Hide();c.border:Hide() end
     end
+    local previous=overlays[token]
+    if previous and previous~=entry then
+        previous.token=nil
+        previous.frame:Hide()
+    end
     overlays[token]=entry
+    entry.token=token
     entry.frame:Show()
     return true
 end
@@ -308,11 +324,35 @@ end
 function AT.RefreshVendorIcons()
     for token in pairs(epochs) do clear(token) end
     if not active() or not C_NamePlate then return end
-    for _,plate in ipairs(safe(C_NamePlate.GetNamePlates) or {}) do
-        local token=plate.namePlateUnitToken
-        if not tokenOK(token) then token=plate.unitToken end
-        if not tokenOK(token) and plain(plate.UnitFrame) and plate.UnitFrame then token=plate.UnitFrame.unit end
-        if tokenOK(token) then added(token) end
+    local unmatched,seen={},{}
+    local list=safe(C_NamePlate.GetNamePlates)
+    if type(list)~="table" then return end
+    for _,plate in ipairs(list) do
+        if plain(plate) and plate and safe(plate.IsForbidden,plate)==false then
+            local token=plate.namePlateUnitToken
+            if not tokenOK(token) then token=plate.unitToken end
+            if not tokenOK(token) and plain(plate.UnitFrame) and plate.UnitFrame then token=plate.UnitFrame.unit end
+            -- Some stock pools omit Lua token fields or retain yesterday's
+            -- recycled token. Only accept an exact current API round-trip.
+            if tokenOK(token) and safe(C_NamePlate.GetNamePlateForUnit,token)==plate then
+                if not seen[token] then added(token);seen[token]=true end
+            else unmatched[plate]=true end
+        end
+    end
+    if next(unmatched) then
+        -- One bounded recovery during refresh (login, zone or options),
+        -- not a per-frame scan, CVar change, or name matching fallback.
+        for i=1,40 do
+            local token="nameplate"..i
+            if not seen[token] then
+                local plate=safe(C_NamePlate.GetNamePlateForUnit,token)
+                if plate and unmatched[plate] then
+                    unmatched[plate]=nil
+                    added(token)
+                    if not next(unmatched) then break end
+                end
+            end
+        end
     end
 end
 function AT.InitVendorIcons()

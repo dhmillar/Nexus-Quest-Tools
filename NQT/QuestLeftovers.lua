@@ -464,6 +464,26 @@ local function associatedQuest(bag,slot)
         refs[qid]=true
         if call(C_QuestLog.IsOnQuest,qid)==true then register(qid) end
     end
+    -- Native-only endgame details are positive backlinks for confirmed held
+    -- quests. Keep them out of the discard index and never let a cold-cache
+    -- reference replace a complete, conflicting set of native objectives.
+    local nativeFacts=AT.NQTDB and AT.NQTDB.NativeQuestItemFacts
+    for qid,row in pairs(nativeFacts or {}) do
+        local on=call(C_QuestLog.IsOnQuest,qid)
+        if isa(on,"boolean") and on then
+            for i=3,#row do
+                if row[i][1]==item then
+                    local live=call(C_QuestLog.GetQuestObjectives,qid)
+                    local native={}
+                    if not isa(live,"table") or not next(live)
+                        or not nativeObjectiveIDs(qid,native) or native[item] then
+                        register(qid)
+                    end
+                    break
+                end
+            end
+        end
+    end
     for qid in pairs(verifiedQuestRefs[item] or {}) do
         refs[qid]=true
         if call(C_QuestLog.IsOnQuest,qid)==true then register(qid) end

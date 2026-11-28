@@ -281,3 +281,23 @@ do
     o.text="Quest objective changed";b.scripts.PreClick(b);assert(not b.shown)
     print("PASS full-line Marshal Ryan secure target, diamond and ping; completed and recycled objective guards")
 end
+
+do
+    assert(loadfile("NQT/NQTDB.lua"))("NQT",AT)
+    local o={type="event",text="Speak with the Innkeeper: 0/1",finished=false}
+    C_QuestLog={IsOnQuest=function(q)return q==92514 end,ReadyForTurnIn=function()return false end,
+        GetQuestObjectives=function()return {{type="event",text="Speak with Illaya Amberwind",finished=true},o} end}
+    local n,id=AT.GetQuestObjectiveNPC(92514,o,o.text)
+    assert(n=="Coriella Calmbreeze" and id==254089)
+    local tile=frame(30)
+    tile.questId,tile.npcObjective,tile.npcID,tile.mobName=92514,2,id,n
+    AT.SetRankQuestItemTargets({{qid=92514,itemTiles={},objectiveMobHits={tile}}},viewport)
+    local b=created[1]
+    local macro=b:GetAttribute("macrotext1")
+    assert(b.shown and macro and macro:find("/targetexact Coriella Calmbreeze",1,true)
+        and macro:find("/tm [@target,exists,noharm,nodead] !3",1,true)
+        and macro:find("/ping [@target,exists,noharm,nodead] Assist",1,true))
+    o.creatureID=251902;b.scripts.PreClick(b)
+    assert(not b.shown and not b:GetAttribute("macrotext1"))
+    print("PASS standalone innkeeper secure target, diamond and ping; contradictory live creature cancels the click")
+end

@@ -5,6 +5,41 @@
 local _,AT=...
 local db={}
 AT.NQTDB=db
+-- The exact hand-in identity is stable; this NPC patrols.
+-- CC BY 4.0 Forever NPC #13717 offer/take records in builds 70938/71139.
+-- https://github.com/JIVESCORP/eg-link-output-wowf/blob/c1bf99bc2835bbe1b2dad82fb99f994c0cfffe33/data/wowf/1.60.1.71139/npcs.json
+db.RoamingTurnInIdentities={
+ [7067]={1443,13717,"Centaur Pariah","Southern Desolace",0},
+}
+-- Exact positive prerequisites, verified from the observed Forever chain:
+-- https://foreverdb.net/quest/95613-keeping-the-light-on
+-- https://foreverdb.net/quest/95615-in-memoriam
+-- https://foreverdb.net/quest/95770-locating-the-lost-city
+-- https://foreverdb.net/quest/95775-the-drowned-city
+-- https://foreverdb.net/quest/95913-fit-for-a-princess
+-- https://foreverdb.net/quest/95961-stepped-out
+-- Only filter catalog/recorded offers; do not veto a native start or a held quest.
+db.RecordedStartPrerequisites={
+ [95613]={95603},
+ [95615]={95613},
+ [95770]={95748},
+ [95775]={95770},
+ [95913]={95561},
+ [95961]={95913},
+}
+function AT.RecordedQuestPrerequisitesMet(quest,isComplete)
+ local needed=db.RecordedStartPrerequisites[quest]
+ if not needed then return true end
+ local ledger=AT.char and AT.char.levelGuideTurnIns
+ for _,prior in ipairs(needed) do
+  if not (ledger and ledger[prior]==true) then
+   if not isComplete then return false end
+   local ok,done=pcall(isComplete,prior)
+   if not ok or issecretvalue and issecretvalue(done) or done~=true then return false end
+  end
+ end
+ return true
+end
 db.Starts={
  [8417]={{1454,0.8015,0.324,2,3354,"Sorek",0}},
 }
@@ -5929,3 +5964,221 @@ db.NativeQuestRewards={
  [84196]={[2]={{226887,1},{226886,1}}},
 }
 -- END NQTDB native-only quest details
+-- BEGIN NQTDB exact interaction objectives (generated)
+-- From Efficient Games build 1.60.1.71139 quest-cache facts (CC BY 4.0).
+-- https://github.com/JIVESCORP/eg-link-output-wowf/blob/c1bf99bc2835bbe1b2dad82fb99f994c0cfffe33/data/wowf/1.60.1.71139/quests.enUS.json
+-- https://efficient.games | https://creativecommons.org/licenses/by/4.0/
+-- Exact quest objective ID, creature ID, and canonical English objective label.
+db.ExactInteractionObjectives={
+ [90750]={{472779,251320,"Speak with the worker"}},
+ [91294]={{462436,246389,"Speak with Hilda the Breaker"},{462437,246393,"Speak with Jorin Croge"},{462438,246394,"Speak with Ander Solliden"},{462439,246378,"Speak with Danitha Morr"}},
+ [92514]={{464991,251902,"Speak with Illaya Amberwind"},{468024,254089,"Speak with the Innkeeper"}},
+ [92679]={{465404,252800,"Find Aamelia Windfield"}},
+ [92947]={{465935,253576,"Report to Hyusaa Quickbreeze"}},
+ [93615]={{466998,255685,"Solstice found"},{467060,255771,"Whisperfur found"},{467061,255773,"Brie found"}},
+ [93739]={{479025,10540,"Speak with Vol'jin"},{479026,3057,"Speak with Cairne Bloodhoof"}},
+ [93836]={{467567,252476,"Speak with Talaanis Shadowsong"}},
+ [93963]={{479018,7937,"Speak with High Tinker Mekkatorque"},{479019,2784,"Speak with King Magni Bronzebeard"},{479020,7999,"Speak with Tyrande Whisperwind"}},
+ [94887]={{469306,257250,"Marshal Ryan found"}},
+ [95647]={{471712,262681,"Learn what happened to Ardin Grassman"}},
+}
+-- END NQTDB exact interaction objectives
+-- BEGIN NQTDB exact duplicate approaches (generated)
+-- Observed player approach positions in the same Efficient Games Forever client build, CC BY 4.0.
+-- https://github.com/JIVESCORP/eg-link-output-wowf/tree/c1bf99bc2835bbe1b2dad82fb99f994c0cfffe33/data/wowf/1.60.1.71139
+-- https://efficient.games | https://creativecommons.org/licenses/by/4.0/
+-- Exact typed/numbered raw objective corroborates each distinct creature/item; no exact spawn implied.
+db.ExactDuplicateApproaches={
+ [3362]={[1]={"monster",5490,8,{{1446,0.2802,0.6749},{1446,0.2879,0.6726},{1446,0.2968,0.6623},{1446,0.2747,0.6609},{1446,0.2849,0.6564},{1446,0.282,0.644},{1446,0.2802,0.6342},{1446,0.2968,0.6263}}},[2]={"monster",5485,8,{{1446,0.2984,0.667},{1446,0.2825,0.6655},{1446,0.2967,0.6623},{1446,0.2749,0.661},{1446,0.3008,0.6581},{1446,0.2893,0.6201}}}},
+ [5863]={[1]={"monster",5474,10,{{1446,0.3863,0.5778},{1446,0.382,0.5748},{1446,0.4066,0.5709},{1446,0.4097,0.5654},{1446,0.3853,0.5438},{1446,0.3883,0.5249}}},[2]={"monster",5472,10,{{1446,0.3822,0.5747},{1446,0.41,0.565},{1446,0.3853,0.5438},{1446,0.4218,0.5402},{1446,0.3881,0.5233},{1446,0.3968,0.5207},{1446,0.396,0.5087}}}},
+ [7828]={[1]={"monster",2926,15,{{1425,0.7025,0.5832},{1425,0.5352,0.5125},{1425,0.6753,0.442}}},[2]={"monster",2925,15,{{1425,0.3899,0.5336},{1425,0.4057,0.5143},{1425,0.3797,0.5128}}}},
+ [8366]={[1]={"monster",7855,10,{{1446,0.7204,0.4556},{1446,0.7212,0.4549},{1446,0.7202,0.4542},{1446,0.7308,0.4516},{1446,0.7231,0.4432},{1446,0.713,0.4317},{1446,0.7081,0.4276}}},[2]={"monster",7856,10,{{1446,0.7358,0.4827},{1446,0.7279,0.4787},{1446,0.7409,0.4608},{1446,0.7201,0.454},{1446,0.7292,0.4497},{1446,0.7282,0.4492},{1446,0.7196,0.4374},{1446,0.7135,0.434}}},[3]={"monster",7857,10,{{1446,0.7383,0.4807},{1446,0.7359,0.4783},{1446,0.7332,0.474},{1446,0.7414,0.4732},{1446,0.7442,0.4692}}},[4]={"monster",7858,10,{{1446,0.7279,0.4786},{1446,0.75,0.4624},{1446,0.7505,0.4597},{1446,0.7536,0.4584},{1446,0.7528,0.4562},{1446,0.7538,0.453}}}},
+ [94678]={[1]={"monster",255770,8,{{2548,0.2126,0.6653},{2548,0.2176,0.6458},{2548,0.216,0.6437},{2548,0.3152,0.6413},{2548,0.2265,0.6393},{2548,0.2154,0.6364},{2548,0.287,0.5878}}},[2]={"monster",255772,8,{{2548,0.213,0.6697},{2548,0.2281,0.6691},{2548,0.2172,0.6514},{2548,0.3148,0.641},{2548,0.2251,0.6401},{2548,0.2262,0.6394},{2548,0.2388,0.6376},{2548,0.2912,0.5885}}}},
+}
+-- END NQTDB exact duplicate approaches
+-- BEGIN NQTDB current cold item names (generated)
+-- Identical item and quantity in the Forever quest and valid English hotfix caches (CC BY 4.0).
+-- https://github.com/JIVESCORP/eg-link-output-wowf/tree/c1bf99bc2835bbe1b2dad82fb99f994c0cfffe33/data/wowf/1.60.1.71139
+-- https://efficient.games | https://creativecommons.org/licenses/by/4.0/
+db.CurrentColdQuestItemNames={
+ [3985]="Monogrammed Sash",
+ [10454]="Essence of Eranikus",
+ [10455]="Chained Essence of Eranikus",
+ [12871]="Chromatic Carapace",
+ [16666]="Vest of Elements",
+ [16667]="Coif of Elements",
+ [16668]="Kilt of Elements",
+ [16669]="Pauldrons of Elements",
+ [16670]="Boots of Elements",
+ [16671]="Bindings of Elements",
+ [16672]="Gauntlets of Elements",
+ [16673]="Cord of Elements",
+ [16674]="Beaststalker's Tunic",
+ [16675]="Beaststalker's Boots",
+ [16676]="Beaststalker's Gloves",
+ [16677]="Beaststalker's Cap",
+ [16678]="Beaststalker's Pants",
+ [16679]="Beaststalker's Mantle",
+ [16680]="Beaststalker's Belt",
+ [16681]="Beaststalker's Bindings",
+ [16682]="Magister's Boots",
+ [16683]="Magister's Bindings",
+ [16684]="Magister's Gloves",
+ [16685]="Magister's Belt",
+ [16686]="Magister's Crown",
+ [16687]="Magister's Leggings",
+ [16688]="Magister's Robes",
+ [16689]="Magister's Mantle",
+ [16690]="Devout Robe",
+ [16691]="Devout Sandals",
+ [16692]="Devout Gloves",
+ [16693]="Devout Crown",
+ [16694]="Devout Skirt",
+ [16695]="Devout Mantle",
+ [16696]="Devout Belt",
+ [16697]="Devout Bracers",
+ [16698]="Dreadmist Mask",
+ [16700]="Dreadmist Robe",
+ [16702]="Dreadmist Belt",
+ [16703]="Dreadmist Bracers",
+ [16705]="Dreadmist Wraps",
+ [16706]="Wildheart Vest",
+ [16707]="Shadowcraft Cap",
+ [16708]="Shadowcraft Spaulders",
+ [16709]="Shadowcraft Pants",
+ [16710]="Shadowcraft Bracers",
+ [16711]="Shadowcraft Boots",
+ [16712]="Shadowcraft Gloves",
+ [16713]="Shadowcraft Belt",
+ [16714]="Wildheart Bracers",
+ [16715]="Wildheart Boots",
+ [16716]="Wildheart Belt",
+ [16717]="Wildheart Gloves",
+ [16718]="Wildheart Spaulders",
+ [16719]="Wildheart Kilt",
+ [16720]="Wildheart Cowl",
+ [16721]="Shadowcraft Tunic",
+ [16722]="Lightforge Bracers",
+ [16723]="Lightforge Belt",
+ [16724]="Lightforge Gauntlets",
+ [16725]="Lightforge Boots",
+ [16726]="Lightforge Breastplate",
+ [16727]="Lightforge Helm",
+ [16728]="Lightforge Legplates",
+ [16729]="Lightforge Spaulders",
+ [16730]="Breastplate of Valor",
+ [16731]="Helm of Valor",
+ [16735]="Bracers of Valor",
+ [16736]="Belt of Valor",
+ [16737]="Gauntlets of Valor",
+ [211293]="Crimson Trophy Quill",
+ [212347]="Illari's Key",
+ [213566]="Arbor Tarantula Specimen",
+ [213567]="Flesh Picker Specimen",
+ [213568]="Hay Weevil Specimen",
+ [270301]="Ve'han's Research Notes",
+ [273828]="Recoiling Gnarlybark Staff",
+ [273832]="Wicked Ritualist's Kris",
+ [281146]="Grant's Mace",
+ [281246]="Toxic Skullcap",
+ [281300]="Blisterweed",
+ [281327]="Hissing Serum",
+}
+-- END NQTDB current cold item names
+-- BEGIN NQTDB named observed hand-ins (generated)
+-- Efficient Games Forever quest-giver takes observations, CC BY 4.0.
+-- https://github.com/JIVESCORP/eg-link-output-wowf/tree/c1bf99bc2835bbe1b2dad82fb99f994c0cfffe33/data/wowf
+-- https://efficient.games | https://creativecommons.org/licenses/by/4.0/
+-- Add only the exact name of the existing observed finisher; do not change coordinates or faction.
+db.ObservedTurnInNames={
+ [217]={1092,"Captain Rugelfuss"},
+ [351]={7784,"Homing Robot OOX-17/TN"},
+ [456]={2079,"Conservator Ilthalaine"},
+ [457]={2079,"Conservator Ilthalaine"},
+ [458]={1992,"Tarindrella"},
+ [459]={1992,"Tarindrella"},
+ [485]={7806,"Homing Robot OOX-09/HL"},
+ [489]={2150,"Zenn Foulhoof"},
+ [916]={2082,"Gilshalan Windwalker"},
+ [917]={2082,"Gilshalan Windwalker"},
+ [921]={3514,"Tenaron Stormgrip"},
+ [922]={3517,"Rellian Greenspyre"},
+ [954]={3650,"Asterion"},
+ [955]={3650,"Asterion"},
+ [2766]={7807,"Homing Robot OOX-22/FE"},
+ [3117]={3596,"Ayanna Everstride"},
+ [3519]={8583,"Dirania Silvershine"},
+ [4495]={8584,"Iverron"},
+ [6103]={4146,"Jocaste"},
+ [6607]={12919,"Nat Pagle"},
+ [97977]={1992,"Tarindrella"},
+}
+-- END NQTDB named observed hand-ins
+-- BEGIN NQTDB object template witnesses (generated)
+-- Efficient Games English object templates and observed Forever loot windows, CC BY 4.0.
+-- https://github.com/JIVESCORP/eg-link-output-wowf/tree/c1bf99bc2835bbe1b2dad82fb99f994c0cfffe33/data/wowf/1.60.1.71139
+-- https://efficient.games | https://creativecommons.org/licenses/by/4.0/
+-- Verified object labels, never a drop rate, exact spawn or targetable NPC.
+db.WitnessedObjectPickups={
+ [77]={[8684]={142191,"Horde Supply Crate"}},
+ [125]={[1309]={32,"Sunken Chest"}},
+ [771]={[4808]={2910,"Well Stone"},[4809]={2912,"Ambercorn"}},
+ [868]={[5058]={3685,"Silithid Mound"}},
+ [962]={[5339]={13891,"Serpentbloom"}},
+ [1069]={[5570]={0,"Deepmoss Eggs"}},
+ [1197]={[5869]={20807,"Ancient Brazier"}},
+ [1221]={[5880]={21277,"Crate with Holes"},[5897]={21530,"Snufflenose Owner's Manual"},[6684]={68865,"Snufflenose Command Sticks"}},
+ [1370]={[6069]={22245,"Sack of Meat"}},
+ [2641]={[8526]={141853,"Violet Tragan"}},
+ [5062]={[12732]={175928,"Incendia Agave"}},
+ [5501]={[13703]={0,"Kodo Bones"}},
+ [93041]={[255945]={587276,"Accursed Skull"}},
+ [94615]={[267223]={625779,"Track"}},
+ [94923]={[266884]={624202,"Hollow Clam Shell"}},
+ [95156]={[268536]={629484,"Hay Bale"}},
+ [95426]={[274975]={654618,"Rog'mar Supply Crate"}},
+ [95561]={[271431]={645233,"Fresh Apple"}},
+ [95943]={[271620]={645449,"Foreman's Crate"}},
+ [95975]={[271823]={648994,"Wildflower"}},
+ [96009]={[271877]={645516,"Bundle of Wood"}},
+ [97291]={[281300]={673933,"Blisterweed"}},
+ [97326]={[277952]={0,"Smooth Boulder"}},
+ [99127]={[286205]={694772,"Fishing Trap"}},
+}
+-- END NQTDB object template witnesses
+-- BEGIN NQTDB November 28 exact object witnesses (generated)
+-- Data from Efficient Games (https://efficient.games), licensed under CC BY 4.0.
+-- https://creativecommons.org/licenses/by/4.0/
+-- https://github.com/JIVESCORP/eg-link-output-wowf/tree/62b0bbc6786fb719ace03c57b39f3255e908f06f/data/wowf/1.60.1.71139
+-- Source labels only; no manufactured percentages, map pins, route points, or NPC targets.
+do
+ local row=db.WitnessedObjectPickups[207] or {}
+ row[2008]=row[2008] or {54,"The Emperor's Tomb"}
+ db.WitnessedObjectPickups[207]=row
+ local row=db.WitnessedObjectPickups[1598] or {}
+ row[6785]=row[6785] or {83763,"Stolen Books"}
+ db.WitnessedObjectPickups[1598]=row
+ local row=db.WitnessedObjectPickups[93160] or {}
+ row[257128]=row[257128] or {613238,"Zephyrseed Cone"}
+ db.WitnessedObjectPickups[93160]=row
+ local row=db.WitnessedObjectPickups[94485] or {}
+ row[265105]=row[265105] or {619450,"Lady's Tear Moss"}
+ db.WitnessedObjectPickups[94485]=row
+ local row=db.WitnessedObjectPickups[94896] or {}
+ row[266433]=row[266433] or {623295,"Abandoned Belongings"}
+ db.WitnessedObjectPickups[94896]=row
+ local row=db.WitnessedObjectPickups[98197] or {}
+ row[279821]=row[279821] or {0,"Khaz Modan Timber"}
+ row[279822]=row[279822] or {670774,"Khaz Modan Iron"}
+ db.WitnessedObjectPickups[98197]=row
+ local row=db.WitnessedObjectPickups[98208] or {}
+ row[279915]=row[279915] or {670962,"Nord'el"}
+ db.WitnessedObjectPickups[98208]=row
+ local row=db.WitnessedObjectPickups[99130] or {}
+ row[286214]=row[286214] or {694855,"Overgrown Duskweed"}
+ db.WitnessedObjectPickups[99130]=row
+ local row=db.WitnessedObjectPickups[99143] or {}
+ row[286209]=row[286209] or {694785,"Junk Pile"}
+ db.WitnessedObjectPickups[99143]=row
+end
+-- END NQTDB November 28 exact object witnesses

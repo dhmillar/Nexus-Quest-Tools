@@ -587,6 +587,29 @@ do
     GetLocale=function()return "koKR" end
     AT.RefreshQuestHUD()
     assert(not a.objectives[1].text:find("Treasure Chest",1,true),"no unlocalized source label")
+
+    -- Test the published catalog and the real HUD branch with adjacent,
+    -- explicitly identified objectives; object windows are not drop odds.
+    assert(loadfile("NQT/NQTDB.lua"))("NQT",source)
+    GetLocale=function()return "enUS" end
+    local visited=entries[5]
+    assert(visited.questID==12)
+    entries[5]={questID=99130,title="An Enticing Offer"}
+    dest[99130]=1
+    C_QuestLog.GetQuestObjectives=function(q)
+        if q==99130 then return {
+            {type="item",itemID=286215,numRequired=6,text="Vial of Animal Blood: 0/6"},
+            {type="item",itemID=286214,numRequired=18,text="Duskweed Petal: 4/18"}
+        } end
+        return priorObjectives(q)
+    end
+    AT.RefreshQuestHUD()
+    local offer=assert(find("An Enticing Offer"))
+    assert(offer.objectives[2].text:find("Duskweed Petal: 4/18",1,true))
+    assert(offer.objectives[2].text:find("Loot: Overgrown Duskweed",1,true))
+    assert(not offer.objectives[2].text:find("%%") and not offer.objectives[1].text:find("Overgrown Duskweed",1,true))
+    entries[5]=visited;dest[99130]=nil
+
     AT.NQTDB,GetLocale,C_QuestLog.GetQuestObjectives=priorDB,priorLocale,priorObjectives
     AT.GetQuestLootObjectName=priorObject
     AT.RefreshQuestHUD()

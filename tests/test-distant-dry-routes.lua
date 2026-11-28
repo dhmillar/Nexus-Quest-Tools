@@ -27,6 +27,18 @@ local function check(world,sx,sy,gx,gy,expected)
  local n=0
  while #q>0 do n=n+1;assert(n<760,"extended exact search must remain bounded");table.remove(q,1)()end
  assert(result and math.abs(result.yards-expected)<1 and #result.waypoints>150)
+ local cost,points=result.cumulativeYards,result.waypoints
+ assert(#cost==#points and cost[1]==0 and cost[#points]==result.yards)
+ local merged=false
+ for i=2,#cost do
+  local a,b=points[i-1],points[i]
+  local dx,dy=(b.x-a.x)*50000,(b.y-a.y)*50000
+  local length=math.sqrt(dx*dx+dy*dy)
+  assert(cost[i]>cost[i-1] and math.abs((cost[i]-cost[i-1])-length)<.001,
+      "each retained straight edge retains its true accumulated graph cost")
+  if length>20 then merged=true end
+ end
+ assert(merged,"witness must include a compacted segment")
  print(("PASS %.0f yd bounded exact walking path in %d timer slices on world %d"):format(result.yards,n,w))
 end
 check(0,-8869.4,-161.5,-10455.1,-3281.9,8079.5)
@@ -54,7 +66,7 @@ local function paced(world,sx,sy,gx,gy,expected,isPin)
  target={map=focusMap,x=(gx-x)/50000+.5,y=(gy-y)/50000+.5}
  local nav=AT.GetWalkingNavigationID()
  local api=assert(AT.GetBundledWalkingAPI(from))
- local method=isPin and "WalkPath" or "WalkBestPath"
+ local method="WalkPath" -- A single quest target is the same exact query as a pin.
  local orig,requests=api[method],0
  api[method]=function(...)requests=requests+1;return orig(...)end
  AT.CancelQuestWalking()

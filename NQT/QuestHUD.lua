@@ -1343,10 +1343,12 @@ local function factDropItem(qid,objective,wanted)
     local locale=call(GetLocale)
     local enUS=locale=="enUS" or locale=="enGB"
     local bundled=enUS and AT.ForeverQuestItemNames
+    local cold=enUS and AT.NQTDB and AT.NQTDB.CurrentColdQuestItemNames
     for i=3,#facts do
         local item,amount=unpack(facts[i])
         local name=call(C_Item and C_Item.GetItemNameByID,item)
         local known=bundled and bundled[item]
+        if not known and (not is(name,"string") or name=="") and cold then known=cold[item] end
         if is(name,"string") and name~="" or is(known,"string") then
             if dropName(name)==wanted or dropName(known)==wanted then
                 if named and named~=item then return nil,true end

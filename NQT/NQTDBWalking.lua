@@ -3,8 +3,20 @@ local _,AT=...
 local dx,dy={1,-1,0,0,1,1,-1,-1},{0,0,1,-1,1,-1,1,-1}
 local UNIT,DIAG=1000000,1414214
 local costs={UNIT,UNIT,UNIT,UNIT,DIAG,DIAG,DIAG,DIAG}
-local powers={1,2,4,8,16,32,64,128}
 local floor,abs,sqrt=math.floor,math.abs,math.sqrt
+-- Link masks are bytes. Decode their ordered neighbor lists once rather
+-- than dividing eight times on every A* expansion, including open terrain.
+local allowedLinks={}
+do
+    local powers={1,2,4,8,16,32,64,128}
+    for mask=1,255 do
+        local links={}
+        for i=1,8 do
+            if floor(mask/powers[i])%2==1 then links[#links+1]=i end
+        end
+        allowedLinks[mask]=links
+    end
+end
 local TILE=1600/3
 local MAX_VISITS,KNOWN_CONNECTED_VISITS,DISTANT_CONNECTED_VISITS=36000,90000,132000
 local function finite(v) return (not issecretvalue or not issecretvalue(v)) and type(v)=="number" and v==v and abs(v)<math.huge end
@@ -19,12 +31,20 @@ do
     for i=1,#chars do digits[chars:byte(i)]=i-1 end
 end
 local tileCache,clock={},0
+local hotKey,hotSource,hotBytes
 local function decoded(D,key,tile)
     if D.codec~="nq1" then return tile end
     local id=D.world*10000+key
+    -- Consecutive reads are on the already most-recent tile. Skip the
+    -- cache clock and table churn until the search actually changes tiles.
+    if id==hotKey and tile==hotSource then return hotBytes end
     local old=tileCache[id]
     clock=clock+1
-    if old then old.used=clock;return old.bytes end
+    if old and old.source==tile then
+        old.used=clock
+        hotKey,hotSource,hotBytes=id,tile,old.bytes
+        return old.bytes
+    end
     local chunks,size,p,z={},0,1,0
     local cap=D.cells*D.cells
     local function digit()
@@ -60,9 +80,10 @@ local function decoded(D,key,tile)
         count=count+1
         if not last or v.used<last then oldID,last=k,v.used end
     end
-    if count>=18 then tileCache[oldID]=nil end
+    if not old and count>=18 then tileCache[oldID]=nil end
     local bytes=table.concat(chunks)
-    tileCache[id]={used=clock,bytes=bytes}
+    tileCache[id]={used=clock,bytes=bytes,source=tile}
+    hotKey,hotSource,hotBytes=id,tile,bytes
     return bytes
 end
 local function project(point)
@@ -318,9 +339,9 @@ local function search(D,sx,sy,tx,ty,callback,estimateOnly,goals,onWork)
     push(source,0,initial)
     local done,cancelled,visits
     visits=0
-    local function finish(a,b,c)
+    local function finish(a,b,c,d)
         done=true
-        if not cancelled then callback(a,b,c) end
+        if not cancelled then callback(a,b,c,d) end
     end
     local function tick()
         if done or cancelled then return end
@@ -340,14 +361,14 @@ local function search(D,sx,sy,tx,ty,callback,estimateOnly,goals,onWork)
                 local winner=cells[k]
                 if winner then
                     if estimateOnly then return finish(true,c/UNIT*TILE/D.cells) end
-                    local keys={k}
+                    local keys,vertexCosts={k},{c}
                     local function trace()
                         if done or cancelled then return end
                         if onWork then onWork() end
                         for step=1,512 do
                             local prev=parents[k]
-                            if not prev then return finish(keys,c/UNIT*TILE/D.cells,winner) end
-                            keys[#keys+1]=prev;k=prev
+                            if not prev then return finish(keys,c/UNIT*TILE/D.cells,winner,vertexCosts) end
+                            keys[#keys+1]=prev;vertexCosts[#keys]=g[prev];k=prev
                         end
                         C_Timer.After(0,trace)
                     end
@@ -355,18 +376,18 @@ local function search(D,sx,sy,tx,ty,callback,estimateOnly,goals,onWork)
                 end
                 local x,y=unpackKey(k)
                 local mask=bits(D,x,y)
-                if mask then for d=1,8 do
-                    if floor(mask/powers[d])%2==1 then
-                        local X,Y=x+dx[d],y+dy[d]
-                        local nextKey,v=encode(X,Y),c+costs[d]
-                        local old=g[nextKey]
-                        -- Reject already dominated relaxations before reading
-                        -- the terrain tile; improving moves still check it.
-                        if (old==nil or v<old) and bits(D,X,Y) then
-                            g[nextKey]=v
-                            if not estimateOnly then parents[nextKey]=k end
-                            push(nextKey,v,v+heuristic(X,Y))
-                        end
+                local links=mask and allowedLinks[mask]
+                if links then for slot=1,#links do
+                    local d=links[slot]
+                    local X,Y=x+dx[d],y+dy[d]
+                    local nextKey,v=encode(X,Y),c+costs[d]
+                    local old=g[nextKey]
+                    -- Reject already dominated relaxations before reading
+                    -- the terrain tile; improving moves still check it.
+                    if (old==nil or v<old) and bits(D,X,Y) then
+                        g[nextKey]=v
+                        if not estimateOnly then parents[nextKey]=k end
+                        push(nextKey,v,v+heuristic(X,Y))
                     end
                 end end
             end
@@ -377,7 +398,7 @@ local function search(D,sx,sy,tx,ty,callback,estimateOnly,goals,onWork)
     return function()cancelled=true end
 end
 local verified=setmetatable({},{__mode="k"})
-local api={version=2,minor=7,progressCallbacks=true,NavVersion=function()return "NQTDB-dry-multiworld-1" end}
+local api={version=2,minor=7,progressCallbacks=true,exactSingleGoal=true,NavVersion=function()return "NQTDB-dry-multiworld-1" end}
 function api.EstimateWalks(_,from,targets,callback,onWork)
     local D=data(from)
     local sx,sy=transform(D,from,true,true)
@@ -432,12 +453,15 @@ local function mapCandidates(from,to)
 end
 local function projectOut(world,x,y,hint)
     local map,p=call(C_Map.GetMapPosFromWorldPos,world,CreateVector2D(x,y),hint)
-    if not finite(map) or map<1 or not p or issecretvalue and issecretvalue(p) then return end
+    if not finite(map) or map<1 or not p or issecretvalue and issecretvalue(p) then
+        return nil,true -- The chart did not produce readable coordinates.
+    end
     local u,v=call(p.GetXY,p)
     if not(finite(u) and finite(v) and u>=0 and u<=1 and v>=0 and v<=1) then return end
     local result={map=map,x=u,y=v}
     local w,rx,ry=project(result)
     if w==world and (rx-x)^2+(ry-y)^2<=1 then return result end
+    if w==nil then return nil,true end -- Forward transform is not ready either.
 end
 local function startCell(from)
     local D=data(from)
@@ -452,21 +476,22 @@ local function startCell(from)
 end
 local function beginPath(D,sx,sy,tx,ty,from,targets,callback,goals,onWork)
     local stopped
-    local cancel=search(D,sx,sy,tx,ty,function(keys,yards,winner)
+    local cancel=search(D,sx,sy,tx,ty,function(keys,yards,winner,vertexCosts)
         if not keys then callback(nil,yards);return end
         local to=targets[winner]
-        local points={}
+        local points,cumulativeYards={},{}
         local W=D.ny*D.cells
         local i=#keys
         local candidates=mapCandidates(from,to)
         local lastHint=candidates[1]
+        local attempts,totalRetries=0,0
         local function projectBatch()
             if stopped then return end
             if onWork then onWork() end
             -- Small batches keep long multi-tile paths from blocking a frame.
             for _=1,48 do
                 if i<1 then
-                    callback({waypoints=points,yards=yards,navVersion=api.NavVersion(),roadAware=false,targetIndex=winner})
+                    callback({waypoints=points,yards=yards,cumulativeYards=cumulativeYards,navVersion=api.NavVersion(),roadAware=false,targetIndex=winner})
                     return
                 end
                 local k=keys[i]
@@ -491,21 +516,37 @@ local function beginPath(D,sx,sy,tx,ty,from,targets,callback,goals,onWork)
                         end
                     end
                 end
+                local mayLoad
                 if not point then
                     -- A path may pass through an outdoor chart other than
                     -- the start, destination or an available parent. Ask
                     -- the client for that chart and verify its round trip.
-                    local native=projectOut(D.world,x,y,nil)
+                    local native,pending=projectOut(D.world,x,y,nil)
                     local info=native and call(C_Map.GetMapInfo,native.map)
-                    if (not issecretvalue or not issecretvalue(info)) and type(info)=="table" then
+                    mayLoad=pending or native and (not issecretvalue or not issecretvalue(info)) and info==nil
+                    if native and (not issecretvalue or not issecretvalue(info)) and type(info)=="table" then
                         local kind=info.mapType
                         if finite(kind) and kind==(Enum and Enum.UIMapType and Enum.UIMapType.Zone or 3) then
                             point,lastHint=native,native.map
                         end
                     end
                 end
-                if not point then callback(nil,"projection");return end
+                if not point then
+                    -- A later chart may be populating. Preserve the verified
+                    -- terrain and prefix while it settles; never paper over
+                    -- known invalid/out-of-world charts or retry indefinitely.
+                    if mayLoad and attempts<2 and totalRetries<8 then
+                        attempts,totalRetries=attempts+1,totalRetries+1
+                        C_Timer.After(.12*attempts,projectBatch)
+                    else callback(nil,"projection") end
+                    return
+                end
+                attempts=0
                 points[#points+1]=point
+                -- Projected vertices and exact costs use the same retained
+                -- parent indices. A merged straight segment still has
+                -- linear progress in the original graph's cost units.
+                cumulativeYards[#points]=vertexCosts[i]/UNIT*TILE/D.cells
                 i=nextIndex
             end
             C_Timer.After(0,projectBatch)

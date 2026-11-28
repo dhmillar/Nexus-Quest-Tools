@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.5.314 - 2026-11-28
+
+- Rank Quest and Level Guide show ten additional verified gathering-object sources. Duskweed Petals now point to Overgrown Duskweed without changing the sibling animal-blood objective. Existing route points and drop-rate data are unchanged.
+
+## 1.5.313 - 2026-11-28
+
+- Vendor Icons keep the correct icon when the game recycles a nameplate before sending its removal event. Recycled civilian nameplates no longer inherit the previous vendor's icon.
+
+## 1.5.312 - 2026-11-28
+
+- Walking routes to verified turn-ins no longer disappear when a separate display pin is missing. Proximity by itself no longer counts as arrival before the walking search finishes.
+- The minimap and stock world map recover from temporarily missing zone coordinates or minimap controls without connecting across unverified gaps. Verified outdoor map dimensions can replace a temporarily unavailable native size.
+- The walking engine reuses decoded terrain tiles and avoids doing the same search twice when an objective has exactly one destination. The route distance display uses the terrain search's measured distance when available.
+- Rank Quest now recognizes more exact quest items before the game loads their names, restoring 41 existing drop-rate displays without guessing new values. Added 27 verified object source names and 74 recorded outdoor approaches for 12 kill objectives.
+- Added 21 missing NPC names on recorded turn-ins and 20 exact NPC interaction objectives. Centaur Pariah is listed in Southern Desolace without setting a fixed waypoint for a moving NPC.
+- Historical starts in the Level Guide and world map respect verified requirements for six follow-up quests. Live quest offers and held quests still take priority.
+- Ctrl-clicking more linked quest items opens their active quest even when the quest log is collapsed. Vendor Icons can find valid stock nameplates even when a plate does not advertise its unit token.
+- Level Guide shows the same verified interaction portraits and loot-object labels as Rank Quest, even before accepting a quest. Live details use the same exact item lookup.
+
 ## 1.5.311 - 2026-11-28
 
 - Verified walking lines can reach the edge of the minimap and stock world map when the game's inverse projection refuses a point just outside that zone. The displayed section is clipped from existing same-world walking geometry, not a shortcut or a bearing.

@@ -200,7 +200,7 @@ end
 -- Only explicit interaction objectives whose subject resolves to a creature.
 -- Do not use giver/turn-in names or zone text to infer an objective NPC.
 local npcObjectiveOverrides={[94887]={["marshal ryan"]=257250}}
-local npcObjectiveKinds={monster=true,event=true,interact=true,npc=true,talk=true,escort=true,object=true,area=true,progressbar=true}
+local npcObjectiveKinds={monster=true,event=true,interact=true,npc=true,talk=true,talkTo=true,escort=true,object=true,area=true,progressbar=true}
 local npcPrefixes={"find","found","locate","located","seek out","meet","speak to","speak with","talk to","talk with","report to","return to","rescue","free","escort","protect","aid","help","interact with","check on"}
 local npcSuffixes={"found","located","met","spoken to","talked to","reported to","rescued","freed","escorted","protected","helped","aided","interacted with","checked on"}
 function AT.GetQuestObjectiveNPC(qid,objective,label)
@@ -211,6 +211,24 @@ function AT.GetQuestObjectiveNPC(qid,objective,label)
     local line=cleanObjective(label)
     if not line or line=="" then return end
     line=line:gsub("[%.!]+$","")
+    -- The client often gives only a role or story phrase (e.g. “the
+    -- Innkeeper”) rather than the creature's exact target name.
+    local facts=AT.NQTDB and AT.NQTDB.ExactInteractionObjectives
+    local rawID=objective.objectiveID
+    if public(rawID,"nil") then rawID=objective.objectiveId end
+    for _,fact in ipairs(facts and facts[qid] or {}) do
+        local exact=normalize(fact[3]):gsub("[%.!]+$","")
+        if exact==line then
+            if not public(rawID,"nil") and (not pos(rawID) or rawID~=fact[1]) then return end
+            for _,field in ipairs({"npcID","creatureID","monsterID"}) do
+                local v=objective[field]
+                if not public(v,"nil") and (not pos(v) or v~=fact[2]) then return end
+            end
+            local row=mob(fact[2])
+            if row then return row[1],fact[2],row[5] end
+            return
+        end
+    end
     local subject
     for _,verb in ipairs(npcSuffixes) do
         subject=line:match("^(.+) +"..verb.."$")
@@ -336,7 +354,13 @@ function AT.GetQuestLootObjectName(qid,item)
     local objectives=catalog and catalog[qid]
     local rows=objectives and objectives[item]
     local first=rows and rows[1]
-    if not first then return end
+    if not first then
+        local witnesses=AT.NQTDB and AT.NQTDB.WitnessedObjectPickups
+        local q=witnesses and witnesses[qid]
+        local exact=q and q[item]
+        if exact then return exact[2],pos(exact[1]) and exact[1] or nil end
+        return
+    end
     -- Multiple spawn templates can share one label. Report the label without
     -- implying a unique object ID, or suppress if the names differ.
     for i=2,#rows do if rows[i][2]~=first[2] then return end end

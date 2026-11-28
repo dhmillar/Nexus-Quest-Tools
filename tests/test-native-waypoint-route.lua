@@ -166,3 +166,38 @@ AT.GetFocusedQuestRouteTargets=oldResolver
 path=atStart();ready=true;stepOver(path)
 assert(not (AT.snapshot and AT.snapshot.path==path),"a completed objective cannot follow a stale in-progress path across maps")
 print("PASS same-target seam continuity for tracked objectives, turn-ins and Level Guide; old routes do not survive a changed target or stage")
+
+-- Exercise the real terrain search for a hand-in with an independently
+-- resolved verified target, but no single POI in the display resolver.
+navSource,ready="hud",true
+local turnX,turnY=mp(493,1607)
+function AT.GetFocusedQuestRoutePoint()return q end
+function AT.GetFocusedQuestRouteTargets(map)
+ assert(map==home)
+ return q,{{map=dest,x=turnX,y=turnY}},{}
+end
+local handIn=atStart()
+assert(handIn.yards>45 and #handIn.waypoints>2
+ and AT.snapshot.selected.x==turnX and AT.snapshot.selected.y==turnY,
+ "actual bundled terrain must render to the verified turn-in point without separate display metadata")
+print("PASS real dry route for a verified alternate hand-in without an independent display POI")
+
+-- Route to a real terrain location through a native-cardinal chart while
+-- GetMapWorldSize temporarily fails. Keep the addon/provider/render boundaries.
+local metricW,metricH=5000,3500
+local function cardinalCoords(a,b)return .5+(y-b)/metricW,.5+(x-a)/metricH end
+C_Map.GetMapWorldSize=function()return nil,0 end
+C_Map.GetWorldPosFromMapPos=function(m,p)
+ local u,v=p:GetXY();return 0,vec(x-(v-.5)*metricH,y-(u-.5)*metricW)
+end
+C_Map.GetMapPosFromWorldPos=function(_,p,m)
+ local a,b=p:GetXY();return m,vec(cardinalCoords(a,b))
+end
+C_Map.GetBestMapForUnit=function()return home end
+C_Map.GetPlayerMapPosition=function()return vec(.5,.5) end
+local u,v=cardinalCoords(493,1607)
+function AT.GetFocusedQuestRouteTargets(m)return q,{{map=home,x=u,y=v}},{} end
+local exact=atStart()
+assert(exact.yards==handIn.yards and #exact.waypoints>2,
+ "without the native width getter, verified cardinal scales must render the same actual dry route")
+print("PASS native width loading is not a blocker for a verified real terrain route")

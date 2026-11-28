@@ -934,7 +934,13 @@ observedTurnIn=function(id,map,x,y,reference,skipName)
     if skipName then return m,px,py end
     if kind==1 then
         local locale=call(GetLocale)
-        if locale~="enUS" and locale~="enGB" then name=nil end
+        if locale~="enUS" and locale~="enGB" then
+            name=nil
+        elseif not reference and (not isType(name,"string") or name=="") then
+            local names=AT.NQTDB and AT.NQTDB.ObservedTurnInNames
+            local exact=names and names[id]
+            if exact and exact[1]==entity then name=exact[2] end
+        end
         for _,unit in ipairs({"npc","target","mouseover"}) do
             local guid=call(UnitGUID,unit)
             local npc=isType(guid,"string") and tonumber(guid:match("^Creature%-%d+%-%d+%-%d+%-%d+%-(%d+)%-"))
@@ -946,6 +952,36 @@ observedTurnIn=function(id,map,x,y,reference,skipName)
     end
     if not isType(name,"string") or name=="" then name=nil end
     return m,px,py,name,kind==1 and name~=nil
+end
+
+local function roamingTurnIn(id)
+    local identities=AT.NQTDB and AT.NQTDB.RoamingTurnInIdentities
+    return identities and identities[id]
+end
+
+local function roamingLabel(id,row)
+    if not row or call(Q.IsOnQuest,id)~=true then return end
+    local faction=call(UnitFactionGroup,"player")
+    local side=faction=="Alliance" and 1 or faction=="Horde" and 2 or -1
+    if row[5]~=0 and row[5]~=side then return end
+    local seen=0
+    for _,p in ipairs(AT.ObservedQuestTurnIns and AT.ObservedQuestTurnIns[id] or {}) do
+        if p[6]==0 or p[6]==side then
+            if p[1]~=row[1] or p[4]~=1 or p[5]~=row[2] then return end
+            seen=seen+1
+        end
+    end
+    if seen<2 then return end
+    for _,unit in ipairs({"npc","target","mouseover"}) do
+        local guid=call(UnitGUID,unit)
+        local npc=isType(guid,"string") and tonumber(guid:match("^Creature%-%d+%-%d+%-%d+%-%d+%-(%d+)%-"))
+        if npc==row[2] then
+            local name=call(UnitName,unit)
+            if isType(name,"string") and name~="" then return name,row[4] end
+        end
+    end
+    local locale=call(GetLocale)
+    if locale=="enUS" or locale=="enGB" then return row[3],row[4] end
 end
 
 resolveTurnInPoint=function(id,viewMap,wantName,lookup)
@@ -1002,6 +1038,12 @@ resolveTurnInPoint=function(id,viewMap,wantName,lookup)
     end
     if m then rememberTurnInMap(id,m) end
     if m and not wantName then return m,x,y end
+    local roaming=roamingTurnIn(id)
+    if roaming then
+        local name
+        if m==roaming[1] and wantName then name=roamingLabel(id,roaming) end
+        return m,x,y,name,name~=nil
+    end
     local knownMap,kx,ky,label,npcOnly=observedTurnIn(id,m,x,y)
     if knownMap then
         return m or knownMap,x or kx,y or ky,wantName and label or nil,wantName and npcOnly or nil
@@ -1016,7 +1058,7 @@ end
 recordedTurnInPoint=function(id)
     -- Never paper over a conflicting observation, or route to a
     -- floor placeholder, a quest giver, or a previous objective.
-    if call(Q.IsOnQuest,id)~=true or (AT.ObservedQuestTurnIns and AT.ObservedQuestTurnIns[id]) then return end
+    if roamingTurnIn(id) or call(Q.IsOnQuest,id)~=true or (AT.ObservedQuestTurnIns and AT.ObservedQuestTurnIns[id]) then return end
     local inside,kind=call(IsInInstance)
     if inside==true and kind~="none" then return end
     local m,x,y=observedTurnIn(id,nil,nil,nil,"verified",true)
@@ -1048,6 +1090,12 @@ function AT.GetReadyQuestTurnInArea(id)
     if not completed(id) or call(Q.IsOnQuest,id)==false then return end
     local locale=call(GetLocale)
     if locale~="enUS" and locale~="enGB" then return end
+    local roaming=roamingTurnIn(id)
+    if roaming then
+        local name,area=roamingLabel(id,roaming)
+        if name then return area,name,true end
+        return
+    end
     local row=AT.ForeverTurnInAreaReferences and AT.ForeverTurnInAreaReferences[id]
     if not row then return end
     local faction=call(UnitFactionGroup,"player")
@@ -1092,7 +1140,8 @@ function AT.GetObservedQuestObjectiveSpots(id,map)
     local refs=db and db.ObjectiveSpots and db.ObjectiveSpots[id]
     local objects=db and db.ObjectPickupApproaches and db.ObjectPickupApproaches[id]
     local uses=db and db.TargetedItemApproaches and db.TargetedItemApproaches[id]
-    if not (refs or objects or uses) or call(Q.IsOnQuest,id)~=true or completed(id) then return end
+    local sameCount=db and db.ExactDuplicateApproaches and db.ExactDuplicateApproaches[id]
+    if not (refs or objects or uses or sameCount) or call(Q.IsOnQuest,id)~=true or completed(id) then return end
     local inside,kind=call(IsInInstance)
     if inside==true and kind~="none" or zoneID(map)~=map then return end
     local live=call(Q.GetQuestObjectives,id)
@@ -1102,7 +1151,7 @@ function AT.GetObservedQuestObjectiveSpots(id,map)
     local function signature(typ,required)
         return observedObjectiveIDs[typ] and validID(required) and typ..":"..required or nil
     end
-    local function remember(observations,fallback,requiresItem)
+    local function remember(observations,fallback,requiresItem,requireIdentity)
         for index,r in pairs(observations or {}) do
             local key=signature(r[1],r[3])
             local available=true
@@ -1110,8 +1159,9 @@ function AT.GetObservedQuestObjectiveSpots(id,map)
                 local count=validID(r[5]) and call(C_Item and C_Item.GetItemCount or GetItemCount,r[5],false,false)
                 available=validID(count) and not (objects and objects[index])
             end
-            if key and available and (not fallback or not (refs and refs[index])) then
-                rows[#rows+1]={index=index,record=r,key=key}
+            if key and available and (not fallback or not (refs and refs[index])) and
+                (not requireIdentity or not (objects and objects[index] or uses and uses[index])) then
+                rows[#rows+1]={index=index,record=r,key=key,requireIdentity=requireIdentity}
                 counts[key]=(counts[key] or 0)+1
             end
         end
@@ -1119,6 +1169,7 @@ function AT.GetObservedQuestObjectiveSpots(id,map)
     remember(refs,false)
     remember(objects,true)
     remember(uses,true,true)
+    remember(sameCount,true,false,true)
     table.sort(rows,function(a,b)return a.index<b.index end)
     for _,o in ipairs(live) do
         local typ=field(o,"type")
@@ -1145,7 +1196,7 @@ function AT.GetObservedQuestObjectiveSpots(id,map)
             end
             local only=b[1]
             if matches==1 and exact.unfinished
-                or not matches and #b==1 and counts[key]==1 and not only.blocked and not only.typed and only.unfinished then
+                or not entry.requireIdentity and not matches and #b==1 and counts[key]==1 and not only.blocked and not only.typed and only.unfinished then
                 for _,p in ipairs(r[4]) do
                     if p[1]==map and xyValid(p[2],p[3]) then points[#points+1]=p end
                 end
@@ -1191,7 +1242,7 @@ function AT.GetFocusedQuestRouteTargets(mapID)
         if m then capture(x,y,m) end
         -- Only an independently verified same-quest turn-in near the native
         -- destination can back up a hand-in. Never substitute an objective.
-        if #targets>0 and completed(id) and call(Q.IsOnQuest,id)==true
+        if #targets>0 and not roamingTurnIn(id) and completed(id) and call(Q.IsOnQuest,id)==true
             and call(IsInInstance)~=true and zoneID(m)==m then
             local world,wx,wy=worldPosition(m,x,y)
             if world~=nil then

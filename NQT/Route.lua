@@ -22,16 +22,12 @@ local function call(fn,...)
     if ok then return a,b,c end
 end
 
--- The native inverse often refuses to return coordinates outside a zone's
--- bounds. For an already verified world route, validate the destination
--- chart's local transform before clipping a short cross-boundary segment.
-function AT.ProjectRouteZoneBoundary(world,pos,map,cache)
+local function zoneChart(map,cache)
     local maps=C_Map
-    if not (maps and CreateVector2D and finite(world) and ordinary(pos) and pos and finite(map)) then return end
-    local wx,wy=call(pos.GetXY,pos)
-    if not finite(wx) or not finite(wy) then return end
+    if not (maps and CreateVector2D and finite(map)) then return end
     local a=cache.chart
-    if a==nil then
+    local now=not a and GetTime and GetTime() or 0
+    if a==nil or a==false and cache.chartRetryAt and now>=cache.chartRetryAt then
         local info=call(maps.GetMapInfo,map)
         local zone=Enum and Enum.UIMapType and Enum.UIMapType.Zone or 3
         local chartWorld
@@ -57,8 +53,20 @@ function AT.ProjectRouteZoneBoundary(world,pos,map,cache)
             end
         end
         cache.chart=a or false
+        if not a then cache.chartRetryAt=now+2 end
     end
-    if not a or a[8]~=world or a[9]~=map then return end
+    if a and a[9]==map then return a end
+end
+
+-- The native inverse often refuses to return coordinates outside a zone's
+-- bounds. For an already verified world route, validate the destination
+-- chart's local transform before clipping a short cross-boundary segment.
+function AT.ProjectRouteZoneBoundary(world,pos,map,cache)
+    if not (finite(world) and ordinary(pos) and pos and finite(map)) then return end
+    local wx,wy=call(pos.GetXY,pos)
+    if not finite(wx) or not finite(wy) then return end
+    local a=zoneChart(map,cache)
+    if not a or a[8]~=world then return end
     local dx,dy=wx-a[1],wy-a[2]
     local u=.25+(dx*a[6]-dy*a[5])/a[7]
     local v=.25+(dy*a[3]-dx*a[4])/a[7]
@@ -72,6 +80,32 @@ local function frac(x, y)
     return finite(x) and finite(y) and x >= 0 and x <= 1 and y >= 0 and y <= 1
 end
 
+local metricChart
+local function routeMapSize(map)
+    local w,h=call(C_Map.GetMapWorldSize,map)
+    if finite(w) and finite(h) and w>0 and h>0 then return w,h end
+    if not metricChart or metricChart.map~=map then metricChart={map=map} end
+    local a=zoneChart(map,metricChart)
+    if not a then return end
+    -- Native world axes point north/west. Only a cardinal outdoor chart
+    -- supports the scalar widths used by minimap rotation and route progress.
+    if math.abs(a[3])>.05 or math.abs(a[6])>.05 or a[4]>=-1 or a[5]>=-1 then return end
+    local now=GetTime and GetTime() or 0
+    if not metricChart.confirmed then
+        if metricChart.inverseRetry and now<metricChart.inverseRetry then return end
+        local cx,cy=a[1]+(a[3]+a[5])*.25,a[2]+(a[4]+a[6])*.25
+        local id,v=call(C_Map.GetMapPosFromWorldPos,a[8],CreateVector2D(cx,cy),map)
+        local u,z
+        if finite(id) and id==map and ordinary(v) and v then u,z=call(v.GetXY,v) end
+        if not finite(u) or not finite(z) or math.abs(u-.5)*(-a[4])>.5 or math.abs(z-.5)*(-a[5])>.5 then
+            metricChart.inverseRetry=now+2
+            return
+        end
+        metricChart.confirmed=true
+    end
+    return -a[4],-a[5]
+end
+
 local function hide()
     if frame then frame:Hide() end
     if bearing then bearing:Hide() end
@@ -82,15 +116,14 @@ local function rotateEnabled()
         local ok,ignored=pcall(C_Minimap.IsRotateMinimapIgnored)
         if ok and ordinary(ignored) and ignored==true then return false end
     end
-    if C_CVar and C_CVar.GetCVarBool then return C_CVar.GetCVarBool("rotateMinimap") end
-    if GetCVarBool then return GetCVarBool("rotateMinimap") end
+    if C_CVar and C_CVar.GetCVarBool then return call(C_CVar.GetCVarBool,"rotateMinimap") end
+    if GetCVarBool then return call(GetCVarBool,"rotateMinimap") end
     return false
 end
 
 local function data(quest)
     local maps = C_Map
-    if not (maps and maps.GetBestMapForUnit and maps.GetPlayerMapPosition and maps.GetMapWorldSize
-        ) then return nil,"position" end
+    if not (maps and maps.GetBestMapForUnit and maps.GetPlayerMapPosition) then return nil,"position" end
     if not scopeTurnIn and not scopeGuide and not scopeWaypoint and type(GetTaskInfo) == "function" then
         local ok, inside = pcall(GetTaskInfo, quest)
         if ok and ordinary(inside) and inside == true then return {insideTaskArea=true} end
@@ -112,13 +145,13 @@ local function data(quest)
     local player = maps.GetPlayerMapPosition(playerMap, "player")
     if not ordinary(player) or not player then return end
     local px, py = player:GetXY()
-    local w, h = maps.GetMapWorldSize(playerMap)
+    local w, h = routeMapSize(playerMap)
     if not (frac(px, py) and (px ~= 0 or py ~= 0) and finite(w) and finite(h) and w > 0 and h > 0) then return end
     local rotating = rotateEnabled()
-    local minimapProjection=ordinary(rotating)
+    local minimapProjection=ordinary(rotating) and type(rotating)=="boolean"
     local heading = 0
     if minimapProjection and rotating then
-        heading = GetPlayerFacing and GetPlayerFacing()
+        heading = call(GetPlayerFacing)
         if not finite(heading) then minimapProjection,heading=false,0 end
     end
     local origin = {map=playerMap, x=px, y=py}
@@ -247,6 +280,8 @@ local function remainingWalkingYards(d, candidate, fraction, best, count)
 end
 local function measureSome(d,count)
     if not measure then measure={next=count-1,suffix={[count]=0},leg={}} end
+    local now=GetTime and GetTime() or 0
+    if measure.retryAt and now<measure.retryAt then return end
     for _=1,256 do
         local i=measure.next
         if i<1 then return end
@@ -256,18 +291,32 @@ local function measureSome(d,count)
             local dx,dy=(bx-ax)*d.w,(by-ay)*d.h
             measure.leg[i]=math.sqrt(dx*dx+dy*dy)
             if measure.suffix[i+1] then measure.suffix[i]=measure.leg[i]+measure.suffix[i+1] end
+        elseif measure.suffix[i+1] then
+            -- An unreadable coordinate does not invalidate the route, and
+            -- can recover while it is still selected. Retry only the first
+            -- missing suffix segment, never an entire per-frame rebuild.
+            if (measure.retries or 0)<3 then
+                measure.retries=(measure.retries or 0)+1
+                measure.retryAt=now+measure.retries*.5
+                return
+            end
+            -- Earlier segments cannot form a complete suffix around a real
+            -- hole. Local progress and arrival remain independent.
+            measure.next=0
+            return
         end
+        measure.retries,measure.retryAt=nil,nil
         measure.next=i-1
     end
 end
-local function detailedProgress(d,candidate,fraction,best,count)
+local function detailedProgress(d,candidate,fraction,best,count,remain)
     local ax,ay=offset(d,candidate)
     if not ax then return end
     local total, toTurn, turn = math.sqrt(best), nil, nil
     local vx,vy
     for i=candidate+1,math.min(count,candidate+32) do
         local bx,by=offset(d,i)
-        if not bx then return {turn=turn,toTurn=toTurn} end
+        if not bx then return {remain=remain,turn=turn,toTurn=toTurn} end
         local dx,dy=bx-ax,by-ay
         local len=math.sqrt(dx*dx+dy*dy)
         if len>3 then
@@ -284,10 +333,9 @@ local function detailedProgress(d,candidate,fraction,best,count)
         total=total+(i==candidate+1 and (1-fraction) or 1)*len
         ax,ay=bx,by
     end
-    local remain
-    if measure.suffix[candidate+1] and measure.leg[candidate] then
+    if not remain and measure and measure.suffix[candidate+1] and measure.leg[candidate] then
         remain=math.sqrt(best)+(1-fraction)*measure.leg[candidate]+measure.suffix[candidate+1]
-    elseif count-candidate<=32 then remain=total end
+    elseif not remain and count-candidate<=32 then remain=total end
     return {remain=remain,turn=turn,toTurn=toTurn}
 end
 local function walk(d, radius, yardRadius)
@@ -297,7 +345,6 @@ local function walk(d, radius, yardRadius)
     end
     local count = #d.path.waypoints
     if count < 2 then return 0 end
-    measureSome(d,count)
     local candidate, fraction, best
     local begin = math.max(1, cursor - 6)
     -- Limit lookahead so an intersection can't skip the intervening corners.
@@ -323,7 +370,17 @@ local function walk(d, radius, yardRadius)
     end
     if AT.NoteQuestWalkingProgress then AT.NoteQuestWalkingProgress(d.path,d.origin,math.sqrt(best),candidate) end
     cursor = candidate
-    travelDetail = detailedProgress(d,candidate,fraction,best,count)
+    local remain
+    local costs,full=d.path.cumulativeYards,d.path.yards
+    if ordinary(costs) and type(costs)=="table" and finite(full) and full>0 and #costs==count
+        and finite(costs[1]) and costs[1]==0 and finite(costs[count]) and costs[count]==full then
+        local a,b=costs[candidate],costs[candidate+1]
+        if finite(a) and finite(b) and a>=0 and b>a and b<=full then
+            remain=math.sqrt(best)+full-(a+(b-a)*fraction)
+        end
+    end
+    if not remain then measureSome(d,count) end -- Existing provider or invalid/missing cost metadata.
+    travelDetail = detailedProgress(d,candidate,fraction,best,count,remain)
     local targetX, targetY
     if d.selected and d.selected.map == d.origin.map and frac(d.selected.x,d.selected.y) then
         targetX,targetY = d.selected.x,d.selected.y
@@ -336,16 +393,20 @@ local function walk(d, radius, yardRadius)
     mapRoute={path=d.path, selected=d.selected, segment=candidate, fraction=fraction, quest=d.quest}
     if not radius then return end -- World-map snapshot does not need a drawable minimap.
     local used, scale = 0, radius/yardRadius
+    local ax,ay=offset(d,candidate)
     for i=candidate,math.min(count-1,candidate+renderLimit-1) do
-        local ax, ay = offset(d, i)
-        local bx, by = offset(d, i+1)
-        if not ax or not bx then break end
-        if i==candidate then ax, ay=ax+(bx-ax)*fraction, ay+(by-ay)*fraction end
-        local x1,y1,x2,y2=clip(ax, ay, bx, by, yardRadius)
-        if x1 then
-            used = used + 1
-            place(lineFor(used),x1*scale,y1*scale,x2*scale,y2*scale)
+        local bx,by=offset(d,i+1)
+        if ax and bx then
+            if i==candidate then ax,ay=ax+(bx-ax)*fraction,ay+(by-ay)*fraction end
+            local x1,y1,x2,y2=clip(ax,ay,bx,by,yardRadius)
+            if x1 then
+                used=used+1
+                place(lineFor(used),x1*scale,y1*scale,x2*scale,y2*scale)
+            end
         end
+        -- A bad projection breaks only its adjoining segments. Never join
+        -- across it, but render later valid edges inside the minimap.
+        ax,ay=bx,by
     end
     return used > 0 and used or nil
 end
@@ -439,7 +500,7 @@ local function yardEstimate(meta)
     if not frac(px,py) or (px==0 and py==0) then return end
     local dx,dy
     if source==meta.map then
-        local w,h=C_Map.GetMapWorldSize(source)
+        local w,h=routeMapSize(source)
         if not (finite(w) and finite(h) and w>0 and h>0) then return end
         dx,dy=(meta.x-px)*w,(meta.y-py)*h
     elseif CreateVector2D and C_Map.GetWorldPosFromMapPos then
@@ -565,10 +626,10 @@ local function drawBearing()
     mapRoute={quest=statusQuest,bearing=true,from=origin,target={map=m.map,x=m.x,y=m.y}}
     if not bearing then bearingStatus="overlay unavailable"; return end
     local rotating=rotateEnabled()
-    if not ordinary(rotating) then bearingStatus="rotation setting protected"; return end
+    if not ordinary(rotating) or type(rotating)~="boolean" then bearingStatus="rotation setting unavailable"; return end
     local heading=0
     if rotating then
-        heading=GetPlayerFacing and GetPlayerFacing()
+        heading=call(GetPlayerFacing)
         if not finite(heading) then
             bearingStatus="facing unavailable"
             return
@@ -615,7 +676,6 @@ local function draw()
     end
     statusQuest=quest
     if not waypoint and (not finite(quest) or quest<=0) then routeStatus="no_quest"; hide(); return end
-    if turnIn and not metaFor(quest).map then routeStatus="turnin_missing"; hide(); return end
     local ok,d,reason=pcall(data,quest)
     if not ok or not d then
         routeStatus=reason or "position"
@@ -639,20 +699,20 @@ local function draw()
         hide(); return
     end
     if arrival and (arrival.quest~=d.quest or arrival.map~=d.origin.map) then arrival=nil end
-    if turnIn and not d.path then
-        local meta=metaFor(quest)
-        if meta.map==d.origin.map then
-            local distance=yardEstimate(meta)
-            if insideObjectiveArea(d,meta.x,meta.y,distance) then
-                routeStatus="arrival"; hide(); return
-            end
-        end
-    end
-    local width,height=Minimap:GetWidth(),Minimap:GetHeight()
+    local width,height=call(Minimap.GetWidth,Minimap),call(Minimap.GetHeight,Minimap)
     local radius=d.minimapProjection and finite(width) and finite(height) and math.min(width,height)*.43
     if not radius or radius<18 then radius=nil end
     -- No route, no geometry. Do not draw a compass bearing through a wall.
-    if not d.path then routeStatus=d.reason or "planning"; hide(); return end
+    if not d.path then
+        -- A single display POI can be absent even when the walking planner
+        -- found an exact or verified alternate hand-in. Only label it
+        -- missing when the planner also has no objective. A short bearing
+        -- across a wall is not enough to prove arrival while planning.
+        routeStatus=d.reason or "planning"
+        if turnIn and (d.reason=="objective_missing" or not AT.GetFocusedQuestWalkingPath)
+            and not metaFor(quest).map then routeStatus="turnin_missing" end
+        hide(); return
+    end
     local count=walk(d,radius,viewYards())
     if not count or count==0 then routeStatus=count==0 and "arrival" or (mapRoute and (d.path.roadAware and "road" or "routed") or "replan"); hide(); return end
     routeStatus=d.path.roadAware and "road" or "routed"

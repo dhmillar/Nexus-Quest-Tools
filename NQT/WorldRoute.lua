@@ -55,7 +55,7 @@ local function project(src,x,y,dst,allowSibling,chart)
         return
     end
     if stitch then
-        local world,vec=C_Map.GetWorldPosFromMapPos(src,CreateVector2D(x,y))
+        local world,vec=call(C_Map.GetWorldPosFromMapPos,src,CreateVector2D(x,y))
         if not finite(world) or not clean(vec) or not vec then return end
         local wx,wy=vec:GetXY()
         if not finite(wx) or not finite(wy) then return end
@@ -76,7 +76,7 @@ local function project(src,x,y,dst,allowSibling,chart)
         end
         if parent~=dst then return end
     end
-    local world, vec=C_Map.GetWorldPosFromMapPos(src,CreateVector2D(x,y))
+    local world, vec=call(C_Map.GetWorldPosFromMapPos,src,CreateVector2D(x,y))
     if not finite(world) or not clean(vec) or not vec then return end
     local id,dstVec=call(C_Map.GetMapPosFromWorldPos,world,vec,dst)
     if not finite(id) or id~=dst or not clean(dstVec) or not dstVec then
@@ -89,17 +89,25 @@ end
 
 -- Clip across visible map bounds without connecting missing or unsupported segments.
 local function clip(ax,ay,bx,by)
+    local left,right,top,bottom=viewBounds[1],viewBounds[2],viewBounds[3],viewBounds[4]
+    local lowX,highX=math.min(ax,bx),math.max(ax,bx)
+    local lowY,highY=math.min(ay,by),math.max(ay,by)
+    if highX<left or lowX>right or highY<top or lowY>bottom then return end
+    if lowX>=left and highX<=right and lowY>=top and highY<=bottom then return ax,ay,bx,by end
+    -- The segment overlaps the view but crosses at least one edge. Clip
+    -- each axis as a parametric interval without a closure per segment.
     local lo,hi,dx,dy=0,1,bx-ax,by-ay
-    local function edge(p,q)
-        if p==0 then return q>=0 end
-        local t=q/p
-        if p<0 then lo=math.max(lo,t) else hi=math.min(hi,t) end
-        return lo<hi
+    if dx>0 then
+        lo,hi=math.max(lo,(left-ax)/dx),math.min(hi,(right-ax)/dx)
+    elseif dx<0 then
+        lo,hi=math.max(lo,(right-ax)/dx),math.min(hi,(left-ax)/dx)
     end
-    if edge(-dx,ax-viewBounds[1]) and edge(dx,viewBounds[2]-ax)
-        and edge(-dy,ay-viewBounds[3]) and edge(dy,viewBounds[4]-ay) then
-        return ax+dx*lo,ay+dy*lo,ax+dx*hi,ay+dy*hi
+    if dy>0 then
+        lo,hi=math.max(lo,(top-ay)/dy),math.min(hi,(bottom-ay)/dy)
+    elseif dy<0 then
+        lo,hi=math.max(lo,(bottom-ay)/dy),math.min(hi,(top-ay)/dy)
     end
+    if lo<hi then return ax+dx*lo,ay+dy*lo,ax+dx*hi,ay+dy*hi end
 end
 local function line(i,w,h,ax,ay,bx,by,isRoute,turnIn,artScale)
     local x,y,u,v=clip(ax,ay,bx,by)
@@ -311,17 +319,40 @@ function AT.RenderWorldQuestRoute(status,quest,snapshot)
         if path~=projectedPath or id~=projectedMap then
             projectedPath,projectedMap,points=path,id,{}
         end
+        local first,last=snapshot.segment,#path.waypoints
+        local now=GetTime and GetTime() or 0
+        local function attempt(i)
+            local pt=path.waypoints[i]
+            local u,v=project(pt.map,pt.x,pt.y,id,true,points)
+            if u then points[i]={u,v}; return points[i] end
+            if not mapWise then
+                points[i]=false
+                local q=points.retry
+                if not q then q={head=1,tail=0}; points.retry=q end
+                q.tail=q.tail+1
+                q[q.tail]={i,now+2}
+            end
+        end
+        -- Native chart data sometimes arrives after the overlay is drawn.
+        -- Retry failed vertices in insertion order with a per-refresh cap.
+        -- Valid vertices are never recalculated and gaps are never joined.
+        local q=points.retry
+        if q then
+            for _=1,24 do
+                local entry=q[q.head]
+                if not entry or now<entry[2] then break end
+                q[q.head]=nil
+                q.head=q.head+1
+                local i=entry[1]
+                if i>=first then attempt(i) else points[i]=nil end
+            end
+            if q.head>q.tail then points.retry=nil end
+        end
         local function at(i)
             local p=points[i]
-            if p==nil then
-                local pt=path.waypoints[i]
-                local u,v=project(pt.map,pt.x,pt.y,id,true,points)
-                p=u and {u,v} or false
-                if p or not mapWise then points[i]=p end
-            end
+            if p==nil then p=attempt(i) end
             if p then return p[1],p[2] end
         end
-        local first,last=snapshot.segment,#path.waypoints
         local a,b=at(first)
         for i=first,last-1 do
             local u,v=at(i+1)

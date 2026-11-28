@@ -1,17 +1,20 @@
 local AT={db={enabled=true,showQuestRoute=true}}
 local x,inside,t,active=.5,false,10,true
-local frames={}
+local frames,drawn={},{}
 local function nothing() end
 local function region()
     return {SetText=function(self,v) self.text=v end,SetPoint=nothing,ClearAllPoints=nothing,SetTextColor=nothing,
         SetThickness=nothing,SetColorTexture=nothing,
         SetStartPoint=function(self,_,_,x,y)self.x=x;self.y=y end,
         SetEndPoint=function(self,_,_,x,y)self.endX=x;self.endY=y end,
-        Show=nothing,Hide=nothing}
+        Show=function(self)self.shown=true end,Hide=function(self)self.shown=false end}
 end
 function CreateFrame(_,_,parent)
     local f={parent=parent,shown=true,CreateTexture=region,CreateLine=region,SetAllPoints=nothing,
         SetSize=nothing,EnableMouse=nothing,SetFrameLevel=nothing,SetScript=function(self,k,v)self[k]=v end,ClearAllPoints=nothing}
+    function f:CreateLine(_,layer)
+        local r=region(); if layer=="OVERLAY" then drawn[#drawn+1]=r end; return r
+    end
     function f:SetPoint(a,b,c,dx,dy) self.anchor={a,b,c,dx,dy} end
     function f:CreateFontString() local l=region();self.label=l;return l end
     function f:Show() self.shown=true end
@@ -80,6 +83,29 @@ AT.RefreshQuestRoute()
 assert(AT.worldStatus=="routed","follow the actual turn-in walk rather than declaring arrival across the wall")
 print("PASS ready-quest route can continue around an obstacle beside the hand-in")
 
+-- The planner can resolve a verified candidate when the independent
+-- single-point resolver (used by the fallback UI) supplies no coordinates.
+local goodTurnInPlanner=AT.GetFocusedQuestWalkingPath
+local goodTurnInPoint=AT.GetFocusedQuestRoutePoint
+AT.GetFocusedQuestRoutePoint=function() return 981 end
+t=t+1;AT.RefreshQuestRoute()
+assert(AT.worldStatus=="routed" and AT.snapshot and AT.snapshot.selected.x==.556,
+    "independent fallback metadata cannot suppress a verified route")
+assert(not bearing.shown,"a real turn-in path is never replaced by a bearing")
+AT.GetFocusedQuestWalkingPath=function()return nil,nil,"objective_missing" end
+t=t+1;AT.RefreshQuestRoute()
+assert(AT.worldStatus=="turnin_missing" and not AT.snapshot and not bearing.shown,
+    "no verified target or geometry is still reported as missing")
+AT.GetFocusedQuestRoutePoint=goodTurnInPoint
+AT.GetFocusedQuestWalkingPath=function()return nil,nil,"planning" end
+t=t+1;AT.RefreshQuestRoute()
+assert(AT.worldStatus=="planning","six yards in a straight line is not proof of arrival while planning")
+AT.GetFocusedQuestWalkingPath=goodTurnInPlanner
+t=t+1;AT.RefreshQuestRoute()
+assert(AT.worldStatus=="routed" and AT.snapshot.path)
+print("PASS turn-in routing respects the verified planner before display coordinates or direct arrival")
+
+
 local scope=true
 AT.GetWalkingNavigationID=function()if scope then return -1,"waypoint" end end
 AT.GetSelectedUserWaypoint=function()return {map=20,x=.556,y=.5}end
@@ -135,3 +161,131 @@ assignPath()
 AT.RefreshQuestRoute()
 assert(not AT.snapshot,"nonaffine chart has no safe cross-boundary snap")
 print("PASS minimap keeps a verified walking line at a zone boundary, and rejects remote or non-affine geometry")
+-- Keep the same path while an initially missing chart becomes readable.
+local chartUnavailable=true
+C_Map.GetWorldPosFromMapPos=function(m,p)
+ if m==20 and chartUnavailable then return end
+ return normal(m,p)
+end
+assignPath();AT.RefreshQuestRoute()
+assert(not AT.snapshot,"unavailable chart cannot draw a guessed edge")
+chartUnavailable=false;t=t+3
+AT.RefreshQuestRoute()
+assert(AT.snapshot and AT.snapshot.path and AT.worldStatus=="routed",
+ "the verified line comes back on the minimap without replacing the path")
+print("PASS native zone boundary transform retries after a temporary chart gap")
+
+
+
+-- A single unprojectable chart point must not blank other nearby segments.
+-- The two segments touching it stay hidden: never bridge the hole.
+x=.5;t=t+1;world=1
+local path={waypoints={{map=20,x=.5,y=.5},{map=20,x=.51,y=.5},
+    {map=21,x=.1,y=.5},{map=20,x=.52,y=.52},{map=20,x=.54,y=.52}},yards=100}
+AT.GetFocusedQuestWalkingPath=function()return path,path.waypoints[5],"routed" end
+AT.RefreshQuestRoute()
+local show={}
+for _,line in ipairs(drawn) do if line.autoTrackGlow and line.shown and line.x then show[#show+1]=line end end
+assert(#show==2,"draw both valid pieces and no bridge")
+assert(show[1].x==0 and show[1].y==0 and show[2].x>show[1].endX and show[2].y==show[2].endY)
+print("PASS minimap shows later verified segments after a projection gap without bridging it")
+
+
+-- A later map point can be temporarily unavailable after a zone reload.
+-- Once readable, recover the precise walking counter without reselecting.
+world=0;x=.95;t=t+1
+local waiting=true
+C_Map.GetWorldPosFromMapPos=function(m,p)
+    if m==21 and waiting then return 0,nil end
+    return normal(m,p)
+end
+local long={{map=20,x=.95,y=.5}}
+for i=1,40 do long[#long+1]={map=20,x=.95+i*.001,y=.5} end
+long[#long+1]={map=21,x=.02,y=.51}
+local longPath={waypoints=long,yards=80}
+AT.GetSelectedUserWaypoint=function()return long[#long] end
+AT.GetFocusedQuestWalkingPath=function() return longPath,long[#long],"routed" end
+AT.RefreshQuestRoute()
+local _,_,firstDetail=AT.GetQuestRouteStatus()
+assert(not firstDetail:find("distance: walking path",1,true))
+waiting=false;t=t+1
+AT.RefreshQuestRoute()
+local _,_,recoveredDetail=AT.GetQuestRouteStatus()
+assert(recoveredDetail:find("distance: walking path",1,true),
+ "a now-readable map point recovers the remaining walking distance")
+print("PASS transient later map point recovers walking distance without replacing the path")
+
+
+-- On a native bundled route the producer supplies cumulative costs.
+-- A later unreadable chart point (in the turn-preview window) must not
+-- turn an exact graph counter into a straight-line estimate.
+waiting=true;x=.954;t=t+1
+local last={map=21,x=.02,y=.52}
+local withCosts={waypoints={{map=20,x=.95,y=.5},{map=20,x=.96,y=.5},
+    {map=20,x=.98,y=.52},last},cumulativeYards={0,10,38.28428,78.28428},yards=78.28428}
+AT.GetSelectedUserWaypoint=function()return last end
+AT.GetFocusedQuestWalkingPath=function()return withCosts,last,"routed" end
+AT.RefreshQuestRoute()
+local _,_,withDetail=AT.GetQuestRouteStatus()
+assert(withDetail:find("distance: walking path",1,true) and meter.label.text=="74 yd",
+    "partial segment uses the exact producer counter while the later chart is unavailable")
+withCosts.cumulativeYards={0,90,38.28428,78.28428}
+AT.RefreshQuestRoute()
+local _,_,badDetail=AT.GetQuestRouteStatus()
+assert(not badDetail:find("distance: walking path",1,true),"invalid metadata uses existing guarded fallback")
+print("PASS exact fractional graph distance survives a later missing chart; invalid metadata does not set the walking counter")
+
+-- The native width/height getter sometimes isn't ready at a zone change.
+-- A cardinal, round-tripped outdoor chart can supply the exact scales.
+local chart=30
+C_Map.GetBestMapForUnit=function()return chart end
+C_Map.GetMapWorldSize=nil
+C_Map.GetWorldPosFromMapPos=function(m,p)
+    local u,v=p:GetXY()
+    return m==32 and 2 or 1,vec(5000-v*2000,3400-u*1200+(m==31 and u*v*40 or 0))
+end
+C_Map.GetMapPosFromWorldPos=function(_,p,m)
+    local a,b=p:GetXY()
+    return m,vec((3400-b)/1200,(5000-a)/2000)
+end
+scope=true;x=.5;t=t+1
+local plannerCalls=0
+local target={map=chart,x=.6,y=.5}
+AT.GetSelectedUserWaypoint=function()return target end
+AT.GetFocusedQuestWalkingPath=function(_,origin,w,h)
+    plannerCalls=plannerCalls+1
+    assert(w==1200 and h==2000)
+    return {waypoints={origin,target},yards=120},target,"routed"
+end
+AT.RefreshQuestRoute()
+assert(AT.worldStatus=="routed" and AT.snapshot and plannerCalls==1,"verified map size fallback keeps walking in view")
+chart=31;target={map=chart,x=.6,y=.5};t=t+1
+AT.RefreshQuestRoute()
+assert(not AT.snapshot and plannerCalls==1,"a nonlinear chart may not substitute for the native size")
+chart=32;target={map=chart,x=.6,y=.5};t=t+1
+C_Map.GetMapPosFromWorldPos=function(_,p,m) return m,vec(.6,.6) end
+AT.RefreshQuestRoute()
+assert(not AT.snapshot and plannerCalls==1,"a chart must independently round trip")
+function C_Map.GetMapWorldSize()return 1200,2000 end
+AT.RefreshQuestRoute()
+assert(AT.snapshot and AT.worldStatus=="routed" and plannerCalls==2,"native sizes remain authoritative")
+print("PASS exact outdoor chart dimensions prevent disappearing routes while native width/height is unavailable")
+
+-- A rotated/minimap API raising a client restriction must never stop the
+-- independently verified world-map route or walking-yard counter.
+function GetCVarBool() error("protected rotation state") end
+AT.RefreshQuestRoute()
+assert(AT.snapshot and AT.worldStatus=="routed" and meter.shown and not frames[1].shown,
+ "the world map and walking counter do not depend on a readable rotation toggle")
+function GetCVarBool()return true end
+function GetPlayerFacing()error("protected heading")end
+AT.RefreshQuestRoute()
+assert(AT.snapshot and AT.worldStatus=="routed" and not frames[1].shown)
+function GetPlayerFacing()return 0 end
+Minimap.GetWidth=function()error("minimap rendering is unavailable")end
+AT.RefreshQuestRoute()
+assert(AT.snapshot and AT.worldStatus=="routed" and not frames[1].shown)
+Minimap.GetWidth=function()return 170 end
+AT.RefreshQuestRoute()
+assert(AT.snapshot and frames[1].shown,"the minimap resumes when rotation and its geometry are readable")
+print("PASS native minimap restrictions cannot suppress independently verified world routes")

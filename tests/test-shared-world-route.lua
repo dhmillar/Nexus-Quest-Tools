@@ -82,4 +82,27 @@ assert(math.abs(segments[1].finish[1]-810)<.00001,"shared bearing projects acros
 AT.RenderWorldQuestRoute("arrival",quest,nil)
 assert(not overlay.visible)
 assert(spf.started==0,"do not call the external provider even when installed")
+-- Native map data may not have populated when a route was first painted.
+-- Initially none of the neighboring-zone vertices can be projected.
+local getWorld=C_Map.GetWorldPosFromMapPos
+local blocked,attempts=true,0
+C_Map.GetWorldPosFromMapPos=function(m,p)
+    if m==21 then attempts=attempts+1;if blocked then return end end
+    return getWorld(m,p)
+end
+local transient={waypoints=path.waypoints}
+local args={path=transient,selected=goal,quest=quest,segment=1,fraction=0}
+AT.RenderWorldQuestRoute("routed",quest,args)
+assert(segments[349].visible and not segments[350].visible,"never bridge a projection failure")
+attempts=0
+AT.RenderWorldQuestRoute("routed",quest,args)
+assert(attempts<=2,"do not reproject all the failed vertices every refresh")
+blocked=false;now=now+3;attempts=0
+AT.RenderWorldQuestRoute("routed",quest,args)
+assert(segments[350].visible and attempts<=26,"nearby geometry recovers with bounded work even for a long route")
+for i=1,20 do now=now+.3;AT.RenderWorldQuestRoute("routed",quest,args) end
+assert(segments[700].visible and math.abs(segments[700].finish[1]-810)<.00001,
+    "all later segments recover without reopening the map or reselecting the quest")
+print("PASS transient native world-map projections recover via a bounded fair retry queue")
+
 print("PASS standalone road provider, full cross-zone walking path, and shared amber bearing")

@@ -624,7 +624,8 @@ function AT.BuildLevelGuide(playerLevel,size)
                 -- Static cache rows can include explicitly marked internal
                 -- quests. Only a real held quest or live starting POI wins.
                 local plausible=plausibleQuest(q,d and d[9])
-                if isDone~=true and factionOkay and (h or liveStart or raceOkay and eligible and plausible) then
+                if isDone~=true and factionOkay and (h or liveStart or raceOkay and eligible and plausible
+                    and (not AT.RecordedQuestPrerequisitesMet or AT.RecordedQuestPrerequisitesMet(q,done))) then
                     local status=h and ((ready[q] or safe(Q and Q.ReadyForTurnIn,q)==true) and "Turn in" or "In log")
                         or liveStart and "Pick up" or "In range"
                     local qname=h and h.title or liveStart and safe(Q and Q.GetTitleForQuestID,q)
@@ -1261,7 +1262,9 @@ local function nativeQuestDetail(q,field)
 end
 local function objectiveItemName(id)
     local name=safe(C_Item and C_Item.GetItemNameByID,id) or safe(GetItemInfo,id)
-        or ((safe(GetLocale)=="enUS" or safe(GetLocale)=="enGB") and AT.ForeverQuestItemNames and AT.ForeverQuestItemNames[id])
+        or ((safe(GetLocale)=="enUS" or safe(GetLocale)=="enGB")
+            and (AT.ForeverQuestItemNames and AT.ForeverQuestItemNames[id]
+                or AT.NQTDB and AT.NQTDB.CurrentColdQuestItemNames and AT.NQTDB.CurrentColdQuestItemNames[id]))
     if not name and not requestedItems[id] then
         requestedItems[id]=true;safe(C_Item and C_Item.RequestLoadItemDataByID,id)
     end
@@ -1288,6 +1291,12 @@ local function objectiveIcon(r,catalog,qid)
                 break
             end
         end
+        -- The quest/item identity is exact, so the same world-object evidence
+        -- as the floating log is useful even before the quest is accepted.
+        if positive(r.item) then
+            local object=safe(AT.GetQuestLootObjectName,qid,r.item)
+            if validName(object) then r.source=object end
+        end
     else
         r.icon=GUIDE_BOOK
     end
@@ -1310,10 +1319,15 @@ function AT.GetLevelGuideObjectiveRows(qid)
                 local knownMob,resolved=safe(AT.GetQuestKillMobName,qid,o,value)
                 local isKill=kind=="kill" or kind=="monster" and (knownMob or
                     subject:lower():match("%s+slain$") or subject:lower():match("^kill%s") or subject:lower():match("^defeat%s"))
-                local item=kind=="item" and (field(o,"itemID") or field(o,"itemId") or safe(AT.GetKnownQuestDropItem,qid,subject))
+                local item=kind=="item" and (safe(AT.ResolveRankQuestObjectiveItem,qid,o,value)
+                    or field(o,"itemID") or field(o,"itemId") or safe(AT.GetKnownQuestDropItem,qid,subject))
                 local done=field(o,"finished")==true
-                lines[#lines+1]=objectiveIcon({text=value,kind=isKill and "kill" or kind=="item" and "collect" or "other",
-                    npc=isKill and (resolved or nativeNPC) or nil,item=item,mob=knownMob,done=done},catalog,qid)
+                local talk,talkID,portrait
+                if kind~="item" and not isKill then talk,talkID,portrait=safe(AT.GetQuestObjectiveNPC,qid,o,value) end
+                local r=objectiveIcon({text=value,kind=isKill and "kill" or kind=="item" and "collect" or "other",
+                    npc=isKill and (resolved or nativeNPC) or talkID,item=item,mob=knownMob or talk,done=done},catalog,qid)
+                if positive(portrait) then r.display=portrait end
+                lines[#lines+1]=r
             end
         end
     end
@@ -1343,7 +1357,17 @@ function AT.GetLevelGuideObjectiveRows(qid)
     for _,entry in ipairs(details or {}) do
         local label,amount=entry[1],entry[2]
         if validName(label) and positive(amount) then
-            lines[#lines+1]=objectiveIcon({text=("%s: 0/%d"):format(label,amount),kind="other"},catalog)
+            local r=objectiveIcon({text=("%s: 0/%d"):format(label,amount),kind="other"},catalog)
+            local exact=AT.NQTDB and AT.NQTDB.ExactInteractionObjectives
+            for _,fact in ipairs(exact and exact[qid] or {}) do
+                if fact[3]==label then
+                    local name,npc,display=safe(AT.GetQuestObjectiveNPC,qid,
+                        {type="talkTo",objectiveID=fact[1],npcID=fact[2]},label)
+                    if validName(name) then r.mob,r.npc,r.display=name,npc,display end
+                    break
+                end
+            end
+            lines[#lines+1]=r
         end
     end
     local summary=english and AT.LevelGuideObjectiveSummaries and AT.LevelGuideObjectiveSummaries[qid]
@@ -1432,7 +1456,11 @@ local function drawGuideObjectives(w,q)
         local withIcon=data.kind~="description"
         row.text:ClearAllPoints();row.text:SetPoint("TOPLEFT",withIcon and 27 or 0,-1)
         row.text:SetWidth(max(20,content:GetWidth()-(withIcon and 30 or 3)))
-        row.text:SetText(data.text)
+        local detail=data.text
+        if validName(data.source) and not detail:find(data.source,1,true) then
+            detail=detail.."  |cff9bd6d4Loot: "..data.source.."|r"
+        end
+        row.text:SetText(detail)
         row.text:SetTextColor(unpack(data.done and palette.teal or data.kind=="description" and palette.dim or palette.ink))
         row.icon:SetShown(withIcon)
         if withIcon then

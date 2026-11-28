@@ -97,3 +97,34 @@ for _,case in ipairs({"none reachable","projected path rejected","async path rej
  end
 end
 print("PASS verified fallback survives estimate and final-projection failures without bypassing combat or budget")
+
+-- A bundled engine certifies that WalkPath is the identical exact query
+-- for a singleton. A budget failure must not rerun it as an estimate.
+focus=focus+1
+AT.CancelQuestWalking()
+engine.exactSingleGoal=true
+local methods={}
+engine.WalkBestPath=function()methods[#methods+1]="multi";return nil,"budget"end
+engine.EstimateWalks=function()methods[#methods+1]="estimate";return nil,"budget"end
+engine.WalkPath=function(_,_,target)
+ assert(target==blocked);methods[#methods+1]="walk";return nil,"budget"
+end
+local function routed()return AT.GetFocusedQuestWalkingPath(focus,origin,1000,1000)end
+local remaining,_,why=routed()
+assert(not remaining and why=="budget" and table.concat(methods)=="walk",
+ "single exact destination must use one search, with no redundant estimate or speculative backup")
+assert(not routed() and #methods==1,"retry backoff is still applied")
+
+focus=focus+1
+AT.CancelQuestWalking()
+methods={}
+engine.WalkPath=function(_,_,target,reply)
+ methods[#methods+1]=target
+ if target==blocked then return nil,"offmesh" end
+ reply({navVersion="bundled-test",yards=100,waypoints={origin,target}})
+ return cleanStop
+end
+route,p=routed()
+assert(route and route.verifiedTurnInApproach and p==observed and #methods==2
+ and methods[1]==blocked and methods[2]==observed, "exact bundled singleton retains verified spatial fallback")
+print("PASS one bundled singleton search and no duplicate estimate on budget; a definite failure still uses verified fallback")

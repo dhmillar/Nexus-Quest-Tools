@@ -241,6 +241,14 @@ local function estimateNext(job, first)
 end
 
 chooseWalkingPath = function(job)
+    if #job.targets==1 and not job.road and job.api.exactSingleGoal==true then
+        -- The standalone graph's single-target search is identical to a
+        -- singleton multi-goal query. Do not estimate the same censored
+        -- search a second time after exhausting its search budget.
+        job.best=job.targets[1]
+        requestPath(job)
+        return
+    end
     if type(job.api.WalkBestPath)~="function" then estimateNext(job,1); return end
     local function budget(why)
         if why~="budget" then return false end

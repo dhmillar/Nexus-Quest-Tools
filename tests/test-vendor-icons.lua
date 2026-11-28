@@ -179,3 +179,41 @@ event:event("NAME_PLATE_UNIT_ADDED",live)
 check(livePlate,"Trade_BlackSmithing")
 assert(not overlays[decoyPlate])
 print("PASS native merchant interaction immediately identifies exact previously uncatalogued vendor and repairs, without same-name, forbidden plate or missing-NPC aliases")
+
+
+-- A stock frame can already exist when the addon initializes without
+-- exposing a token (or with a stale token from the previous pool owner).
+local bareToken,bare=npc(30,"Bare Stock Vendor","General Goods")
+local staleToken,stale=npc(31,"Recycled Stock Trainer","Engineering Trainer")
+local _,nonVendor=npc(33,"Civilian","General Goods",{player=true})
+bare.unitToken=nil
+stale.unitToken=bareToken
+nonVendor.unitToken=nil
+local cvarWrites,reads=0,0
+function SetCVar()cvarWrites=cvarWrites+1 end
+local lookup=C_NamePlate.GetNamePlateForUnit
+C_NamePlate.GetNamePlateForUnit=function(t)reads=reads+1;return lookup(t) end
+AT.RefreshVendorIcons()
+check(bare,"INV_Misc_Bag_10");check(stale,"Trade_Engineering")
+assert(not overlays[nonVendor] and cvarWrites==0 and reads<=120,"bounded initial recovery with player and settings safeguards")
+event:event("NAME_PLATE_UNIT_REMOVED",bareToken);assert(not overlays[bare].shown)
+print("PASS rediscovered stock vendor/trainer frames with missing and stale tokens, without changing nameplate settings")
+
+-- The native pool can reassign a plate before sending the old token's
+-- removal. Either ordering must leave only the current NPC's service icon.
+local oldToken,shared=npc(34,"First Vendor","General Goods")
+local newToken=npc(35,"Second Vendor","Reagents")
+event:event("NAME_PLATE_UNIT_ADDED",oldToken)
+check(shared,"INV_Misc_Bag_10")
+plates[oldToken]=nil;plates[newToken]=shared
+event:event("NAME_PLATE_UNIT_ADDED",newToken)
+check(shared,"INV_Misc_Dust_02")
+event:event("NAME_PLATE_UNIT_REMOVED",oldToken)
+check(shared,"INV_Misc_Dust_02")
+local civilian=npc(36,"Quiet Civilian",nil)
+plates[newToken]=nil;plates[civilian]=shared
+event:event("NAME_PLATE_UNIT_ADDED",civilian)
+assert(not overlays[shared].shown,"recycled non-vendor kept old icon while removal was pending")
+event:event("NAME_PLATE_UNIT_REMOVED",newToken)
+assert(not overlays[shared].shown)
+print("PASS vendor overlays survive out-of-order native pool rewiring without leaking onto civilians")
