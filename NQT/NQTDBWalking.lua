@@ -11,11 +11,79 @@ local function call(f,...)
     local ok,a,b,c,d=pcall(f,...)
     if ok then return a,b,c,d end
 end
-local function data() return AT.NQTDB and AT.NQTDB.RouteTiles end
+local digits={}
+do
+    local chars="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+    for i=1,#chars do digits[chars:byte(i)]=i-1 end
+end
+local tileCache,clock={},0
+local function decoded(D,key,tile)
+    if D.codec~="nq1" then return tile end
+    local id=D.world*10000+key
+    local old=tileCache[id]
+    clock=clock+1
+    if old then old.used=clock;return old.bytes end
+    local chunks,size,p,z={},0,1,0
+    local cap=D.cells*D.cells
+    local function digit()
+        local a=digits[tile:byte(p)]
+        p=p+1
+        return a
+    end
+    while p<=#tile do
+        local a,b,c=digit(),digit(),digit()
+        if not(a and b and c) then return end
+        if a==0 then
+            local n=b*64+c
+            if n==0 or size+n>cap then return end
+            chunks[#chunks+1]=string.rep(string.char(0),3*n)
+            size=size+n
+        else
+            local mask=(a-1)*64+b
+            if mask==0 or mask>255 or size>=cap then return end
+            if c==63 then
+                local d,e,f=digit(),digit(),digit()
+                if not(d and e and f) then return end
+                local n=d*4096+e*64+f
+                z=n%2==0 and n/2 or -(n+1)/2
+            else z=z+c-31 end
+            if z < -32768 or z > 32767 then return end
+            chunks[#chunks+1]=string.char(mask,z%256,floor(z/256)%256)
+            size=size+1
+        end
+    end
+    if size~=cap then return end
+    local count,oldID,last=0
+    for k,v in pairs(tileCache) do
+        count=count+1
+        if not last or v.used<last then oldID,last=k,v.used end
+    end
+    if count>=18 then tileCache[oldID]=nil end
+    local bytes=table.concat(chunks)
+    tileCache[id]={used=clock,bytes=bytes}
+    return bytes
+end
+local function project(point)
+    if not point or not finite(point.map) or not finite(point.x) or not finite(point.y)
+        or not(CreateVector2D and C_Map) then return end
+    local world,v=call(C_Map.GetWorldPosFromMapPos,point.map,CreateVector2D(point.x,point.y))
+    if not finite(world) or not v or issecretvalue and issecretvalue(v) then return end
+    local x,y=call(v.GetXY,v)
+    if finite(x) and finite(y) then return world,x,y end
+end
+local function data(point)
+    local world=project(point)
+    local db=AT.NQTDB
+    if not db or not world then return end
+    if db.RouteWorlds and db.RouteWorlds[world] then return db.RouteWorlds[world] end
+    if db.RouteTiles and db.RouteTiles.world==world then return db.RouteTiles end
+end
 local function bits(D,x,y)
     if x<0 or y<0 or x>=D.nx*D.cells or y>=D.ny*D.cells then return end
     local n=D.cells
-    local tile=D.tiles[floor(x/n)*D.ny+floor(y/n)+1]
+    local key=floor(x/n)*D.ny+floor(y/n)+1
+    local tile=D.tiles[key]
+    if tile then tile=decoded(D,key,tile) end
     if not tile then return end
     local p=((x%n)*n+y%n)*3+1
     local mask,l,h=string.byte(tile,p,p+2)
@@ -25,12 +93,8 @@ local function bits(D,x,y)
     return mask,z
 end
 local function transform(D,point,checkHeight)
-    if not point or not finite(point.map) or not finite(point.x) or not finite(point.y)
-        or not (CreateVector2D and C_Map) then return end
-    local world,v=call(C_Map.GetWorldPosFromMapPos,point.map,CreateVector2D(point.x,point.y))
-    if not finite(world) or world~=D.world or not v or issecretvalue and issecretvalue(v) then return end
-    local x,y=call(v.GetXY,v)
-    if not finite(x) or not finite(y) then return end
+    local world,x,y=project(point)
+    if not D or world~=D.world then return end
     local X,Y=floor(x/TILE*D.cells-D.tx*D.cells),floor(y/TILE*D.cells-D.ty*D.cells)
     local mask,z=bits(D,X,Y)
     if not mask then return end
@@ -115,13 +179,13 @@ local function search(D,sx,sy,tx,ty,callback)
     return function()cancelled=true end
 end
 local verified=setmetatable({},{__mode="k"})
-local api={version=2,minor=7,NavVersion=function()return "NQTDB-dry-zephras-1" end}
+local api={version=2,minor=7,NavVersion=function()return "NQTDB-dry-multiworld-1" end}
 function api.EstimateWalks(_,from,targets,callback)
-    local D=data()
+    local D=data(from)
     local sx,sy=transform(D,from,true)
     if not sx then return nil,"offmesh" end
     local now=call(GetTime)
-    if finite(now) then verified[from]={sx,sy,now} end
+    if finite(now) then verified[from]={sx,sy,now,D} end
     local result,i,stop,cancel={},0,nil,nil
     local function nextGoal()
         if stop then return end
@@ -139,11 +203,11 @@ function api.EstimateWalks(_,from,targets,callback)
     return function()stop=true;if cancel then cancel()end end
 end
 function api.WalkPath(_,from,to,callback)
-    local D=data()
+    local D=data(from)
     local sx,sy=transform(D,from,true)
     local now=call(GetTime)
     local previous=verified[from]
-    if not sx and previous and finite(now) and now-previous[3]>=0 and now-previous[3]<=35 then
+    if D and not sx and previous and previous[4]==D and finite(now) and now-previous[3]>=0 and now-previous[3]<=35 then
         sx,sy=previous[1],previous[2]
     end
     verified[from]=nil
@@ -167,7 +231,7 @@ function api.WalkPath(_,from,to,callback)
     end)
 end
 function AT.GetBundledWalkingAPI(origin,snapshot)
-    local D=data()
+    local D=data(origin)
     if not D or not C_Timer or type(C_Timer.After)~="function" or not C_Map or not C_Map.GetMapPosFromWorldPos then return end
     local _,build=call(GetBuildInfo)
     if not (build=="71037" or build=="71139") then return end

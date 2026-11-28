@@ -1,15 +1,22 @@
 "use strict";
 const fs=require("node:fs"), z=require("node:zlib"), path=require("node:path");
-const [src,out]=process.argv.slice(2);
+const [src,out,arg]=process.argv.slice(2);
+const world=arg===undefined?2991:Number(arg);
+if(![0,1,2991].includes(world))throw Error("unsupported world");
+const prefix="Nav"+world;
 const A="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-const text=fs.readFileSync(path.join(src,"Nav2991.lua"),"utf8");
+const text=fs.readFileSync(path.join(src,prefix+".lua"),"utf8");
 const readField=k=>+text.match(new RegExp("\\b"+k+"\\s*=\\s*(-?\\d+)\\s*,"))?.[1];
 const [cx,cy,nx,ny,n,h]=["cx0","cy0","nx","ny","cells","zstep"].map(readField);
-if(!text.includes("ShortestPathForeverPathData[2991]")||readField("format")!==4||readField("floorFormat")!==1||
+if(!text.includes("ShortestPathForeverPathData["+world+"]")||readField("format")!==4||readField("floorFormat")!==1||
  ![cx,cy,nx,ny,n,h].every(Number.isInteger)||n!==67)throw Error("unexpected grid revision");
-const pack=fs.readFileSync(path.join(src,"Nav2991_1.lua"),"utf8");
+const chunks=fs.readdirSync(src).filter(f=>new RegExp("^"+prefix+"_[0-9]+\\.lua$").test(f));
+const counts=text.match(/counts\s*=\s*\{[^}]+\}/)?.[0];
+if(!counts||!chunks.length)throw Error("missing source metadata");
+const expected=k=>+counts.match(new RegExp("\\b"+k+"\\s*=\\s*(\\d+)"))?.[1];
 const tiles={};
-for(const m of pack.matchAll(/^data\.packed\.(grid|floor|height)\[(\d+)\]\s*=\s*\{([^}]+)\}/gm)){
+for(const file of chunks)for(const m of fs.readFileSync(path.join(src,file),"utf8").matchAll(/^data\.packed\.(grid|floor|height)\[(\d+)\]\s*=\s*\{([^}]+)\}/gm)){
+ if(+m[2]<1||+m[2]>nx*ny)throw Error("tile outside declared world");
  const t=tiles[m[2]]??={};
  if(t[m[1]])throw Error("duplicate field");
  const blocks=[...m[3].matchAll(/"([A-Za-z0-9+/=]+)"/g)].map(b=>z.inflateSync(Buffer.from(b[1],"base64"),{maxOutputLength:1e6}));
@@ -100,8 +107,12 @@ function cut(t){
  }
  return {floors,clear};
 }
+for(const field of ["grid","height","floor"]){
+ const actual=Object.values(tiles).filter(t=>t[field]).length;
+ if(actual!==expected(field))throw Error("incomplete "+field+" "+actual+"/"+expected(field));
+}
 for(const [key,t] of Object.entries(tiles)){
- if(!t.grid||!t.height||!t.floor)throw Error("incomplete tile "+key);
+ if(!t.grid||!t.height)throw Error("incomplete tile "+key);
  t.values=cells(t);t.heights=height(t,t.values);
  Object.assign(t,cut(t));
 }
@@ -132,9 +143,38 @@ for(const [key,t] of Object.entries(tiles)){
    bin.writeInt16LE(t.heights[j]*h,j*3+1);
   }
  }
- payload[key]=bin;
+ if(bin.some(Boolean)||world===2991)payload[key]=bin;
 }
-if(Object.keys(payload).length!==25||edges<20000||nodes<4000)throw Error("unexpected converted coverage: "+[Object.keys(payload).length,nodes,edges]);
+if((world===2991&&Object.keys(payload).length!==25)||edges<20000||nodes<4000)throw Error("unexpected converted coverage: "+[Object.keys(payload).length,nodes,edges]);
+if(world!==2991){
+ // Format nq1: 0 + two digits = empty span; nonzero mask high digit + low
+ // digit + a signed delta digit (or escape and an absolute 3-digit zigzag).
+ const u=(v,n)=>Array.from({length:n},(_,i)=>A[(v>>(6*(n-i-1)))&63]).join("");
+ function encode(bin){
+  const pieces=[];let z=0;
+  for(let j=0;j<cap;){
+   const m=bin[3*j];
+   if(!m){
+    let k=j+1;
+    while(k<cap&&k-j<4095&&!bin[3*k])k++;
+    pieces.push("A"+u(k-j,2));j=k;continue;
+   }
+   const h=bin.readInt16LE(3*j+1),d=h-z;
+   pieces.push(u(m+64,2)+(d>=-31&&d<=31?u(d+31,1):"/"+u(h<0?-2*h-1:2*h,3)));
+   j++;z=h;
+  }
+  return pieces.join("");
+ }
+ const lines=["-- SPDX-License-Identifier: GPL-3.0-or-later",
+ "-- Derived dry ground grid from Shortest Path Forever v1.49.2; see RouteData.Notice.md.",
+ "local _,AT=...","AT.NQTDB=AT.NQTDB or {}","AT.NQTDB.RouteWorlds=AT.NQTDB.RouteWorlds or {}",
+ "AT.NQTDB.RouteWorlds["+world+"]={world="+world+",cells="+n+",nx="+nx+",ny="+ny+",tx="+cx+",ty="+cy+",",
+ ' navigationBuild=71037, codec="nq1", tiles={'];
+ for(const [key,bin] of Object.entries(payload))lines.push(" ["+key+"]="+JSON.stringify(encode(bin))+",");
+ lines.push(" }}","");
+ fs.writeFileSync(out,lines.join("\n"));
+ console.log({world,tiles:Object.keys(payload).length,nodes,edges,bytes:fs.statSync(out).size});
+}else{
 const lua=s=>'"'+[...s].map(b=>"\\"+String(b).padStart(3,"0")).join("")+'"';
 const lines=["-- SPDX-License-Identifier: GPL-3.0-or-later","-- Derived from Shortest Path Forever v1.49.2 by cjber and contributors.",
  "-- https://github.com/cjber/shortest-path-forever ; source and license details in RouteData.Notice.md.",
@@ -150,3 +190,4 @@ for(const [key,b] of Object.entries(payload)){
 lines.push(" }}","");
 fs.writeFileSync(out,lines.join("\n"));
 console.log({tiles:Object.keys(payload).length,nodes,edges});
+}

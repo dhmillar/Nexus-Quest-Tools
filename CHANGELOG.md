@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.265 - 2026-11-28
+
+- Standalone NQTDB adds 461 Eastern Kingdoms and 633 Kalimdor terrain tiles for supported dry outdoor routes. Zephras remains included.
+- Decode a small working set of terrain tiles on demand. The release no longer loads the optional Polestar route adapter.
+- This is not full navigation coverage: unsupported floors, unverified terrain, water, and transfers still do not produce a collision-checked walking path.
+
 ## 1.5.264
 
 - Pet Bar: recover stock pet nameplates before unit metadata loads, keep following the actual pet, and recover when a nameplate addon resets the pet category after startup. No stationary bar or player anchor.
