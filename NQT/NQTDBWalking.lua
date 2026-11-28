@@ -250,27 +250,36 @@ local function search(D,sx,sy,tx,ty,callback,estimateOnly,goals)
         return max(lowerBound(x,y),geometric)
     end
     local source=encode(sx,sy)
-    local g,parents,heap={[source]=0},{},{}
+    local g,parents,heap,queued={[source]=0},{},{},{}
     local function better(f,c,b) return f<b[3] or (f==b[3] and c>b[2]) end
     local function push(k,c,f)
-        local i=#heap+1
+        -- Each queued cell has one heap row. Improving a tentative route
+        -- decreases its key in place rather than keeping stale entries
+        -- that later consume the frame and visit budgets.
+        local i=queued[k] or #heap+1
+        local entry=heap[i]
+        if entry then entry[2],entry[3]=c,f else entry={k,c,f} end
         while i>1 do
-            local p=floor(i/2);if not better(f,c,heap[p]) then break end
-            heap[i]=heap[p];i=p
+            local p=floor(i/2)
+            local parent=heap[p]
+            if not better(f,c,parent) then break end
+            heap[i]=parent;queued[parent[1]]=i;i=p
         end
-        heap[i]={k,c,f}
+        heap[i]=entry;queued[k]=i
     end
     local function pop()
         local first,last=heap[1],table.remove(heap)
+        queued[first[1]]=nil
         if #heap>0 then
             local i=1
             while i*2<=#heap do
                 local ch=i*2
                 if heap[ch+1] and better(heap[ch+1][3],heap[ch+1][2],heap[ch]) then ch=ch+1 end
-                if not better(heap[ch][3],heap[ch][2],last) then break end
-                heap[i]=heap[ch];i=ch
+                local child=heap[ch]
+                if not better(child[3],child[2],last) then break end
+                heap[i]=child;queued[child[1]]=i;i=ch
             end
-            heap[i]=last
+            heap[i]=last;queued[last[1]]=i
         end
         return first
     end

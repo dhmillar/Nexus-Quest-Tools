@@ -38,7 +38,8 @@ end
 local baseline,before=run(nil)
 local result,after,reads=run(samples)
 assert(math.abs(baseline.yards-result.yards)<.01,"lower bound must not change the optimal path cost")
-assert(after<before*.8,"representative long route should process at least 20% fewer timer slices")
+assert(after<before*.9,"landmarks should still reduce work with a unique-entry frontier")
+assert(after<=225,"representative long route must stay below its old 249-slice schedule")
 print(("PASS %.0f yd real terrain route; unchanged optimal cost, %d → %d timer slices"):format(result.yards,before,after))
 
 assert(reads<100000,"already dominated relaxations should not reread terrain")

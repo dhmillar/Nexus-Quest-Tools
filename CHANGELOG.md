@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.297 - 2026-11-28
+
+- Walking: keep one pending search entry per terrain cell instead of spending route budget on duplicates. The fixed 4,983-yard outdoor benchmark kept the same shortest cost and completed in 205 rather than 249 timer slices.
+
 ## 1.5.296 - 2026-11-28
 
 - Rank Quest: the quest-start popup now uses exact verified NQTDB starter links when the bag API omits the quest ID, such as Healthy Dragon Scale. Held or completed quests and ambiguous or restricted metadata do not trigger the fallback. The item still requires a click and the quest is not auto-accepted.
