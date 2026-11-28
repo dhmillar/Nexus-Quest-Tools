@@ -9,7 +9,7 @@ local function texture()
         SetTexture=function(self,value)self.texture=value end}
 end
 function CreateFrame(_,_,parent)
-    local f={parent=parent,SetPoint=function(self,_,owner) if owner then self.anchor=owner;overlays[owner]=self end end,EnableMouse=no,SetFrameLevel=no,SetSize=no,arts={},RegisterEvent=no,
+    local f={parent=parent,SetPoint=function(self,_,owner) if owner then self.anchor=owner;overlays[owner]=self end end,ClearAllPoints=no,EnableMouse=no,SetFrameLevel=no,SetSize=no,arts={},RegisterEvent=no,
         Show=function(self)self.shown=true end,Hide=function(self)self.shown=false end,
         CreateTexture=function(self,_,kind)local t=texture();if kind=="ARTWORK" then self.arts[#self.arts+1]=t end;return t end,
         SetScript=function(self,_,script)self.event=script end}
@@ -83,7 +83,7 @@ local old=UnitGUID
 function UnitGUID(t) if t=="nameplate17" then return "Creature-0-0-0-0-89-00003" end return old(t) end
 assert(loadfile("NQT/VendorIcons.lua"))("NQT",AT)
 AT.InitVendorIcons()
-check(savanne,"Trade_Fishing");check(harklane,"INV_Misc_Fish_02");assert(not overlays[recycled])
+check(savanne,"Trade_Fishing");check(harklane.unitFramePlater.ActorNameSpecial,"INV_Misc_Fish_02");assert(not overlays[recycled])
 check(p,"INV_Misc_Bag_10")
 check(p2,"INV_Misc_Dust_02");check(p2,"Trade_BlackSmithing",2)
 check(p3,"Ability_Hunter_AimedShot")
@@ -217,3 +217,26 @@ assert(not overlays[shared].shown,"recycled non-vendor kept old icon while remov
 event:event("NAME_PLATE_UNIT_REMOVED",newToken)
 assert(not overlays[shared].shown)
 print("PASS vendor overlays survive out-of-order native pool rewiring without leaking onto civilians")
+
+local _, innByTitle=npc(37,"A Friendly Host","<Innkeeper>")
+local _, innByName=npc(38,"Innkeeper Moore",nil)
+local _, innByID=npc(39,"Localized Host",nil)
+local _, invalidInn=npc(40,"Innkeeper Enemy",nil,{hostile=true})
+local currentID=UnitGUID
+function UnitGUID(t)
+    if t=="nameplate39" then return "Creature-0-0-0-0-295-00039" end
+    return currentID(t)
+end
+local titleLabel={GetText=function()return "A Friendly Host" end,IsShown=function()return true end}
+innByTitle.UnitFrame={name=titleLabel}
+local staleLabel={GetText=function()return "Some Other NPC" end,IsShown=function()return true end}
+innByID.unitFramePlater={ActorNameSpecial=staleLabel}
+AT.RefreshVendorIcons()
+assert(overlays[titleLabel] and overlays[titleLabel].shown,"icon should follow the visible name")
+assert(overlays[titleLabel].arts[1].texture:match("INV_Misc_Key_03$"))
+check(innByName,"INV_Misc_Key_03")
+check(innByID,"INV_Misc_Key_03")
+assert(not overlays[staleLabel] and not overlays[invalidInn])
+event:event("NAME_PLATE_UNIT_REMOVED","nameplate37")
+assert(not overlays[titleLabel].shown)
+print("PASS innkeeper service via subtitle, NPC name, or verified ID; aligns with live name and excludes stale name and hostile NPC")

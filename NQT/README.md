@@ -1,4 +1,4 @@
-# Nexus Quest Tools 1.5.318
+# Nexus Quest Tools 1.5.319
 For World of Warcraft: Forever 1.60.1 (interface 16001). Uses the Blizzard quest tracker and a native character-specific action-bar macro. Quest data and tracking are standalone; Questie and QuestieDB are not used.
 
 **Rank Quest party announcements (on by default):** NQT announces every completed quest in party chat with your chosen Primary raid marker, including quests with no kill or collection objectives. Kill and collection milestones on unfinished quests still show. The final objective and quest completion are one announcement when confirmed together. Turn it off in **Rank Quest → Announce quest completion in party chat**. It does not replay old completions or post to raids.
@@ -319,7 +319,7 @@ Level Guide uses exact quest/item drop evidence in the selected Solo, Duo or Tri
 
 NQTDB also includes exact quest-conditioned Forever corpse rate estimates where compatible current-mode rates were absent. Efficient Games has at least 12 matching opened loot windows and 12 known corpses, with a minimum of two unshared recorded drops; each estimate is computed from one build's measurements and checked against the publisher's documented formula. We do not synthesize odds for unobserved quest items or reuse solo figures for this batch in party mode. Reproduce the gap input using `lua tools/audit-nqtdb-loot.lua rates-before.tsv "" "" before-exact-rates`, then run the pinned exact rates importer.
 
-Vendor Icons can recognize verified Forever merchants by creature ID when the client omits the subtitle. Repair availability comes from observed merchant windows, and Level Guide adds opt-in vendor/repair pins only for matched outdoor merchant locations and known faction. These lookups exclude world objects disguised as NPCs and do not modify default minimap pins.
+Vendor Icons place service symbols beside nearby NPC names when WoW supplies a usable nameplate, including a gold key for innkeepers. Vendor Icons can recognize verified Forever merchants by creature ID when the client omits the subtitle. Repair availability comes from observed merchant windows, and Level Guide adds opt-in vendor/repair pins only for matched outdoor merchant locations and known faction. These lookups exclude world objects disguised as NPCs and do not modify default minimap pins.
 
 Verified trainer windows also add exact NPC-ID icons and opt-in Level Guide pins for class, profession and weapon trainers. Class specialties use reported titles; profession specialties use a matching title or the profession required by recorded training services. A trainer with no trustworthy specialty retains its generic icon.
 

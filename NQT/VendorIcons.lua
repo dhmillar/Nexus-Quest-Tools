@@ -1,7 +1,7 @@
 local _,AT=...
 local base="Interface\\Icons\\"
 local art={
-    vendor="INV_Misc_Bag_10", reagent="INV_Misc_Dust_02", repair="Trade_BlackSmithing",
+    innkeeper="INV_Misc_Key_03", vendor="INV_Misc_Bag_10", reagent="INV_Misc_Dust_02", repair="Trade_BlackSmithing",
     ammo="INV_Ammo_Bullet_01", arrows="INV_Ammo_Arrow_02", weapon="INV_Sword_04",
     fishvendor="INV_Misc_Fish_02", fishingsupplies="Trade_Fishing",
     class="INV_Misc_Book_11", profession="INV_Misc_Gear_01",
@@ -41,7 +41,7 @@ local services
 local function serviceNames()
     if services then return services end
     services={}
-    local kinds={[3]="repair",[4]="class",[5]="profession",[6]="vendor",[11]="weapon"}
+    local kinds={[2]="innkeeper",[3]="repair",[4]="class",[5]="profession",[6]="vendor",[11]="weapon"}
     for _,rows in pairs(AT.LevelGuideNPCServices or {}) do
         for _,r in ipairs(rows) do
             local kind,name=kinds[r[1]],clean(r[5])
@@ -80,6 +80,8 @@ local function classify(title,name,known)
             elseif has("trainer") then roles[#roles+1]="profession" end
         end
     end
+    local innkeeper=context("innkeeper") or context("inn keeper") or known and known.innkeeper
+    if innkeeper then roles[#roles+1]="innkeeper" end
     local reagent=context("reagent") or context("reagents")
     local bullets=context("ammunition") or context("ammo") or context("gunsmith") or context("gun merchant")
     local arrows=context("bowyer") or context("fletcher") or context("arrows") or context("quivers")
@@ -91,7 +93,7 @@ local function classify(title,name,known)
     elseif bullets then roles[#roles+1]="ammo"
     elseif has("fishing supplies") then roles[#roles+1]="fishingsupplies"
     elseif has("fish vendor") then roles[#roles+1]="fishvendor"
-    elseif vendor and not repair then roles[#roles+1]="vendor" end
+    elseif vendor and not repair and not innkeeper then roles[#roles+1]="vendor" end
     if repair then roles[#roles+1]="repair" end
     return roles
 end
@@ -194,8 +196,16 @@ local function labelRole(token,plate,guid)
     elseif trainer and (faction=="Alliance" or faction=="Horde") then
         return {}
     end
+    local catalogInn=verified and (word(clean(verified[2]),"innkeeper") or word(clean(verified[1]),"innkeeper"))
+    local function ensureInn(roles)
+        if catalogInn and allowed(verified[3]) then
+            for _,role in ipairs(roles) do if role=="innkeeper" then return roles end end
+            table.insert(roles,1,"innkeeper")
+        end
+        return roles
+    end
     if witnessed then
-        local roles=classify(subtitle,name,known)
+        local roles=ensureInn(classify(subtitle,name,known))
         local catalogVendor=verified and allowed(verified[3]) and verified
         if #roles==0 and catalogVendor then
             roles=classify(clean(catalogVendor[2]),clean(catalogVendor[1]),{vendor=true,repair=catalogVendor[4]})
@@ -206,7 +216,7 @@ local function labelRole(token,plate,guid)
         if allowed(verified[3]) then
             -- A discovered merchant ID works even when tooltip title/name data
             -- is unavailable. Classes/subtypes still use real service titles.
-            local roles=classify(subtitle,name,nil)
+            local roles=ensureInn(classify(subtitle,name,nil))
             if #roles==0 then roles=classify(clean(verified[2]),clean(verified[1]),{vendor=true,repair=verified[4]}) end
             if #roles==0 then roles[1]="vendor" end
             if verified[4] then
@@ -238,7 +248,6 @@ local function frameFor(plate)
     local existing=plateCache[plate]
     if existing then return existing end
     local f=CreateFrame("Frame",nil,UIParent)
-    if not pcall(f.SetPoint,f,"BOTTOM",plate,"TOP",0,13) then f:Hide();return end
     f:EnableMouse(false)
     if f.SetFrameStrata then f:SetFrameStrata("MEDIUM") end
     f:SetFrameLevel(6)
@@ -257,6 +266,30 @@ local function frameFor(plate)
     plateCache[plate]=item
     return item
 end
+-- Follow the real name region, not the plate's top edge. Some nameplate
+-- addons populate their label one tick later; otherwise use the native plate
+-- as the positional anchor. Never borrow name art from a recycled unit.
+local function position(entry,plate,token)
+    local name=clean(safe(UnitName,token))
+    local function usable(region)
+        if not plain(region) or type(region)~="table" or not region.GetText
+            or region.IsForbidden and safe(region.IsForbidden,region)~=false
+            or region.IsShown and safe(region.IsShown,region)~=true then return end
+        local shown=clean(safe(region.GetText,region))
+        if name~="" and shown==name then return region end
+    end
+    local function candidate(unitFrame)
+        if not plain(unitFrame) or type(unitFrame)~="table" or unitFrame.IsForbidden
+            and safe(unitFrame.IsForbidden,unitFrame)~=false then return end
+        return usable(unitFrame.ActorNameSpecial) or usable(unitFrame.name)
+            or usable(unitFrame.Name) or usable(unitFrame.NameText)
+    end
+    local label=candidate(plate.unitFramePlater) or candidate(plate.UnitFrame) or candidate(plate)
+    local f=entry.frame
+    f:ClearAllPoints()
+    if label and pcall(f.SetPoint,f,"RIGHT",label,"LEFT",-6,0) then return true end
+    return pcall(f.SetPoint,f,"RIGHT",plate,"LEFT",-5,0)
+end
 local function update(token)
     if not active() or not tokenOK(token) then return false end
     local plate=safe(C_NamePlate and C_NamePlate.GetNamePlateForUnit,token)
@@ -270,7 +303,7 @@ local function update(token)
     local roles=labelRole(token,plate,guid)
     if #roles==0 then return false end
     local entry=frameFor(plate)
-    if not entry then return false end
+    if not entry or not position(entry,plate,token) then return false end
     local n=math.min(3,#roles)
     entry.frame:SetSize(46+(n-1)*49,46)
     for i,c in ipairs(entry.icons) do
@@ -311,7 +344,7 @@ local function added(token)
     clear(token)
     if not active() then return end
     local generation=epochs[token]
-    if update(token) then return end
+    update(token)
     if C_Timer and C_Timer.After then
         C_Timer.After(.35,function()
             if epochs[token]~=generation or not active() or update(token) then return end

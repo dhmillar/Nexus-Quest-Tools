@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.319 - 2026-11-28
+
+- Vendor Icons recognize innkeepers by title and verified Forever NPC IDs and place a gold key beside their names. Vendor and trainer icons now line up beside the visible name when WoW exposes it, with a nameplate fallback. No nameplate settings are changed.
+
 ## 1.5.318 - 2026-11-28
 
 - General: added Enemy Player Names for editable hostile player plates, with a Horde icon when the faction is confirmed. Existing enemy health bars and all enemy mob plates are preserved. Requests up to 45 yards through the player-only range setting; the client still limits which plates are available.

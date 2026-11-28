@@ -337,7 +337,7 @@ local function buildPanel()
     end
     makeText(classes,"GameFontHighlightSmall",-79,"One cast per press. Hunters: Shift + macro for Monkey in combat.")
     makeText(classes,"GameFontDisableSmall",-325,"A slim overhead bar shows the health of your active pet.")
-    option(general, "vendorIcons", "Vendor Icons", -114, "Show large icons above nearby vendors and trainers when WoW exposes their nameplates. Does not change nameplate settings.")
+    option(general, "vendorIcons", "Vendor Icons", -114, "Show large service icons next to nearby vendors, innkeepers, and trainers when WoW exposes their nameplates. Does not change nameplate settings.")
     option(general, "friendlyNames", "Friendly Names", -148,
         "Use a clean, class-colored name above friendly player characters. Only replaces nameplates WoW allows NQT to change.")
     option(general, "friendlyBars", "Friendly Bars", -194,
