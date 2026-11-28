@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.309 - 2026-11-28
+
+- NQTDB: added 11 exact item requirements and verified reward details for five endgame quests. These entries fill missing details only after the game confirms the quest is already in the player's log; they never generate a suggested pickup or route on their own.
+
 ## 1.5.308 - 2026-11-28
 
 - Walking routes no longer disappear just because a short passage crosses a third outdoor map between the start and destination. NQT accepts the intervening chart only when its coordinates independently round-trip to the same point in the same world.

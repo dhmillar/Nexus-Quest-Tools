@@ -5902,3 +5902,30 @@ db.TargetedItemApproaches={
  [877]={[1]={"object",3737,1,{{1413,0.5555,0.4268},{1413,0.5562,0.4276}},5068}},
 }
 -- END NQTDB targeted item approaches
+-- BEGIN NQTDB native-only quest details (generated)
+-- Efficient Games World of Warcraft: Forever build 71139, CC BY 4.0.
+-- https://github.com/JIVESCORP/eg-link-output-wowf/blob/c1bf99bc2835bbe1b2dad82fb99f994c0cfffe33/data/wowf/1.60.1.71139/quests.enUS.json
+-- https://efficient.games | https://creativecommons.org/licenses/by/4.0/
+-- These IDs are native-only: no quest-giver, availability or automatic route asserted.
+db.NativeQuestDetails={
+ [8951]={58,60,1537,81,"55155555b1354c4d",7,2,0,"Anthion's Parting Words",{{2,16715,1},{2,16719,1},{2,16718,1}}},
+ [9008]={58,60,1637,81,"aa2aaaaa4e0ab3b2",2,2,0,"Saving the Best for Last",{{2,16677,1},{2,16674,1}}},
+ [9012]={58,60,1637,81,"aa2aaaaa4e0ab3b2",2,2,0,"Saving the Best for Last",{{2,16698,1},{2,16700,1}}},
+ [9205]={55,60,139,0,"ffffffffffffffff",0,1,0,"Craftsman's Writ - Plated Armorfish",{{2,22623,1},{2,13890,30}}},
+ [84196]={58,60,1537,81,"55155555b1354c4d",2,2,0,"Saving the Best for Last",{{2,16677,1},{2,16674,1}}},
+}
+db.NativeQuestItemFacts={
+ [8951]={58,60,{16715,1},{16719,1},{16718,1}},
+ [9008]={58,60,{16677,1},{16674,1}},
+ [9012]={58,60,{16698,1},{16700,1}},
+ [9205]={55,60,{22623,1},{13890,30}},
+ [84196]={58,60,{16677,1},{16674,1}},
+}
+db.NativeQuestRewards={
+ [8951]={[2]={{22107,1},{22111,1},{22112,1}}},
+ [9008]={[2]={{22013,1},{22060,1}}},
+ [9012]={[2]={{22074,1},{22075,1}}},
+ [9205]={[3]={{22524,1},{22523,1}},[5]={{529,3}}},
+ [84196]={[2]={{226887,1},{226886,1}}},
+}
+-- END NQTDB native-only quest details

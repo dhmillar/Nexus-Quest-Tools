@@ -23,5 +23,5 @@ for id,r in pairs(AT.NQTDB.Rewards) do
  assert(type(r[8])=="number" and r[8]>=0 and type(r[9])=="number" and r[9]>=0)
  n=n+1
 end
-assert(n==3380)
-print("PASS 3380 qualified NQTDB reward rows, localized items, choice distinction, copper, no invented XP")
+assert(n==3382)
+print("PASS 3382 qualified NQTDB reward rows, localized items, choice distinction, copper, no invented XP")

@@ -555,6 +555,10 @@ function AT.BuildLevelGuide(playerLevel,size)
     local tags=Enum and Enum.QuestTag
     for q in pairs(candidates) do
         local d,h=data[q],held[q]
+        if not d and h and safe(Q and Q.IsOnQuest,q)==true then
+            local native=AT.NQTDB and AT.NQTDB.NativeQuestDetails
+            d=native and native[q]
+        end
         local liveStart=live[q]
         local qLevel=h and h.level or d and d[2]
         if not positive(qLevel) and (h or liveStart) then
@@ -1241,6 +1245,12 @@ local function rateLine(q)
     return ""
 end
 local requestedItems={}
+local function nativeQuestDetail(q,field)
+    if not positive(q) or safe(Q and Q.IsOnQuest,q)~=true then return end
+    local db=AT.NQTDB
+    local rows=db and db[field]
+    return rows and rows[q]
+end
 local function objectiveItemName(id)
     local name=safe(C_Item and C_Item.GetItemNameByID,id) or safe(GetItemInfo,id)
         or ((safe(GetLocale)=="enUS" or safe(GetLocale)=="enGB") and AT.ForeverQuestItemNames and AT.ForeverQuestItemNames[id])
@@ -1301,6 +1311,7 @@ function AT.GetLevelGuideObjectiveRows(qid)
     end
     if #lines>0 then return lines,true end
     local row=AT.ForeverLevelGuideQuests and AT.ForeverLevelGuideQuests[qid]
+        or nativeQuestDetail(qid,"NativeQuestDetails")
     for _,o in ipairs(row and row[10] or {}) do
         local kind,id,n=unpack(o)
         if (kind==1 or kind==2) and positive(n) then
@@ -1343,7 +1354,7 @@ end
 function AT.GetLevelGuideRewardRows(qid)
     if not positive(qid) then return {} end
     local db=AT.NQTDB
-    local rewards=db and db.Rewards and db.Rewards[qid]
+    local rewards=db and db.Rewards and db.Rewards[qid] or nativeQuestDetail(qid,"NativeQuestRewards")
     if not rewards then return {} end
     local rows={}
     if positive(rewards[1]) then

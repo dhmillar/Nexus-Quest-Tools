@@ -1333,6 +1333,10 @@ end
 
 local function factDropItem(qid,objective,wanted)
     local facts=AT.ForeverQuestFacts and AT.ForeverQuestFacts[qid]
+    if not facts and call(Q and Q.IsOnQuest,qid)==true then
+        local native=AT.NQTDB and AT.NQTDB.NativeQuestItemFacts
+        facts=native and native[qid]
+    end
     if not facts then return end
     local required=field(objective,"numRequired")
     local named,possible,unresolved
