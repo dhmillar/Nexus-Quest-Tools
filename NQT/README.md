@@ -325,6 +325,8 @@ Verified trainer windows also add exact NPC-ID icons and opt-in Level Guide pins
 
 The optional quest-start item popup can use an exact NQTDB starter witness if the bag has the item but the client omits its quest ID. A known native quest ID always wins. The fallback works only when the game confirms the exact quest is neither in the log nor completed; it does not accept quests automatically or make up an item’s origin.
 
+A separately verified quest starter can locate an already-held quest in Level Guide when the original quest record has no area. For example, NQT can identify Sorek in Orgrimmar for A Troubled Spirit without assuming that other classes qualify for the unheld quest.
+
 Some endgame quests are described by the Forever client but have no independently verified offer. When a player actually holds one of the verified IDs, NQT can fill in exact objective items and rewards while the game is still loading details. These records never create a quest recommendation, start pin or routing destination on their own.
 
 Level Guide filters out catalog-only internal placeholders such as <NYI>, <UNUSED>, and [DNT] instead of recommending them as playable quests. It still honors actual held quests and live quest-start pins. The offline Forever facts audit compares exact current-build identity, level, race/class masks, area, and item counts without treating unknown historical quests as proved. Run `node tools/audit-forever-quest-facts.cjs <pinned-quests.enUS.json> NQT` with the November 27 build 1.60.1.71139 [Efficient Games export](https://github.com/JIVESCORP/eg-link-output-wowf/blob/c1bf99bc2835bbe1b2dad82fb99f994c0cfffe33/data/wowf/1.60.1.71139/quests.enUS.json), CC BY 4.0.

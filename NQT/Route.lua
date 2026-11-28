@@ -16,6 +16,58 @@ local function finite(value)
         and value > -math.huge and value < math.huge
 end
 
+local function call(fn,...)
+    if type(fn)~="function" then return end
+    local ok,a,b,c=pcall(fn,...)
+    if ok then return a,b,c end
+end
+
+-- The native inverse often refuses to return coordinates outside a zone's
+-- bounds. For an already verified world route, validate the destination
+-- chart's local transform before clipping a short cross-boundary segment.
+function AT.ProjectRouteZoneBoundary(world,pos,map,cache)
+    local maps=C_Map
+    if not (maps and CreateVector2D and finite(world) and ordinary(pos) and pos and finite(map)) then return end
+    local wx,wy=call(pos.GetXY,pos)
+    if not finite(wx) or not finite(wy) then return end
+    local a=cache.chart
+    if a==nil then
+        local info=call(maps.GetMapInfo,map)
+        local zone=Enum and Enum.UIMapType and Enum.UIMapType.Zone or 3
+        local chartWorld
+        local function sample(u,v)
+            local w,p=call(maps.GetWorldPosFromMapPos,map,CreateVector2D(u,v))
+            if finite(w) and (not chartWorld or chartWorld==w) and ordinary(p) and p then
+                chartWorld=w
+                local x,y=call(p.GetXY,p)
+                if finite(x) and finite(y) then return x,y end
+            end
+        end
+        if ordinary(info) and type(info)=="table" and finite(info.mapType) and info.mapType==zone then
+            local x,y=sample(.25,.25)
+            local rx,ry=sample(.75,.25)
+            local sx,sy=sample(.25,.75)
+            local tx,ty=sample(.75,.75)
+            local mx,my=sample(.5,.5)
+            if x and rx and sx and tx and mx and math.abs(tx-rx-sx+x)<=.5 and math.abs(ty-ry-sy+y)<=.5
+                and math.abs(mx-(rx+sx)/2)<=.5 and math.abs(my-(ry+sy)/2)<=.5 then
+                local xx,xy,yx,yy=2*(rx-x),2*(ry-y),2*(sx-x),2*(sy-y)
+                local det=xx*yy-xy*yx
+                if finite(det) and math.abs(det)>1 then a={x,y,xx,xy,yx,yy,det,chartWorld,map} end
+            end
+        end
+        cache.chart=a or false
+    end
+    if not a or a[8]~=world or a[9]~=map then return end
+    local dx,dy=wx-a[1],wy-a[2]
+    local u=.25+(dx*a[6]-dy*a[5])/a[7]
+    local v=.25+(dy*a[3]-dx*a[4])/a[7]
+    if not finite(u) or not finite(v) then return end
+    local du,dv=u-math.max(0,math.min(1,u)),v-math.max(0,math.min(1,v))
+    local ox,oy=du*a[3]+dv*a[5],du*a[4]+dv*a[6]
+    if ox*ox+oy*oy<=650^2 then return u,v end
+end
+
 local function frac(x, y)
     return finite(x) and finite(y) and x >= 0 and x <= 1 and y >= 0 and y <= 1
 end
@@ -125,11 +177,14 @@ local function projectedPoint(d, i)
     if pt.map ~= map then
         local m = C_Map
         if not (CreateVector2D and m.GetWorldPosFromMapPos and m.GetMapPosFromWorldPos) then return end
-        local world, pos = m.GetWorldPosFromMapPos(pt.map, CreateVector2D(x, y))
+        local world,pos=call(m.GetWorldPosFromMapPos,pt.map,CreateVector2D(x,y))
         if not finite(world) or not ordinary(pos) or not pos then return end
-        local dstMap, dst = m.GetMapPosFromWorldPos(world, pos, map)
-        if dstMap ~= map or not ordinary(dst) or not dst then return end
-        x, y = dst:GetXY()
+        local dstMap,dst=call(m.GetMapPosFromWorldPos,world,pos,map)
+        if finite(dstMap) and dstMap==map and ordinary(dst) and dst then
+            x,y=call(dst.GetXY,dst)
+        else
+            x,y=AT.ProjectRouteZoneBoundary(world,pos,map,projected)
+        end
     end
     if not finite(x) or not finite(y) then return end
     projected[i] = {x=x,y=y}
@@ -293,12 +348,6 @@ local function walk(d, radius, yardRadius)
         end
     end
     return used > 0 and used or nil
-end
-
-local function call(fn,...)
-    if type(fn)~="function" then return end
-    local ok,a,b,c=pcall(fn,...)
-    if ok then return a,b,c end
 end
 
 local function pointOK(map,x,y)

@@ -41,7 +41,7 @@ local function outdoor(id)
     local kind=mapKind(id)
     return kind==(Enum and Enum.UIMapType and Enum.UIMapType.Zone or 3)
 end
-local function project(src,x,y,dst,allowSibling)
+local function project(src,x,y,dst,allowSibling,chart)
     if not finite(src) or not finite(x) or not finite(y) then return end
     if src==dst and not stitch and not mapWise then return x,y end
     if not (CreateVector2D and C_Map.GetWorldPosFromMapPos) then return end
@@ -78,9 +78,12 @@ local function project(src,x,y,dst,allowSibling)
     end
     local world, vec=C_Map.GetWorldPosFromMapPos(src,CreateVector2D(x,y))
     if not finite(world) or not clean(vec) or not vec then return end
-    local id,dstVec=C_Map.GetMapPosFromWorldPos(world,vec,dst)
-    if not finite(id) or id~=dst or not clean(dstVec) or not dstVec then return end
-    local a,b=dstVec:GetXY()
+    local id,dstVec=call(C_Map.GetMapPosFromWorldPos,world,vec,dst)
+    if not finite(id) or id~=dst or not clean(dstVec) or not dstVec then
+        if chart and dstKind==3 and AT.ProjectRouteZoneBoundary then return AT.ProjectRouteZoneBoundary(world,vec,dst,chart) end
+        return
+    end
+    local a,b=call(dstVec.GetXY,dstVec)
     if finite(a) and finite(b) then return a,b end
 end
 
@@ -312,7 +315,7 @@ function AT.RenderWorldQuestRoute(status,quest,snapshot)
             local p=points[i]
             if p==nil then
                 local pt=path.waypoints[i]
-                local u,v=project(pt.map,pt.x,pt.y,id,true)
+                local u,v=project(pt.map,pt.x,pt.y,id,true,points)
                 p=u and {u,v} or false
                 if p or not mapWise then points[i]=p end
             end

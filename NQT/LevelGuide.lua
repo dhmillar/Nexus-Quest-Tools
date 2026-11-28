@@ -404,7 +404,8 @@ local function chooseGiver(q,p,side,fallback)
         consider(AT.LevelGuideMoreOffers and AT.LevelGuideMoreOffers[q])
         if not known then known,ambiguous=prior,wasAmbiguous end
     end
-    if not known and AT.NQTDB then consider(AT.NQTDB.Starts[q]) end
+    local starts=AT.NQTDB and AT.NQTDB.Starts
+    if not known and starts then consider(starts[q]) end
     -- ForeverVerifiedEndpointReferences describes turn-ins, never quest starts.
     if known and not ambiguous then return known end
     local pickup=chooseItemStart(q,p,side)
@@ -527,7 +528,7 @@ function AT.BuildLevelGuide(playerLevel,size)
     end
     -- When the catalog has no assignable zone, an independently recorded start can place
     -- the quest in the browser. Never infer dungeon membership from a loot location.
-    local function recordedStartZone(q)
+    local function recordedStartZone(q,heldHere)
         local best,ambiguous,named
         local function record(map,x,y)
             if not positive(map) or not validPoint(x,y) then return end
@@ -546,6 +547,13 @@ function AT.BuildLevelGuide(playerLevel,size)
         end
         offers(AT.LevelGuideQuestGivers and AT.LevelGuideQuestGivers[q],4,2,3)
         offers(AT.LevelGuideMoreOffers and AT.LevelGuideMoreOffers[q],4,2,3)
+        if not named and heldHere and safe(Q and Q.IsOnQuest,q)==true then
+            -- These offers have an exact map/giver, but the cached quest can
+            -- omit eligibility details such as class. Resolve its location
+            -- when held, not as a new unconfirmed catalog recommendation.
+            local starts=AT.NQTDB and AT.NQTDB.Starts
+            offers(starts and starts[q],4,2,3)
+        end
         if not named then
             local item=AT.LevelGuideItemStarts and AT.LevelGuideItemStarts[q]
             for _,r in ipairs(item and item[2] or {}) do record(r[1],r[2],r[3]) end
@@ -599,7 +607,7 @@ function AT.BuildLevelGuide(playerLevel,size)
                 end
             end
             p=p or choose(liveStart) or area and categories[area] or choose(known[q]) or h and zones[h.destination]
-                or recordedStartZone(q)
+                or recordedStartZone(q,h~=nil)
             if p and (positive(qLevel) or h or liveStart) then
                 if not p.rangeKnown and positive(qLevel) then
                     p.lo=min(p.lo or qLevel,qLevel);p.hi=max(p.hi or qLevel,qLevel)

@@ -141,3 +141,33 @@ scope=false
 AT.RenderWorldQuestRoute("no_quest",nil,nil)
 assert(not native.shown and not overlay.shown)
 print("PASS a tracked map waypoint shares verified walking geometry on both world map styles, and never shows fallback bearing")
+
+
+-- A verified route across a stock-zone edge can be clipped at the edge
+-- even when native inverse coordinates refuse every off-chart sample.
+assert(loadfile("NQT/Route.lua"))("NQT",AT)
+AT.GetWalkingNavigationID=function()return 20,"order"end
+AT.IsQuestTurnInNavigation=function()return false end
+MapWiseAPI.UI.frame.hidden=true
+WorldMapFrame.IsVisible=function()return true end
+WorldMapFrame.ScrollContainer=nil
+local distant=0
+C_Map.GetWorldPosFromMapPos=function(m,p)
+ local a,b=p:GetXY()
+ return m==121 and distant or 0,CreateVector2D((a+(m==121 and 1 or 0))*1000,b*1000)
+end
+C_Map.GetMapPosFromWorldPos=function(_,p,m)
+ local a,b=p:GetXY()
+ if m==120 and a>=0 and a<=1000 then return m,CreateVector2D(a/1000,b/1000) end
+end
+local function crossing()
+ return {quest=20,path={waypoints={{map=120,x=.96,y=.7},{map=121,x=.04,y=.7}}},
+    segment=1,fraction=0}
+end
+AT.RenderWorldQuestRoute("routed",20,crossing())
+assert(layer.parts[1].shown and math.abs(layer.parts[1].x-96)<.00001
+ and math.abs(layer.parts[1].endX-100)<.00001,"clip verified line to the stock zone's edge")
+distant=1
+AT.RenderWorldQuestRoute("routed",20,crossing())
+assert(not layer.parts[1].shown,"do not project a line from a different world")
+print("PASS world-map route clips to the zone edge without a native inverse outside that zone")

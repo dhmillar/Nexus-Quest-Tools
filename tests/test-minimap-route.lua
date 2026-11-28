@@ -96,3 +96,42 @@ scope=false
 AT.RefreshQuestRoute()
 assert(AT.worldStatus=="no_quest" and not meter.shown)
 print("PASS selected waypoint route bypasses quest/task state, tracks around walls and hides when cleared or unsupported")
+
+
+-- The active graph route remains usable at the zone edge even when the
+-- native inverse won't expose an out-of-bounds map coordinate.
+scope=true
+x=.98;t=t+1
+local function vec(a,b)return {GetXY=function()return a,b end} end
+CreateVector2D=vec
+local world=0
+C_Map.GetWorldPosFromMapPos=function(m,p)
+ local a,b=p:GetXY()
+ return m==21 and world or 0,vec((a+(m==21 and 1 or 0))*1000,b*1000)
+end
+C_Map.GetMapPosFromWorldPos=function(_,p,m)
+ local a,b=p:GetXY()
+ if m==20 and a>=0 and a<=1000 then return m,vec(a/1000,b/1000) end
+end
+local endpoint={map=21,x=.06,y=.5}
+local function assignPath()
+ local path={waypoints={{map=20,x=.98,y=.5},endpoint},yards=80}
+ AT.GetFocusedQuestWalkingPath=function()return path,endpoint,"routed"end
+end
+assignPath()
+AT.RefreshQuestRoute()
+assert(AT.snapshot and AT.snapshot.path and AT.worldStatus=="routed" and not bearing.shown,
+ "verified cross-boundary path must be drawn without resorting to a bearing")
+world=1;assignPath()
+AT.RefreshQuestRoute()
+assert(not AT.snapshot,"never carry a line from a different world")
+world=0;local normal=C_Map.GetWorldPosFromMapPos
+C_Map.GetWorldPosFromMapPos=function(m,p)
+ local w,z=normal(m,p);local a,b=z:GetXY()
+ if m==20 and a==500 and b==500 then a=a+4 end
+ return w,vec(a,b)
+end
+assignPath()
+AT.RefreshQuestRoute()
+assert(not AT.snapshot,"nonaffine chart has no safe cross-boundary snap")
+print("PASS minimap keeps a verified walking line at a zone boundary, and rejects remote or non-affine geometry")

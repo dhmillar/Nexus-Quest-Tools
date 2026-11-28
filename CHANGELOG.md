@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.311 - 2026-11-28
+
+- Verified walking lines can reach the edge of the minimap and stock world map when the game's inverse projection refuses a point just outside that zone. The displayed section is clipped from existing same-world walking geometry, not a shortcut or a bearing.
+- Level Guide can show a held quest's exact NQTDB starter when it has no catalog zone. A Troubled Spirit now lists Sorek in Orgrimmar while retaining the Fallen Hero of the Horde as the separate turn-in.
+
 ## 1.5.310 - 2026-11-28
 
 - Routing: a long standalone walking search is no longer reset while it is still doing work. Truly stalled requests still retry, and changing the selected quest or waypoint still cancels stale work. Two exact bundled routes completed once each in a 15 fps scheduler test past the previous 35-second cutoff.
