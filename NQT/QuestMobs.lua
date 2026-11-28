@@ -27,7 +27,12 @@ end
 -- Exact Forever quest/item/merchant relationships. Not a general item-vendor
 -- table: a vendor who merely resells an item is not necessarily a quest source.
 local questVendors={
+    [116]={[1939]={465,"Barkeep Dobbins",1},[1941]={277,"Roberto Pupellyverbos",1},[1942]={274,"Barkeep Hann",1}},
     [288]={[2594]={1464,"Innkeeper Helbrek",1}},
+    [619]={[4595]={2832,"Nixxrax Fillamug",0}},
+    [79236]={[4600]={2832,"Nixxrax Fillamug",0}},
+    [81790]={[220168]={9499,"Plugger Spazzring",0}},
+    [97583]={[278265]={4612,"Boyle",2}},
     [8928]={[21939]={16015,"Vi'el",0}},
     [95988]={
         [271657]={260487,"Gritta Chumwater",0},
@@ -35,6 +40,7 @@ local questVendors={
         [271654]={260560,"Krikshank",0},
     },
 }
+local observedVendors={}
 local function allowedVendor(v)
     return v[3]==0 or UnitFactionGroup and UnitFactionGroup("player")== (v[3]==1 and "Alliance" or "Horde")
 end
@@ -42,25 +48,33 @@ function AT.GetQuestObjectiveVendor(qid,item)
     local locale=GetLocale and GetLocale()
     if locale~="enUS" and locale~="enGB" or not pos(qid) or not pos(item) then return end
     local vendors=questVendors[qid]
-    local v=vendors and vendors[item]
+    local observed=observedVendors[qid]
+    local v=observed and observed[item] or vendors and vendors[item]
     if not v or not allowedVendor(v) then return end
     local npc=mob(v[1])
     return v[2],v[1],npc and npc[5]
 end
--- Read just the quests for this merchant, not the whole player's log.
-function AT.GetNeededQuestVendorItems(merchantID)
-    local needed={}
-    if not pos(merchantID) or not C_QuestLog then return needed end
-    local function value(fn,...)
-        if type(fn)~="function" then return end
-        local ok,v=pcall(fn,...)
-        if ok and (not issecretvalue or not issecretvalue(v)) then return v end
-    end
-    for qid,items in pairs(questVendors) do
-        local matchesVendor
-        for _,v in pairs(items) do if v[1]==merchantID then matchesVendor=true;break end end
-        if matchesVendor and value(C_QuestLog.IsOnQuest,qid)==true and value(C_QuestLog.ReadyForTurnIn,qid)~=true then
-            local list=value(C_QuestLog.GetQuestObjectives,qid)
+-- The live merchant inventory is stronger evidence than an incomplete vendor
+-- database. Intersect stock with unfinished objectives by exact item ID.
+local function value(fn,...)
+    if type(fn)~="function" then return end
+    local ok,v=pcall(fn,...)
+    if ok and (not issecretvalue or not issecretvalue(v)) then return v end
+end
+function AT.GetNeededQuestVendorItems(stock,npcID,npcName)
+    local needed,changed={},false
+    local q=C_QuestLog
+    if not q or not public(stock,"table") or not next(stock) then return needed end
+    local rows=value(q.GetNumQuestLogEntries)
+    if not pos(rows) or rows>500 then return needed end
+    local mayLearn=pos(npcID) and public(npcName,"string") and #npcName>0 and #npcName<=100
+        and not npcName:find("[%c;%[%]|]")
+    for index=1,rows do
+        local info=value(q.GetInfo,index)
+        if public(info,"table") and public(info.isHeader,"boolean") and not info.isHeader
+            and pos(info.questID) and value(q.ReadyForTurnIn,info.questID)~=true then
+            local qid=info.questID
+            local list=value(q.GetQuestObjectives,qid)
             for _,o in ipairs(public(list,"table") and list or {}) do
                 if public(o,"table") and public(o.type,"string") and o.type=="item"
                     and public(o.finished,"boolean") and not o.finished then
@@ -68,16 +82,22 @@ function AT.GetNeededQuestVendorItems(merchantID)
                     if not pos(item) and public(o.text,"string") then
                         item=value(AT.ResolveRankQuestObjectiveItem,qid,o,o.text)
                     end
-                    if pos(item) and items[item] then
-                        -- Use the same exact item/merchant and faction rule as the quest row.
-                        local vendor=items[item]
-                        if vendor[1]==merchantID and allowedVendor(vendor) then needed[item]=true end
+                    if pos(item) and stock[item]==true then
+                        needed[item]=true
+                        if mayLearn then
+                            local current=observedVendors[qid]
+                            if not current then current={};observedVendors[qid]=current end
+                            local row=current[item]
+                            if not row or row[1]~=npcID or row[2]~=npcName then
+                                current[item]={npcID,npcName,0};changed=true
+                            end
+                        end
                     end
                 end
             end
         end
     end
-    return needed
+    return needed,changed
 end
 local function killSubject(label)
     for _,verb in ipairs({"kill","slay","defeat","destroy"}) do

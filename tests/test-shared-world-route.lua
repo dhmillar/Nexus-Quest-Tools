@@ -63,8 +63,8 @@ local now=1
 function GetTime()return now end
 assert(loadfile("NQT/Walking.lua"))("NQT",AT)
 local result,selected,status=AT.GetFocusedQuestWalkingPath(quest,player,1000,1000)
-assert(result and result.navVersion=="spf" and #result.waypoints==701 and selected==goal and status=="routed")
-assert(spf.started==1 and road.started==0)
+assert(result and result.navVersion=="road" and #result.waypoints==701 and selected==goal and status=="routed")
+assert(spf.started==0 and road.started==1)
 assert(loadfile("NQT/WorldRoute.lua"))("NQT",AT)
 continent=true
 AT.RenderWorldQuestRoute("routed",quest,{path=result,selected=goal,quest=quest,segment=1,fraction=.25})
@@ -74,11 +74,12 @@ assert(segments[1].start[1]>120,"trim already-walked part of the first segment")
 visible=false
 AT.RenderWorldQuestRoute("routed",quest,{path=result,selected=goal,quest=quest,segment=1,fraction=0})
 assert(not overlay.visible)
-AT.CancelQuestWalking()
-spf.unavailable=true
-now=2
-assert(not AT.GetFocusedQuestWalkingPath(quest,player,1000,1000))
-now=3
-local fallback=AT.GetFocusedQuestWalkingPath(quest,player,1000,1000)
-assert(fallback and fallback.navVersion=="road" and road.started==1,"back off an unavailable preferred provider")
-print("PASS preferred Shortest Path Forever API, fallback solver, full 700-segment cross-zone world route, moving start and hidden map")
+
+visible=true
+AT.RenderWorldQuestRoute("nodata",quest,{quest=quest,bearing=true,from=player,target=goal})
+assert(overlay.visible and segments[1].visible and not segments[2].visible)
+assert(math.abs(segments[1].finish[1]-810)<.00001,"shared bearing projects across zones")
+AT.RenderWorldQuestRoute("arrival",quest,nil)
+assert(not overlay.visible)
+assert(spf.started==0,"do not call the external provider even when installed")
+print("PASS standalone road provider, full cross-zone walking path, and shared amber bearing")

@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.5.246 - 2026-11-28
+
+- Both maps show a solid amber **Direct Bearing Only** line when NQT can locate you and the tracked quest but has no walking path. Available road routes take priority and stay green for turn-ins and yellow for objectives.
+- Quest routing uses NQT's bundled road data without connecting to Shortest Path Forever. This release does not include the local terrain test packs.
+- Rank Quest now checks the merchant's real stock against unfinished item objectives by exact item ID. The gold border and exclamation point no longer depend on the seller being in the bundled database.
+- Added Nixxrax Fillamug for Cherry Grog in Cherry for Your Thoughts?, plus several other quest-seller entries. Rank Quest can also show a vendor confirmed by the open merchant window for the rest of the session.
+- No purchase is made automatically. Completed items and buyback listings are not highlighted.
+
 ## 1.5.243
 
 - Added **General > Vendor Icons**, on by default. Large overhead icons distinguish merchants, reagents, ammo and repair, plus class and profession trainers, on visible NPC nameplates. No changes to your nameplate settings.

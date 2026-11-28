@@ -321,26 +321,33 @@ local function refreshMerchantArt()
     local frame=_G.MerchantFrame
     if not frame or not call(frame.IsShown,frame) or frame.selectedTab~=1
         or not AT.db or AT.db.enabled==false then return end
+    local count=call(GetMerchantNumItems)
+    if not finite(count) or count<1 or count>500 then return end
+    local stock,byIndex={},{}
+    for index=1,count do
+        local item=call(GetMerchantItemID,index)
+        if not finite(item) or item<=0 then
+            local token=itemToken(call(GetMerchantItemLink,index))
+            item=token and tonumber(token:match("%d+"))
+        end
+        if finite(item) and item>0 and item%1==0 then stock[item],byIndex[index]=true,item end
+    end
     local guid=call(UnitGUID,"npc")
     local npc=readable(guid,"string") and tonumber(guid:match("^Creature%-%d+%-%d+%-%d+%-%d+%-(%d+)%-"))
-    if not npc then return end
-    local needed=call(AT.GetNeededQuestVendorItems,npc)
+    local needed,changed=call(AT.GetNeededQuestVendorItems,stock,npc,call(UnitName,"npc"))
     if not needed or not next(needed) then return end
-    local count=call(GetMerchantNumItems)
-    if not finite(count) or count<1 then return end
     local perPage=MERCHANT_ITEMS_PER_PAGE
-    if not finite(perPage) or perPage<1 or perPage>50 then return end
-    for slot=1,perPage do
-        local button=_G["MerchantItem"..slot.."ItemButton"]
-        local index=button and call(button.GetID,button)
-        if finite(index) and index>=1 and index<=count and call(button.IsShown,button) then
-            local item=call(GetMerchantItemID,index)
-            if not finite(item) or item<=0 then
-                local token=itemToken(call(GetMerchantItemLink,index))
-                item=token and tonumber(token:match("%d+"))
-            end
-            if item and needed[item] then drawMerchantBox(button) end
+    if finite(perPage) and perPage>=1 and perPage<=50 then
+        for slot=1,perPage do
+            local button=_G["MerchantItem"..slot.."ItemButton"]
+            local index=button and call(button.GetID,button)
+            local item=finite(index) and byIndex[index]
+            if item and needed[item] and call(button.IsShown,button) then drawMerchantBox(button) end
         end
+    end
+    if changed and AT.RefreshQuestHUD then
+        if C_Timer and C_Timer.After then C_Timer.After(0,AT.RefreshQuestHUD)
+        else AT.RefreshQuestHUD() end
     end
 end
 local function bindMerchantArt()

@@ -28,7 +28,7 @@ function GetTime()return t end
 function GetTaskInfo()return inside end
 function AT.GetQuestNavigationID() if active then return 981,"test" end end
 function AT.GetFocusedQuestRoutePoint()return 981,20,.75,.5 end
-function AT.RenderWorldQuestRoute(state) AT.worldStatus=state end
+function AT.RenderWorldQuestRoute(state,quest,snapshot) AT.worldStatus,AT.snapshot=state,snapshot end
 assert(loadfile("NQT/Route.lua"))("NQT",AT)
 AT.InitQuestRoute()
 local meter,bearing
@@ -39,6 +39,12 @@ for _,f in ipairs(frames) do
 end
 assert(meter and meter.shown and bearing and bearing.shown,"keep yards and directional guidance")
 assert(not bearing.dashes and bearing.core.x==0 and bearing.core.y==0 and bearing.core.endX>0, "render one uninterrupted bearing from center")
+assert(bearing.label.text=="DIRECT BEARING ONLY" and AT.snapshot.bearing)
+assert(AT.snapshot.from.x==.5 and AT.snapshot.target.x==.75)
+function GetCVarBool() return true end
+AT.RefreshQuestRoute()
+assert(not bearing.shown and AT.snapshot.bearing, "missing heading does not suppress world-map bearing")
+GetCVarBool=nil
 x=.55;t=t+1;AT.RefreshQuestRoute()
 assert(meter.label.text=="200 yd" and bearing.shown)
 inside=true;t=t+1;AT.RefreshQuestRoute()

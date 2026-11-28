@@ -34,11 +34,7 @@ local function apiForWalking(from, quest)
         local ok, nav = pcall(api.NavVersion)
         if ok and type(nav) == "string" and nav ~= "" then return api, nav, road end
     end
-    -- Use SPF's public walking solver first. Do not start, stop, or replace
-    -- the player's own journey; NQT owns a separate request and both overlays.
-    local api,nav,road=checked(ShortestPathForever and ShortestPathForever.API,false)
-    if api then return api,nav,road end
-    api,nav,road=checked(AT.GetRoadWalkingAPI and AT.GetRoadWalkingAPI(from),true)
+    local api,nav,road=checked(AT.GetRoadWalkingAPI and AT.GetRoadWalkingAPI(from),true)
     return api,nav,road,lastFailure
 end
 

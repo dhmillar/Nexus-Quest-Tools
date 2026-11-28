@@ -118,12 +118,9 @@ local function line(i,w,h,ax,ay,bx,by,isRoute,turnIn,artScale)
             region:SetColorTexture(1,.85,.13,1)
             glow:SetColorTexture(1,.64,.08,.34)
         end
-    elseif turnIn then
-        region:SetColorTexture(.58,.92,.46,1)
-        glow:SetColorTexture(.25,.64,.25,.26)
     else
-        region:SetColorTexture(1,.81,.38,1)
-        glow:SetColorTexture(1,.52,.10,.28)
+        region:SetColorTexture(1,.66,.29,1)
+        glow:SetColorTexture(1,.47,.12,.28)
     end
     glow:SetStartPoint("TOPLEFT",canvas,x*w,-y*h)
     glow:SetEndPoint("TOPLEFT",canvas,u*w,-v*h)
@@ -318,8 +315,15 @@ function AT.RenderWorldQuestRoute(status,quest,snapshot)
     else
         projectedPath,projectedMap,points=nil,nil,nil
     end
-    local real=used>0
-    if not real then
+    if used==0 and snapshot and snapshot.quest==quest and snapshot.bearing then
+        local from,dst=snapshot.from,snapshot.target
+        local ax,ay=project(from.map,from.x,from.y,id,true)
+        local bx,by=project(dst.map,dst.x,dst.y,id,true)
+        if ax and bx and line(1,w,h,ax,ay,bx,by,false,turnIn,artScale) then
+            used,x,y,text=1,bx,by,"DIRECT BEARING ONLY  |  NO WALKING PATH"
+        end
+    end
+    if used==0 then
         local source,provenance
         x,y,source,provenance=objective(quest,id)
         if x then
@@ -358,7 +362,9 @@ function AT.RenderWorldQuestRoute(status,quest,snapshot)
     else pin:Hide() end
     if text then
         legend:SetText(text)
-        if turnIn then legend:SetTextColor(.42,1,.38) else legend:SetTextColor(1,.85,.30) end
+        if text:find("DIRECT BEARING",1,true) or text:find("NOT A WALKING ROUTE",1,true) then
+            legend:SetTextColor(1,.66,.29)
+        elseif turnIn then legend:SetTextColor(.42,1,.38) else legend:SetTextColor(1,.85,.30) end
         overlay:Show()
     else
         overlay:Hide()

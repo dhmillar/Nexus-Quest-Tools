@@ -81,7 +81,7 @@ AT.GetQuestTurnInPoint=function()return 121,.2,.35 end
 C_Map.GetPlayerMapPosition=function()return CreateVector2D(.2,.2) end
 AT.RenderWorldQuestRoute("planning",20,nil)
 assert(overlay.shown and overlay.parts[1].shown and not overlay.parts[2].shown)
-assert(math.abs(overlay.parts[1].endX-50)<.00001 and overlay.parts[1].color[2]==.92)
+assert(math.abs(overlay.parts[1].endX-50)<.00001 and overlay.parts[1].color[2]==.66)
 assert(overlay.legendText=="ESTIMATED DIRECTION  |  NOT A WALKING ROUTE")
 AT.RenderWorldQuestRoute("no_quest",nil,nil)
 assert(not overlay.shown)

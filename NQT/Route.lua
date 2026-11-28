@@ -398,7 +398,7 @@ local function yardEstimate(meta)
     else
         return
     end
-    return math.sqrt(dx*dx+dy*dy),dx,dy,source
+    return math.sqrt(dx*dx+dy*dy),dx,dy,{map=source,x=px,y=py}
 end
 local function setHudLabel(region,text)
     if region.lastATText~=text then region:SetText(text);region.lastATText=text end
@@ -488,19 +488,26 @@ local function makeBearing()
     dotFrame.core=dotFrame:CreateLine(nil,"OVERLAY")
     dotFrame.core:SetThickness(1.4)
     dotFrame:Hide()
+    if dotFrame.CreateFontString then
+        local label=dotFrame:CreateFontString(nil,"OVERLAY","GameFontNormalSmall")
+        label:SetPoint("BOTTOM",dotFrame,"BOTTOM",0,17)
+        label:SetTextColor(1,.66,.29,.96)
+        label:SetText("DIRECT BEARING ONLY")
+    end
     bearing=dotFrame
 end
 
 local function drawBearing()
-    if not bearing then bearingStatus="overlay unavailable"; return end
-    bearing:Hide()
+    if bearing then bearing:Hide() end
     bearingStatus="hidden (" .. (routeStatus or "no status") .. ")"
     if routeStatus=="arrival" or routeStatus=="interior" or routeStatus=="disabled"
         or routeStatus=="routed" or routeStatus=="road" or not finite(statusQuest) then return end
     local m=metaFor(statusQuest)
     if not m.map then bearingStatus="no objective coordinates"; return end
-    local distance,dx,dy=yardEstimate(m)
+    local distance,dx,dy,origin=yardEstimate(m)
     if not finite(distance) or distance<=0 then bearingStatus="no shared outdoor map position"; return end
+    mapRoute={quest=statusQuest,bearing=true,from=origin,target={map=m.map,x=m.x,y=m.y}}
+    if not bearing then bearingStatus="overlay unavailable"; return end
     local rotating=rotateEnabled()
     if not ordinary(rotating) then bearingStatus="rotation setting protected"; return end
     local heading=0
@@ -514,8 +521,7 @@ local function drawBearing()
     local w,h=Minimap:GetWidth(),Minimap:GetHeight()
     if not finite(w) or not finite(h) or math.min(w,h)<42 then return end
     local r=math.min(w,h)*.42
-    local display=math.min(.93*r, distance/viewYards()*r)
-    if display<(scopeTurnIn and 2 or 8) then bearingStatus="objective very close"; return end
+    local display=math.min(.93*r, math.max(6,distance/viewYards()*r))
     local east,north=dx,-dy
     local vx=(east*math.cos(heading)+north*math.sin(heading))/distance
     local vy=(-east*math.sin(heading)+north*math.cos(heading))/distance
@@ -523,13 +529,12 @@ local function drawBearing()
     local px,py=display*vx,display*vy
     for i,region in ipairs({bearing.glow,bearing.core}) do
         local alpha=i==1 and .22 or .84
-        if scopeTurnIn then region:SetColorTexture(.38,1,.33,alpha)
-        else region:SetColorTexture(1,.87,.24,alpha) end
+        region:SetColorTexture(1,.66,.29,alpha)
         region:SetStartPoint("CENTER",bearing,0,0)
         region:SetEndPoint("CENTER",bearing,px,py)
         region:Show()
     end
-    bearingStatus="estimated direction"
+    bearingStatus="direct bearing only"
     bearing:Show()
 end
 
