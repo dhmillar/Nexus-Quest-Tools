@@ -72,6 +72,8 @@ function components({C,nx,ny,tiles}){
  }
  return {packed,valid,total,largest};
 }
+module.exports={decode};
+if(require.main===module){
 let lines=["-- SPDX-License-Identifier: GPL-3.0-or-later","-- Reachability labels derived from NQTDB's verified dry edges.","local _,AT=...","AT.NQTDB.DryComponents={"];
 for(const w of [0,1,2991]){
  const fn=w===2991?"NQTDBRouteTiles.lua":"NQTDBRouteWorld"+w+".lua";
@@ -82,3 +84,4 @@ for(const w of [0,1,2991]){
 }
 lines.push("}","");
 fs.writeFileSync(output,lines.join("\n"));
+}

@@ -191,11 +191,47 @@ local function search(D,sx,sy,tx,ty,callback,estimateOnly,goals)
             end
         elseif component(D,tx,ty)==group then limit=KNOWN_CONNECTED_VISITS end
     end
+    local atlas=AT.NQTDB and AT.NQTDB.DryLandmarks
+    atlas=atlas and atlas[D.world]
+    local destinations,regionScores={},{}
+    local function region(x,y)
+        return floor(x/atlas.step)*atlas.groups+floor(y/atlas.step)+1
+    end
+    if atlas and group==atlas.component then
+        local function include(x,y)
+            if component(D,x,y)~=group then atlas=nil;return end
+            local r=atlas.ranges[region(x,y)]
+            if not r then atlas=nil;return end
+            for i=1,#r,2 do
+                destinations[i]=destinations[i] and math.min(destinations[i],r[i]) or r[i]
+                destinations[i+1]=destinations[i+1] and math.max(destinations[i+1],r[i+1]) or r[i+1]
+            end
+        end
+        if goals then for _,g in ipairs(goals) do
+            include(g[1],g[2]);if not atlas then break end
+        end
+        else include(tx,ty) end
+    else atlas=nil end
+    local function lowerBound(x,y)
+        if not atlas then return 0 end
+        local k=region(x,y)
+        if regionScores[k] then return regionScores[k] end
+        local r=atlas.ranges[k]
+        local best=0
+        if r then for i=1,#destinations,2 do
+            best=math.max(best,destinations[i]-r[i+1],r[i]-destinations[i+1])
+        end end
+        -- Distances were computed with no greater costs; interval
+        -- separation cannot exceed the true cost to any accepted goal.
+        best=best*1000
+        regionScores[k]=best
+        return best
+    end
     -- The octile distance to the bounding box never exceeds the
     -- shortest route to any goal, even if some of the goals are isolated.
     local function heuristic(x,y)
         local X,Y=math.max(lowX-x,0,x-highX),math.max(lowY-y,0,y-highY)
-        return UNIT*math.max(X,Y)+(DIAG-UNIT)*math.min(X,Y)
+        return math.max(lowerBound(x,y),UNIT*math.max(X,Y)+(DIAG-UNIT)*math.min(X,Y))
     end
     local source=encode(sx,sy)
     local g,parents,heap={[source]=0},{},{}

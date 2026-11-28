@@ -29,3 +29,5 @@ node tools/build-nqtdb-dry-components.cjs NQT NQT/NQTDBDryComponents.lua
 ```
 
 `tools/inspect-spf-nav.cjs` audits packed stream counts without adding unchecked upper-layer steps or water paths.
+
+The landmark table in NQTDBDryLandmarks.lua derives distance bounds from the same NQTDB graph, rather than storing upstream preplanned routes. Rebuild it with node tools/build-nqtdb-landmark-pilot.cjs NQT NQT/NQTDBDryLandmarks.lua. Region intervals use conservative edge costs and only guide planning inside their indexed component.

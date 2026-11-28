@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.278 - 2026-11-28
+
+- Added distance bounds for long walking routes on the largest dry areas of Eastern Kingdoms and Kalimdor. Search still follows only verified terrain edges.
+- The 4,983-yard regression route retains the same walking distance while using 249 timer slices instead of 382 in offline testing.
+
 ## 1.5.277 - 2026-11-28
 
 - Preserve established routes through verified narrow dry passages instead of hiding the line mid-walk.
