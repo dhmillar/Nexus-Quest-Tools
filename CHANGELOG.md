@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.307 - 2026-11-28
+
+- Level Guide: no longer recommend explicitly tagged internal placeholder quests from the historical catalog alone. Quests held by the character or confirmed by a live offer are still shown.
+- NQTDB: added a reproducible current-build audit for quest identity, level, availability masks, area, and item counts across both shipped quest datasets.
+
 ## 1.5.306 - 2026-11-28
 
 - Routing: plan or measure a terrain destination only once when multiple objective pins fall in the same walkable cell. Keep each original pin's distance and the existing first-match tie order. A bundled terrain benchmark kept the same winning route while reducing search slices from 370 to 114 and repeated distance estimates from 2,296 to 468.

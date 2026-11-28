@@ -22,6 +22,15 @@ local function positive(n) return number(n) and n>0 end
 local function lower(s) return (strlower or string.lower)(s) end
 local function key(s) return lower(s):gsub("’","'"):gsub("^the%s+",""):gsub("%s+$","") end
 local function validName(s) return plain(s) and type(s)=="string" and #s>0 end
+local internalQuestTags={nyi=true,unused=true,test=true,txt=true,dnt=true,ph=true,deprecated=true}
+local function plausibleQuest(q,title)
+    if q<=3 then return false end
+    if not validName(title) then return true end
+    local name=lower(title):match("^%s*(.*)$")
+    local prefix=name:match("^<([%a]+)>") or name:match("^%[([%a]+)%]")
+    return not (internalQuestTags[prefix] or name:match("^test quest") or name:match("^qa[%s:_]")
+        or name:match("^unused[:%s]") or name:match("^deprecated[:%s]"))
+end
 -- AreaTable ID, UI map ID, guide band, English fallback. The bands are
 -- planning ranges, not access restrictions.
 local classicZones={
@@ -600,9 +609,9 @@ function AT.BuildLevelGuide(playerLevel,size)
                 local factionRule=dungeonFaction[q]
                 if factionRule and factionRule~="Both" and factionRule~=faction and side>0 then factionOkay=false end
                 local eligible=not blocked(q)
-                local dev=d and lower(d[9])
-                local plausible=not dev or not (dev:match("^test quest") or dev:match("^qa[%s:_]") or dev:match("^unused[:%s]")
-                    or dev:match("^deprecated[:%s]") or q<=3)
+                -- Static cache rows can include explicitly marked internal
+                -- quests. Only a real held quest or live starting POI wins.
+                local plausible=plausibleQuest(q,d and d[9])
                 if isDone~=true and factionOkay and (h or liveStart or raceOkay and eligible and plausible) then
                     local status=h and ((ready[q] or safe(Q and Q.ReadyForTurnIn,q)==true) and "Turn in" or "In log")
                         or liveStart and "Pick up" or "In range"
