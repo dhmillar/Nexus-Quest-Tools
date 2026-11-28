@@ -294,3 +294,9 @@ Rank Quest prioritizes observed Forever rates, then published references for exa
 Performance: coalesces routine quest-watch updates and native map pin refresh bursts, and avoids scanning unopened quest starter candidates or the full loot-item catalog during routine quest progress.
 
 If the built-in tracker has no quest item button, Rank Quest can show a held item with an on-use spell when the game links the item to that exact active quest.
+
+### Classic drop-rate fallback
+
+Rank Quest > **Use Classic drop rates**, enabled by default, shows Classic estimates only when no Forever rate is available, and only for the same quest ID and required item ID. Turning off **Show item drop rates** hides all percentages. A Classic estimate can differ from the current Forever rate.
+
+`ClassicQuestDropReferences.lua` is an independently sourced numeric data table adapted from [CMaNGOS Classic-DB](https://github.com/cmangos/classic-db/tree/04bc47631b680b99cdfeee88488dafb5e871c207) under its [GPL-3.0 terms](ClassicDB.LICENSE.md), with the original [copyright notices](ClassicDB.COPYRIGHT.md). The table contains no upstream quest text, names, or comments. Rebuild it with `node tools/import-classic-drop-references.cjs classic.sql.gz NQT/ForeverQuestFacts.lua NQT/ClassicQuestDropReferences.lua` and the [pinned upstream source archive](https://github.com/cmangos/classic-db/blob/04bc47631b680b99cdfeee88488dafb5e871c207/Full_DB/ClassicDB_1_12_1_z2815.sql.gz). Only direct, ungrouped, unconditional loot rows contribute percentages; grouped and reference loot rolls are not estimated.

@@ -1466,6 +1466,13 @@ local function objectiveDropSuffix(qid,item)
         local ref=AT.ForeverReportedQuestDropReferences and AT.ForeverReportedQuestDropReferences[qid]
         local row=ref and ref[item]
         if row then return " ("..fmtDrop(row[2]/100)..")" end
+        local classic=AT.db.rankQuestLegacyDropRates~=false and AT.ClassicQuestDropReferences
+        local ref=classic and classic[qid]
+        local rate=ref and ref[item]
+        if rate then
+            local a,b=fmtDrop(rate[1]),fmtDrop(rate[2])
+            return " ("..(a==b and a or a.."\226\128\147"..b)..")"
+        end
         return ""
     end
     local a,b=fmtDrop(low),fmtDrop(high)

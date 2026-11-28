@@ -357,7 +357,7 @@ local function buildPanel()
     option(rank, "questStartItemAlert", "Quest-starting item popup", -170, "Shows the icon for a newly acquired quest-starting item above your character. Click to open the quest offer, or right-click to dismiss.")
     option(rank, "rankQuestPartyAnnouncements", "Announce quest completion in party chat", -198,
         "Announces any completed quest to your party, with your Primary marker in front. Also shows kill and collection milestones on unfinished quests. On by default.")
-    makeText(rank, "GameFontHighlightSmall", -226, "Auto Focus compares ready turn-ins and unfinished quests by distance.")
+    option(rank, "rankQuestLegacyDropRates", "Use Classic drop rates", -226, "Fill gaps with estimates for matching Classic quests and items. Forever data takes priority. Requires Show item drop rates.")
     makeText(rank, "GameFontHighlightSmall", -265, "Right-click a quest to exclude it from automatic tracking.")
     makeText(rank, "GameFontDisableSmall", -286, "Ctrl-click quest titles to number them. /at order lists them.")
 

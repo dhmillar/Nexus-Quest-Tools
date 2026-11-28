@@ -30,6 +30,7 @@ local defaults = {
     showQuestMapPins = true,
     showObservedQuestGivers = false,
     rankQuestDropRates = true,
+    rankQuestLegacyDropRates = true,
     questLeftoverMarks = false,
     questStartItemAlert = true,
     questHUDCollapsed = false,

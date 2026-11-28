@@ -510,6 +510,35 @@ do
         assert(not find("Acquired in Stranglethorn").objectives[1].text:find("63%",1,true),"do not show solo samples as party rates")
         AT.ForeverPublicDropWindows=oldPublic
 
+        local classic={}
+        assert(loadfile("NQT/ClassicQuestDropReferences.lua"))("NQT",classic)
+        assert(classic.ClassicQuestDropReferences[2870][9248][1]==100)
+        assert(classic.ClassicQuestDropReferences[22][723][2]>37)
+        local prevClassic=AT.ClassicQuestDropReferences
+        AT.ClassicQuestDropReferences={[12]={[990005]={42.9,42.9}}}
+        C_QuestLog.GetQuestObjectives=function(q)
+            if q==12 or q==11 then return {{type="item",itemID=990005,text="Test sample "..q..": 0/5"}} end
+            return getObjectives(q)
+        end
+        local function text12()
+            AT.RefreshQuestHUD()
+            return find("Acquired in Stranglethorn").objectives[1].text
+        end
+        assert(text12():find("(43%)",1,true),"unconfigured users see Classic fallback")
+        assert(not find("A flight to Duskwood").objectives[1].text:find("43%",1,true),"do not cross quest IDs")
+        AT.db.rankQuestLegacyDropRates=false
+        assert(not text12():find("43%",1,true),"Classic setting off")
+        AT.db.rankQuestLegacyDropRates=true
+        AT.db.rankQuestDropRates=false
+        assert(not text12():find("43%",1,true),"master off")
+        AT.db.rankQuestDropRates=nil
+        AT.ForeverPublicDropWindows={[12]={[990005]={[1]={.19,.19}}}}
+        assert(text12():find("(19%)",1,true),"Forever measurement wins")
+        AT.ForeverPublicDropWindows=oldPublic
+        AT.ClassicQuestDropReferences=prevClassic
+        AT.db.rankQuestLegacyDropRates=nil
+
+
         AT.ForeverEarlyDropSamples={[12]=early[596]}
         C_QuestLog.GetQuestObjectives=function(q)
             if q==12 or q==11 then return {{type="item",itemID=3915,text="Bloody Bone Necklace: 0/25"}} end

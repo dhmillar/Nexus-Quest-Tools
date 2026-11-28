@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.259 - 2026-11-28
+
+- Restores **Use Classic drop rates** in Rank Quest for all players, enabled by default.
+- Adds a Classic fallback for 1,579 exact quest/item pairs. Available Forever observations still take priority, and the main item drop-rate switch still controls all percentages.
+
 ## 1.5.258 - 2026-11-28
 
 - Rank Quest detects usable items that the game associates with an active quest even if no default quest item button exists. Items appear after loading their spell data and disappear after they leave the bag.
