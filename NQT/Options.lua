@@ -52,6 +52,7 @@ local function updateState()
     if AT.RefreshHunterDeadzone then AT.RefreshHunterDeadzone() end
     if AT.RefreshPetBar then AT.RefreshPetBar() end
     if AT.RefreshVendorIcons then AT.RefreshVendorIcons() end
+    if AT.RefreshFriendlyDisplay then AT.RefreshFriendlyDisplay() end
     if AT.RefreshSmartBuff then AT.RefreshSmartBuff() end
     refreshPanel()
     if minimapButton then
@@ -337,7 +338,36 @@ local function buildPanel()
     makeText(classes,"GameFontHighlightSmall",-79,"One cast per press. Hunters: Shift + macro for Monkey in combat.")
     makeText(classes,"GameFontDisableSmall",-325,"A slim overhead bar shows the health of your active pet.")
     option(general, "vendorIcons", "Vendor Icons", -114, "Show large icons above nearby vendors and trainers when WoW exposes their nameplates. Does not change nameplate settings.")
-    status = makeText(general, "GameFontHighlightSmall", -153, "")
+    option(general, "friendlyNames", "Friendly Names", -148,
+        "Use a clean, class-colored name above friendly player characters. Only replaces nameplates WoW allows NQT to change.")
+    option(general, "friendlyBars", "Friendly Bars", -194,
+        "Use a slim, class-colored health bar above friendly player characters. Enable Friendly Names as well to show both.")
+    local function friendlySlider(key,caption,y,minimum,maximum,step,fallback,suffix)
+        local value=makeText(general,"GameFontHighlightSmall",y,caption)
+        value:ClearAllPoints();value:SetPoint("TOPLEFT",300,controlY(y));value:SetWidth(225)
+        local slider=CreateFrame("Slider",nil,general,"BackdropTemplate")
+        if not slider.SetOrientation then return end
+        slider:SetOrientation("HORIZONTAL")
+        slider:SetPoint("TOPLEFT",300,controlY(y-18));slider:SetSize(220,11)
+        surface(slider,.09,.075,.055)
+        slider:SetThumbTexture("Interface/Buttons/UI-SliderBar-Button-Horizontal")
+        slider:SetMinMaxValues(minimum,maximum);slider:SetValueStep(step)
+        if slider.SetObeyStepOnDrag then slider:SetObeyStepOnDrag(true) end
+        local function formatValue(v) value:SetText(caption..": "..math.floor(v+.5)..suffix) end
+        local start=math.min(maximum,math.max(minimum,tonumber(AT.db[key]) or fallback))
+        slider:SetValue(start);formatValue(start)
+        slider:SetScript("OnValueChanged",function(_,v)
+            v=math.floor(v+.5)
+            formatValue(v)
+            if AT.db[key]==v then return end
+            AT.db[key]=v
+            if AT.RefreshFriendlyDisplay then AT.RefreshFriendlyDisplay() end
+        end)
+    end
+    friendlySlider("friendlyNameSize","Name size",-146,10,26,1,16," pt")
+    friendlySlider("friendlyBarScale","Bar size",-192,60,160,5,100,"%")
+    makeText(general,"GameFontDisableSmall",-230,"These replace friendly player plates outdoors only. Enemy and NPC plates stay unchanged.")
+    status = makeText(general, "GameFontHighlightSmall", -265, "")
     status:SetTextColor(.86,.72,.46)
 
     option(macro, "quietTarget", "Mute target macro sounds", -2)

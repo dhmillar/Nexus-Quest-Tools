@@ -10,6 +10,10 @@ local defaults = {
     reacquireEachPress = false,
     showQuestRoute = true,
     vendorIcons = true,
+    friendlyNames = false,
+    friendlyBars = false,
+    friendlyNameSize = 16,
+    friendlyBarScale = 100,
     hunterDeadzone = true,
     petBarEnabled = false,
     hunterDeadzoneX = 0,
@@ -120,6 +124,7 @@ loader:SetScript("OnEvent", function(self, event, arg)
         safeInit("Hunter Deadzone", AT.InitHunterDeadzone)
         safeInit("Pet Bar", AT.InitPetBar)
         safeInit("Vendor Icons", AT.InitVendorIcons)
+        safeInit("Friendly nameplates", AT.InitFriendlyDisplay)
         safeInit("Smart Buff", AT.InitSmartBuff)
         safeInit("Settings", AT.InitOptions)
     end

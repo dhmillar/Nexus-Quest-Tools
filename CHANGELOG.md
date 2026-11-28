@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.316 - 2026-11-28
+
+- General: added independent Friendly Names and Friendly Bars options for class-colored friendly player nameplates, with size sliders. Both off by default. NQT restores verified stock and attached third-party art when disabled and leaves enemies, NPCs, pets and restricted instance nameplates alone.
+
 ## 1.5.315 - 2026-11-28
 
 - Rank Quest: the Zones menu now includes Quest Items below the dungeon list. It shows quests linked to items in your carried bags, including collection items and ready-to-turn-in quests under Completed. The filter updates as items enter or leave your bags.
