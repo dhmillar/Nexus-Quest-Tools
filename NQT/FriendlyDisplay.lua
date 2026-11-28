@@ -109,9 +109,42 @@ local function fontSize(v)
     if not finite(v) then return 16 end
     return math.min(26,math.max(10,math.floor(v+.5)))
 end
-local function barSize(v)
-    if not finite(v) then return 100 end
-    return math.min(160,math.max(60,v))
+local function dimension(v,min,max,default)
+    if not finite(v) then return default end
+    return math.floor(math.min(max,math.max(min,v))+.5)
+end
+local function nameText(u)
+    local first,last=call(UnitName,u)
+    local full,ending=call(UnitFullName,u)
+    local function named(s) return type(s)=="string" and s:find("%S")~=nil end
+    -- The Forever client exposes a two-part name on ordinary unit queries.
+    -- Never add a duplicate surname if one API returned the assembled name.
+    if named(full) and full:find("%s") then return full end
+    if named(first) and first:find("%s") then return first end
+    if named(first) and named(last) and first~=last then return first.." "..last end
+    if named(full) and named(ending) and full~=ending then return full.." "..ending end
+    local shown=safe(GetUnitName,u,false)
+    if named(shown) and shown:find("%s") then return shown end
+    return first or full or shown
+end
+local function paintHealth(bar,u)
+    local hp,max=safe(UnitHealth,u),safe(UnitHealthMax,u)
+    if finite(hp) and finite(max) and max>0 then
+        bar:SetMinMaxValues(0,1)
+        bar:SetValue(math.max(0,math.min(1,hp/max)))
+        return true
+    end
+    if type(UnitHealthPercent)~="function" or not CurveConstants or not CurveConstants.ScaleTo100 then return false end
+    -- Use WoW's display API unchanged, just like Pet Bar. Never inspect or
+    -- do any Lua arithmetic on a restricted health value.
+    local success,painted=pcall(function()
+        local v=UnitHealthPercent(u,false,CurveConstants.ScaleTo100)
+        if plain(v) and not finite(v) then return false end
+        bar:SetMinMaxValues(0,100)
+        bar:SetValue(v)
+        return true
+    end)
+    return success and painted==true
 end
 local function attach(plate)
     local f=pools[plate]
@@ -158,13 +191,13 @@ local function update(u)
     local c=type(klass)=="string" and RAID_CLASS_COLORS and RAID_CLASS_COLORS[klass]
     if type(c)~="table" or not finite(c.r) or not finite(c.g) or not finite(c.b) then clear(u);return end
     local d=AT.db
-    local n=safe(UnitName,u)
-    local hp,max=safe(UnitHealth,u),safe(UnitHealthMax,u)
-    local names=d.friendlyNames==true and type(n)=="string" and n~=""
-    local bars=d.friendlyBars==true and finite(hp) and finite(max) and max>0
-    if not names and not bars then clear(u);return end
+    local n=d.friendlyNames==true and nameText(u)
+    local names=type(n)=="string" and n~=""
+    if not names and d.friendlyBars~=true then clear(u);return end
     local f=attach(plate)
     if not f then clear(u);return end
+    local bars=d.friendlyBars==true and paintHealth(f.bar,u)
+    if not names and not bars then clear(u);return end
     if visual[u] and visual[u]~=f then clear(u) end
     visual[u],current[u],f.owner=f,true,u
     if names then
@@ -174,10 +207,8 @@ local function update(u)
         f.name:SetPoint("BOTTOM",bars and f.bar or f,bars and "TOP" or "BOTTOM",0,bars and 2 or 0)
     end
     if bars then
-        local scale=barSize(d.friendlyBarScale)/100
-        f.bar:SetSize(64*scale,9*scale)
+        f.bar:SetSize(dimension(d.friendlyBarWidth,32,160,64),dimension(d.friendlyBarHeight,4,26,9))
         f.bar:SetStatusBarColor(c.r,c.g,c.b)
-        f.bar:SetValue(math.max(0,math.min(1,hp/max)))
     end
     f.name:SetShown(names);f.bar:SetShown(bars);f:Show()
     maskPlate(plate,u)

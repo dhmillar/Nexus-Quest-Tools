@@ -13,7 +13,8 @@ local defaults = {
     friendlyNames = false,
     friendlyBars = false,
     friendlyNameSize = 16,
-    friendlyBarScale = 100,
+    friendlyBarWidth = 64,
+    friendlyBarHeight = 9,
     hunterDeadzone = true,
     petBarEnabled = false,
     hunterDeadzoneX = 0,
@@ -101,6 +102,12 @@ loader:SetScript("OnEvent", function(self, event, arg)
         if type(AutoTrackCharDB) ~= "table" then AutoTrackCharDB = {} end
         AT.db, AT.char = AutoTrackDB, AutoTrackCharDB
         AT.db.questHUDCompact = nil
+        local oldBarScale = AT.db.friendlyBarScale
+        if type(oldBarScale)=="number" and oldBarScale>=60 and oldBarScale<=160 then
+            if type(AT.db.friendlyBarWidth)~="number" then AT.db.friendlyBarWidth=math.floor(64*oldBarScale/100+.5) end
+            if type(AT.db.friendlyBarHeight)~="number" then AT.db.friendlyBarHeight=math.floor(9*oldBarScale/100+.5) end
+        end
+        AT.db.friendlyBarScale=nil
         for k, v in pairs(defaults) do
             if type(AT.db[k]) ~= type(v) then AT.db[k] = v end
         end

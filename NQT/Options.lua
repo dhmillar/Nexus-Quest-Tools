@@ -365,9 +365,10 @@ local function buildPanel()
         end)
     end
     friendlySlider("friendlyNameSize","Name size",-146,10,26,1,16," pt")
-    friendlySlider("friendlyBarScale","Bar size",-192,60,160,5,100,"%")
-    makeText(general,"GameFontDisableSmall",-230,"These replace friendly player plates outdoors only. Enemy and NPC plates stay unchanged.")
-    status = makeText(general, "GameFontHighlightSmall", -265, "")
+    friendlySlider("friendlyBarWidth","Bar width",-192,32,160,1,64," px")
+    friendlySlider("friendlyBarHeight","Bar height",-233,4,26,1,9," px")
+    makeText(general,"GameFontDisableSmall",-272,"These replace friendly player plates outdoors only. Enemy and NPC plates stay unchanged.")
+    status = makeText(general, "GameFontHighlightSmall", -305, "")
     status:SetTextColor(.86,.72,.46)
 
     option(macro, "quietTarget", "Mute target macro sounds", -2)

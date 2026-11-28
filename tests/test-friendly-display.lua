@@ -1,22 +1,23 @@
 local players={
-    nameplate1={name="Orange Druid",class="DRUID",hp=65,friend=true,player=true},
+    nameplate1={name="Orange",surname="Druid",class="DRUID",hp=65,friend=true,player=true},
     nameplate2={name="Enemy",class="MAGE",hp=99,attack=true,player=true},
     nameplate3={name="NPC",class="MAGE",hp=99,friend=true},
     nameplate4={name="Blocked",class="MAGE",hp=99,friend=true,player=true,blocked=true},
-    nameplate5={name="Blue Mage",class="MAGE",hp=85,friend=true,player=true},
+    nameplate5={name="Blue Mage",surname="Mage",class="MAGE",hp=85,friend=true,player=true},
 }
 local secret={}
 local function nilop() end
 local frames,hooked={},{}
 local function widget(parent)
     local w={parent=parent,alpha=1,shown=true, SetPoint=nilop,ClearAllPoints=nilop,EnableMouse=nilop,SetFrameStrata=nilop,SetFrameLevel=nilop,
-        SetStatusBarTexture=nilop,SetMinMaxValues=nilop,SetJustifyH=nilop,SetColorTexture=nilop}
+        SetStatusBarTexture=nilop,SetJustifyH=nilop,SetColorTexture=nilop}
     function w:SetSize(x,y)self.width,self.height=x,y end
     function w:SetFont(_,n,outline)self.size,self.outline=n,outline end
     function w:SetText(text)self.text=text end
     function w:SetTextColor(r,g,b)self.color={r,g,b} end
     w.SetStatusBarColor=w.SetTextColor
     function w:SetValue(v)self.value=v end
+    function w:SetMinMaxValues(min,max)self.low,self.high=min,max end
     function w:SetScript(k,f)self[k]=f end
     function w:RegisterEvent()end
     function w:SetShown(v)self.shown=v end
@@ -53,7 +54,7 @@ function UnitIsFriend(_,u)return players[u].friend==true end
 function UnitCanAttack(_,u)return players[u].attack==true end
 function UnitIsUnit()return false end
 function UnitClass(u)return "Class",players[u].class end
-function UnitName(u)return players[u].name end
+function UnitName(u)return players[u].name,players[u].surname end
 function UnitHealth(u)return players[u].hp end
 function UnitHealthMax()return 100 end
 RAID_CLASS_COLORS={DRUID={r=1,g=.49,b=.04},MAGE={r=.25,g=.78,b=.92}}
@@ -73,13 +74,22 @@ assert(not find("Enemy") and not find("NPC") and not find("Blocked"))
 assert(plates.nameplate1.UnitFrame.alpha==0 and plates.nameplate1.unitFramePlater.alpha==0 and plates.nameplate1.ActorNameSpecial.alpha==0)
 assert(plates.nameplate2.UnitFrame.alpha==1 and plates.nameplate3.UnitFrame.alpha==1 and plates.nameplate4.UnitFrame.alpha==1)
 plates.nameplate1.unitFramePlater:SetAlpha(.8);assert(plates.nameplate1.unitFramePlater.alpha==0)
-AT.db.friendlyBars=true;AT.db.friendlyBarScale=125;AT.RefreshFriendlyDisplay()
-assert(orange.bar.shown and orange.bar.width==80 and orange.bar.value==.65 and orange.bar.color[2]==.49)
+AT.db.friendlyBars=true;AT.db.friendlyBarWidth=80;AT.db.friendlyBarHeight=13;AT.RefreshFriendlyDisplay()
+assert(orange.bar.shown and orange.bar.width==80 and orange.bar.height==13 and orange.bar.value==.65 and orange.bar.color[2]==.49)
 players.nameplate1.hp=42;event:OnEvent("UNIT_HEALTH","nameplate1")
 assert(orange.bar.value==.42)
 AT.db.friendlyNames=false;AT.RefreshFriendlyDisplay()
 assert(not orange.name.shown and orange.bar.shown)
-players.nameplate1.hp=secret;event:OnEvent("UNIT_HEALTH","nameplate1")
+players.nameplate1.hp=secret
+CurveConstants={ScaleTo100={}}
+function UnitHealthPercent(u,pct,curve)
+    assert(u=="nameplate1" and pct==false and curve==CurveConstants.ScaleTo100)
+    return secret
+end
+event:OnEvent("UNIT_HEALTH","nameplate1")
+assert(orange.shown and orange.bar.shown and orange.bar.high==100 and orange.bar.value==secret)
+UnitHealthPercent=nil
+event:OnEvent("UNIT_HEALTH","nameplate1")
 assert(not orange.shown and plates.nameplate1.unitFramePlater.alpha==.8)
 players.nameplate1.hp=42;event:OnEvent("NAME_PLATE_UNIT_ADDED","nameplate1")
 assert(orange.shown)

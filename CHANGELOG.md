@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.317 - 2026-11-28
+
+- Friendly Names show both names on WoW Forever. Friendly Bars use the native WoW status bar when raw health is restricted, and have separate width and height sliders. Previous size settings carry over.
+
 ## 1.5.316 - 2026-11-28
 
 - General: added independent Friendly Names and Friendly Bars options for class-colored friendly player nameplates, with size sliders. Both off by default. NQT restores verified stock and attached third-party art when disabled and leaves enemies, NPCs, pets and restricted instance nameplates alone.
