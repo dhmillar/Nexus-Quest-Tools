@@ -2,7 +2,9 @@
 const fs=require("node:fs"), z=require("node:zlib"), path=require("node:path");
 const [src,out,arg,...extra]=process.argv.slice(2);
 const transit=extra.includes("--layer-transit");
-const explain=extra.find(a=>a!=="--layer-transit");
+const centerline=extra.includes("--centerline");
+const explain=extra.find(a=>!a.startsWith("--"));
+if(centerline&&!transit)throw Error("centerline requires transit guards");
 const world=arg===undefined?2991:Number(arg);
 if(![0,1,2991].includes(world))throw Error("unsupported world");
 const prefix="Nav"+world;
@@ -65,8 +67,8 @@ function height(t,values){
  return heights;
 }
 function cut(t){
- const floors=new Map(),clear=Array(cap).fill(0);
- if(!t.floor||!t.floor.length)return {floors,clear};
+ const floors=new Map(),clear=Array(cap).fill(0),wet=Array(cap).fill(0);
+ if(!t.floor||!t.floor.length)return {floors,clear,wet};
  const c=cursor(t.floor),N=c.number(3),steps=[];
  let id=0;
  function note(node,mask,cell){steps.push({node,mask,cell});}
@@ -92,22 +94,24 @@ function cut(t){
   c.offset++;
   if((t.floor.length-c.offset)%(2*stride+1))throw Error("bad clearance planes");
   for(let p=c.offset;p<t.floor.length;p+=2*stride+1)if(t.floor[p]===0){
-   for(let i=0;i<cap;i++)clear[i]|=t.floor[p+1+i]|t.floor[p+1+i+stride];
+   for(let i=0;i<cap;i++){wet[i]|=t.floor[p+1+i];clear[i]|=t.floor[p+1+i]|t.floor[p+1+i+stride];}
   }
   c.offset=t.floor.length;
  }else{
   if(marker===33){
    c.offset++;
-   for(let i=0;i<cap;i++)clear[i]|=t.floor[c.offset+i]|t.floor[c.offset+stride+i];
+   for(let i=0;i<cap;i++){wet[i]|=t.floor[c.offset+i];clear[i]|=t.floor[c.offset+i]|t.floor[c.offset+stride+i];}
    c.offset+=2*stride;
   }
   let node=0;
   while(!c.done){
    node+=c.delta();const code=c.number(2);
-   if(node<cap&&code%64===0)clear[node]|=1<<(Math.floor(code/64)%8);
+   if(node<cap&&code%64===0){
+    const dir=Math.floor(code/64);clear[node]|=1<<(dir%8);if(dir<8)wet[node]|=1<<dir;
+   }
   }
  }
- return {floors,clear};
+ return {floors,clear,wet};
 }
 for(const field of ["grid","height","floor"]){
  const actual=Object.values(tiles).filter(t=>t[field]).length;
@@ -124,25 +128,31 @@ function slot(X,Y){
  const tile=tiles[Math.floor(X/n)*ny+Math.floor(Y/n)+1],cell=X%n*n+Y%n;
  if(tile&&(tile.values[cell]>>8)===1&&(transit||!tile.floors.has(cell)))return [tile,cell];
 }
-let edges=0,nodes=0,layerNodes=0;
+let edges=0,nodes=0,layerNodes=0,centerOnlyNodes=0,narrowEdges=0;
 const payload={};
 for(const [key,t] of Object.entries(tiles)){
  const k=+key-1;const bin=Buffer.alloc(cap*3);
  for(let j=0;j<cap;j++){
   const x=Math.floor(k/ny)*n+Math.floor(j/n), y=(k%ny)*n+j%n;
-  let mask=0;
+  let mask=0,strictMask=0;
   if(slot(x,y))for(let d=0;d<8;d++){
    const dest=slot(x+dx[d],y+dy[d]);
-   if(!dest||!(t.values[j]&(1<<d))||(t.clear[j]&(1<<d)))continue;
+   if(!dest||!(t.values[j]&(1<<d)))continue;
    const [dt,at]=dest;
-   if(!(dt.values[at]&(1<<back[d]))||(dt.clear[at]&(1<<back[d])))continue;
+   if(!(dt.values[at]&(1<<back[d])))continue;
+   const restricted=(t.clear[j]&(1<<d))||(dt.clear[at]&(1<<back[d]));
+   if(restricted&&(!centerline||(t.wet[j]&(1<<d))||(dt.wet[at]&(1<<back[d]))))continue;
    if(Math.abs(t.heights[j]-dt.heights[at])>2)continue;
    mask|=1<<d;edges++;
+   if(restricted)narrowEdges++;else strictMask|=1<<d;
   }
   if(mask){
    nodes++;
-   const layer=transit&&t.floors.has(j);
-   if(layer)layerNodes++;
+   const layered=transit&&t.floors.has(j);
+   const narrowOnly=centerline&&strictMask===0;
+   const layer=layered||narrowOnly;
+   if(layered)layerNodes++;
+   if(narrowOnly)centerOnlyNodes++;
    bin[j*3]=mask;
    bin.writeInt16LE(t.heights[j]*h+(layer?1:0),j*3+1);
   }
@@ -214,11 +224,11 @@ if(world!==2991){
  "-- Derived dry ground grid from Shortest Path Forever v1.49.2; see RouteData.Notice.md.",
  "local _,AT=...","AT.NQTDB=AT.NQTDB or {}","AT.NQTDB.RouteWorlds=AT.NQTDB.RouteWorlds or {}",
  "AT.NQTDB.RouteWorlds["+world+"]={world="+world+",cells="+n+",nx="+nx+",ny="+ny+",tx="+cx+",ty="+cy+",",
- ' navigationBuild=71037, codec="nq1", '+(transit?'layerTransit=true, ':'')+'tiles={'];
+ ' navigationBuild=71037, codec="nq1", '+(transit?'layerTransit=true, ':'')+(centerline?'centerline=true, ':'')+'tiles={'];
  for(const [key,bin] of Object.entries(payload))lines.push(" ["+key+"]="+JSON.stringify(encode(bin))+",");
  lines.push(" }}","");
  fs.writeFileSync(out,lines.join("\n"));
- console.log({world,tiles:Object.keys(payload).length,nodes,layerNodes,edges,bytes:fs.statSync(out).size});
+ console.log({world,tiles:Object.keys(payload).length,nodes,layerNodes,centerOnlyNodes,narrowEdges,edges,bytes:fs.statSync(out).size});
 }else{
 const lua=s=>'"'+[...s].map(b=>"\\"+String(b).padStart(3,"0")).join("")+'"';
 const lines=["-- SPDX-License-Identifier: GPL-3.0-or-later","-- Derived from Shortest Path Forever v1.49.2 by cjber and contributors.",

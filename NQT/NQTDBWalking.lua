@@ -94,6 +94,33 @@ local function bits(D,x,y)
     local layerFlag=D.layerTransit and z%2 or 0
     return mask,z-layerFlag,layerFlag==1
 end
+local function component(D,x,y)
+    local groups=AT.NQTDB and AT.NQTDB.DryComponents
+    local data=groups and groups[D.world]
+    if not data then return end
+    local n=D.cells
+    local key=floor(x/n)*D.ny+floor(y/n)+1
+    local row=data[key]
+    if type(row)~="string" or #row%5~=0 then return end
+    local at=(x%n)*n+y%n
+    for i=1,#row,5 do
+        local a,b,c,d,e=row:byte(i,i+4)
+        a,b,c,d,e=digits[a],digits[b],digits[c],digits[d],digits[e]
+        if not(a and b and c and d and e) then return end
+        local span=a*64+b
+        if span<=0 then return end
+        if at<span then
+            local id=c*4096+d*64+e
+            if id>0 then return id end
+            return
+        end
+        at=at-span
+    end
+end
+local function differentComponent(D,sx,sy,tx,ty)
+    local a,b=component(D,sx,sy),component(D,tx,ty)
+    return a and b and a~=b
+end
 local function confirmOrigin(world,x,y,z,map)
     local px,py,az,area=call(UnitPosition,"player")
     if finite(area) and area~=world then return false end
@@ -120,7 +147,7 @@ local function transform(D,point,checkHeight)
     if not D or world~=D.world then return end
     local X,Y=floor(x/TILE*D.cells-D.tx*D.cells),floor(y/TILE*D.cells-D.ty*D.cells)
     local mask,z,layered=bits(D,X,Y)
-    -- Route through a proven base edge but never guess an ambiguous endpoint floor.
+    -- Transit-only cells can carry a proven dry edge, not a guessed endpoint.
     if not mask or layered then return end
     if checkHeight and not confirmOrigin(world,x,y,z,point.map) then return end
     return X,Y
@@ -240,7 +267,7 @@ function api.EstimateWalks(_,from,targets,callback)
         local target=targets[i]
         if not target then callback(result);return end
         local x,y=transform(D,target,false)
-        if not x then result[i]=false;C_Timer.After(0,nextGoal);return end
+        if not x or differentComponent(D,sx,sy,x,y) then result[i]=false;C_Timer.After(0,nextGoal);return end
         cancel=search(D,sx,sy,x,y,function(keys,yards)
             if not keys and yards=="budget" then callback(nil,"budget");return end
             result[i]=keys and yards or false
@@ -343,25 +370,29 @@ function api.WalkPath(_,from,to,callback)
     local D,sx,sy=startCell(from)
     local tx,ty=transform(D,to,false)
     if not(sx and tx) then return nil,"offmesh" end
+    if differentComponent(D,sx,sy,tx,ty) then return nil,"unreachable" end
     return beginPath(D,sx,sy,tx,ty,from,{to},callback)
 end
 function api.WalkBestPath(_,from,targets,callback)
     local D,sx,sy=startCell(from)
     if not sx then return nil,"offmesh" end
     if #targets>256 then return nil,"budget" end
-    local goals,i,cancel,stopped={},0
+    local goals,i,cancel,stopped,projectable={},0
     local function collect()
         if stopped then return end
         for _=1,12 do
             i=i+1
             local target=targets[i]
             if not target then
-                if #goals==0 then callback(nil,"offmesh");return end
+                if #goals==0 then callback(nil,projectable and "unreachable" or "offmesh");return end
                 cancel=beginPath(D,sx,sy,nil,nil,from,targets,callback,goals)
                 return
             end
             local x,y=transform(D,target,false)
-            if x then goals[#goals+1]={x,y,i} end
+            if x then
+                projectable=true
+                if not differentComponent(D,sx,sy,x,y) then goals[#goals+1]={x,y,i} end
+            end
         end
         C_Timer.After(0,collect)
     end

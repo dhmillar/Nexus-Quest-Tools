@@ -48,7 +48,7 @@ function status(v){
  const t=w.tiles.get(Math.floor(x/n)*w.ny+Math.floor(y/n)+1);
  if(!t)return "noDryTile";
  const cell=t[x%n*n+y%n];
- if(cell===2)return "layerTransitOnly";
+ if(cell===2)return "transitOnly";
  if(cell===1)return "dryCell";
  return "maskedCell";
 }

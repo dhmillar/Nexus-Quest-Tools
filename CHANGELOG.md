@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.273 - 2026-11-28
+
+- Reconnect narrow, demonstrably dry centerline paths in Eastern Kingdoms and Kalimdor. Water and steps without a straight dry centerline are still excluded. Narrow-only and stacked cells remain transit, not assumed endpoints.
+- A compact region index skips impossible dry searches before they consume the route budget. Nine previously disconnected pairs of observed Forever positions now produce routes in offline testing.
+
 ## 1.5.272 - 2026-11-28
 
 - If a native in-progress quest pin cannot be routed, NQT can try a same-zone location where progress on the exact objective was observed. Reachable native pins remain first choice. No guessed NPC, off-zone target, or turn-in is substituted.

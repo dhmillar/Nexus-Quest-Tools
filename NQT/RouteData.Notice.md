@@ -16,8 +16,16 @@ The two continent payloads, `NQTDBRouteWorld0.lua` and `NQTDBRouteWorld1.lua`, a
 
 ```sh
 node tools/verify-spf-continent-source.cjs /path/to/upstream/Nav
-node tools/import-spf-grid.cjs /path/to/upstream/Nav NQT/NQTDBRouteWorld0.lua 0 --layer-transit
-node tools/import-spf-grid.cjs /path/to/upstream/Nav NQT/NQTDBRouteWorld1.lua 1 --layer-transit
+node tools/import-spf-grid.cjs /path/to/upstream/Nav NQT/NQTDBRouteWorld0.lua 0 --layer-transit --centerline
+node tools/import-spf-grid.cjs /path/to/upstream/Nav NQT/NQTDBRouteWorld1.lua 1 --layer-transit --centerline
 ```
 
 The same reciprocal dry-step filters apply. Completely empty tiles are omitted. The continent files store run-length encoded empty cells, direction masks, and height deltas; the client only decodes tiles needed for the current search. The route engine does not load Shortest Path Forever or Polestar.
+
+The continent importer separately checks wet and narrow clearance. A narrow edge is accepted only when both directions have a dry centerline, both endpoints are dry, and the same height-change guard passes. Cells with only narrow or stacked routes are transit-only. The derived connectivity index contains no upstream graph, transport or road-trail records; rebuild it with:
+
+```sh
+node tools/build-nqtdb-dry-components.cjs NQT NQT/NQTDBDryComponents.lua
+```
+
+`tools/inspect-spf-nav.cjs` audits packed stream counts without adding unchecked upper-layer steps or water paths.

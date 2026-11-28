@@ -63,3 +63,26 @@ assert(err=="budget","do not report a capped connected path as unreachable")
 assert(api.EstimateWalks("budget",start,{goal},function(r,e)assert(not r);err=e end));drain()
 assert(err=="budget","do not rank an unfinished route as a known unreachable candidate")
 print("PASS 30,099-cell snake, geometry-preserving compression, disconnected control, and truthful search-budget propagation")
+
+-- Treat exact compiled connected-component labels as a proof of disjoint
+-- dry terrain, without throwing away candidates when the index is absent.
+local alphabet="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+local function num(n,count)
+ local s=""
+ for _=1,count do
+  local x=n%64;n=math.floor(n/64);s=alphabet:sub(x+1,x+1)..s
+ end
+ return s
+end
+local function span(n,id)return num(n,2)..num(id,3)end
+local disconnectedTile=math.floor(350/67)*4+1
+AT.NQTDB.DryComponents={[world]={
+ [1]=span(1,1)..span(4095,0)..span(393,0),
+ [disconnectedTile]=span(1005,0)..span(1,2)..span(3483,0),
+}}
+local unreach,reason=api.WalkPath("component disjoint",start,point(350,0),function()error("should be immediately disconnected")end)
+assert(not unreach and reason=="unreachable" and #queue==0)
+assert(api.WalkBestPath("component disjoint",start,{point(350,0)},function(r,e)assert(not r);err=e end))
+assert(#queue==1);table.remove(queue,1)()
+assert(err=="unreachable" and #queue==0,"multi-goal avoids expanding an impossible component")
+print("PASS packaged component format makes provably disconnected pins fail without search")
