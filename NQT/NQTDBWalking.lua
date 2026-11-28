@@ -94,6 +94,27 @@ local function bits(D,x,y)
     local layerFlag=D.layerTransit and z%2 or 0
     return mask,z-layerFlag,layerFlag==1
 end
+local function confirmOrigin(world,x,y,z,map)
+    local px,py,az,area=call(UnitPosition,"player")
+    if finite(area) and area~=world then return false end
+    -- Forever can return a placeholder 0, or not disclose height at all.
+    -- The caller has already excluded water, stacked cells and instances.
+    -- A meaningful but contradictory height still disqualifies the origin.
+    if finite(az) and az~=0 and abs(az-z)>5 then return false end
+    if finite(px) and finite(py) and finite(area) then
+        return (x-px)^2+(y-py)^2<=16
+    end
+    -- Use only independent, currently readable player-map inputs. Do not
+    -- try to interpret the hidden values or infer a particular stacked floor.
+    local current=call(C_Map.GetBestMapForUnit,"player")
+    if not finite(current) or current~=map then return false end
+    local position=call(C_Map.GetPlayerMapPosition,map,"player")
+    if not position or issecretvalue and issecretvalue(position) then return false end
+    local u,v=call(position.GetXY,position)
+    if not(finite(u) and finite(v) and u>=0 and u<=1 and v>=0 and v<=1) then return false end
+    local w,X,Y=project({map=map,x=u,y=v})
+    return w==world and (X-x)^2+(Y-y)^2<=16
+end
 local function transform(D,point,checkHeight)
     local world,x,y=project(point)
     if not D or world~=D.world then return end
@@ -101,11 +122,7 @@ local function transform(D,point,checkHeight)
     local mask,z,layered=bits(D,X,Y)
     -- Route through a proven base edge but never guess an ambiguous endpoint floor.
     if not mask or layered then return end
-    if checkHeight then
-        local px,py,az,area=call(UnitPosition,"player")
-        if not(finite(area) and area==world and finite(px) and finite(py) and finite(az)
-            and (x-px)^2+(y-py)^2<=16 and abs(az-z)<=5) then return end
-    end
+    if checkHeight and not confirmOrigin(world,x,y,z,point.map) then return end
     return X,Y
 end
 local function search(D,sx,sy,tx,ty,callback,estimateOnly,goals)
@@ -358,6 +375,6 @@ function AT.GetBundledWalkingAPI(origin,snapshot)
     if not (build=="71037" or build=="71139") then return end
     if call(IsInInstance)==true or call(IsSwimming)==true
         or call(IsFlying)==true or call(UnitOnTaxi,"player")==true then return end
-    -- The base grid has no reliable position on top of a second floor.
+    -- Layered cells never pass endpoint validation, even with readable X/Y.
     if transform(D,origin,not snapshot) then return api end
 end

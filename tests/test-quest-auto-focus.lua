@@ -330,7 +330,7 @@ do
     assert(AT.ToggleQuestHUDManualFocus(206));expect(206)
     local id,goals=AT.GetFocusedQuestRouteTargets(2548)
     assert(id==206 and #goals==1 and goals[1].map==1434 and goals[1].x==.378 and goals[1].y==.036)
-    ShortestPathForever={API={
+    local bundled={
         version=2,minor=13,NavVersion=function()return "test-route"end,
         EstimateWalks=function()error("a verified single hand-in does not need an estimate pass")end,
         WalkPath=function(_,from,to,reply)
@@ -338,7 +338,8 @@ do
             reply({navVersion="test-route",yards=6400,waypoints={from,to}})
             return function()end
         end
-    }}
+    }
+    AT.GetBundledWalkingAPI=function()return bundled end
     assert(loadfile("NQT/Walking.lua"))("NQT",AT)
     local walking,handIn=AT.GetFocusedQuestWalkingPath(206,{map=2548,x=.6337,y=.3930},5500,5500)
     assert(walking and handIn.map==1434,"verified manual turn-in is sent across zones to the walking solver")

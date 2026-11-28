@@ -889,10 +889,12 @@ local referenceTurnIns={
 }
 observedTurnIn=function(id,map,x,y,reference,skipName)
     local source
+    local verifiedCompletion=AT.NQTDB and AT.NQTDB.VerifiedCompletionTurnIns
+    local fresh=verifiedCompletion and verifiedCompletion[id]
     if reference=="verified" then
-        source=AT.ForeverVerifiedEndpointReferences and AT.ForeverVerifiedEndpointReferences[id]
+        source=fresh or (AT.ForeverVerifiedEndpointReferences and AT.ForeverVerifiedEndpointReferences[id])
     elseif reference then
-        source=referenceTurnIns[id] or (AT.ForeverQuestNPCReferences and AT.ForeverQuestNPCReferences[id])
+        source=fresh or referenceTurnIns[id] or (AT.ForeverQuestNPCReferences and AT.ForeverQuestNPCReferences[id])
             or (AT.ForeverATTQuestNPCReferences and AT.ForeverATTQuestNPCReferences[id])
             or (AT.ForeverVerifiedEndpointReferences and AT.ForeverVerifiedEndpointReferences[id])
             or (AT.ForeverSupplementalTurnInReferences and AT.ForeverSupplementalTurnInReferences[id])
@@ -975,8 +977,8 @@ resolveTurnInPoint=function(id,viewMap,wantName,lookup)
                 end
             end
         end
-        if not queryHints(AT.ObservedQuestTurnIns) and not queryHints(referenceTurnIns)
-            and not queryHints(AT.ForeverQuestNPCReferences) and not queryHints(AT.ForeverATTQuestNPCReferences) then
+        if not queryHints(AT.ObservedQuestTurnIns) and not queryHints(AT.NQTDB and AT.NQTDB.VerifiedCompletionTurnIns)
+            and not queryHints(referenceTurnIns) and not queryHints(AT.ForeverQuestNPCReferences) and not queryHints(AT.ForeverATTQuestNPCReferences) then
             if not queryHints(AT.ForeverVerifiedEndpointReferences) and not queryHints(AT.ForeverSupplementalTurnInReferences) then
                 queryHints(AT.NQTDB and AT.NQTDB.TurnIns)
             end

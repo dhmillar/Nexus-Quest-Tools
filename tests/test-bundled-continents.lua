@@ -245,3 +245,37 @@ IsInInstance=nil
 spawnZ=12
 assert(not AT.GetBundledWalkingAPI(start),"single-floor overworld interiors still require observed height")
 print("PASS obstacle-aware target ranking and strict floor verification for overworld interiors")
+
+-- A Forever capability detail: UnitPosition height may be a literal 0
+-- even on a high, single-floor terrain cell. Confirm via public X/Y; if
+-- the entire value is secret only use independently readable map evidence.
+for k=0,4488 do dry[k+1]=string.char(edges[k] or 0,40,0) end
+D[world]={world=world,cells=67,nx=1,ny=1,tx=0,ty=0,tiles={table.concat(dry)}}
+IsIndoors=nil
+spawnZ=0
+assert(AT.GetBundledWalkingAPI(start),"0 is a placeholder, not a claim that this plateau is at sea level")
+spawnZ=100
+assert(not AT.GetBundledWalkingAPI(start),"real mismatched height must still fail")
+local SECRET={}
+issecretvalue=function(v)return v==SECRET end
+function UnitPosition() return SECRET,SECRET,SECRET,SECRET end
+C_Map.GetPlayerMapPosition=function(kind,unit)
+ assert(kind==201 and unit=="player")
+ return vec(start.x,start.y)
+end
+assert(AT.GetBundledWalkingAPI(start),"readable native map is an independent source")
+picked=nil
+assert(api.WalkBestPath("map-only",start,{tempting,quick},function(r)picked=r end));drain()
+assert(picked and picked.targetIndex==2,"map-only origin can generate checked terrain route")
+C_Map.GetPlayerMapPosition=function()return vec(start.x+.2,start.y) end
+assert(not AT.GetBundledWalkingAPI(start),"stale remote coordinates fail")
+C_Map.GetPlayerMapPosition=function()return SECRET end
+assert(not AT.GetBundledWalkingAPI(start),"do not interpret hidden map coordinates")
+C_Map.GetPlayerMapPosition=function()return vec(start.x,start.y) end
+function UnitPosition() return spawnX+14,spawnY,0,world end
+assert(not AT.GetBundledWalkingAPI(start),"a known horizontal conflict is not overridable")
+function UnitPosition() return SECRET,SECRET,SECRET,world+1 end
+assert(not AT.GetBundledWalkingAPI(start),"a known world conflict is not overridable")
+IsInInstance=function()return true end
+assert(not AT.GetBundledWalkingAPI(start),"a plausible map coordinate never enables an instance")
+print("PASS real Forever placeholder and withheld height cases; only independently confirmed public single-floor coordinates route")

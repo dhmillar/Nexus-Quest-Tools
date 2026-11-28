@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.271 - 2026-11-28
+
+- Fix routes being rejected when Forever reports a placeholder player height. Verified single-floor routes can start from matching readable map coordinates even when the separate unit-position data is withheld. Instances and ambiguous floors are still excluded.
+- Added five verified Riverglades turn-in locations for ready quests. WoW's own pin still takes priority.
+
 ## 1.5.270 - 2026-11-28
 
 - Added 37,482 continent terrain cells as verified lower-floor transit. Routes may cross them along clear reciprocal dry edges, but NQT does not pick an ambiguous floor as a start or destination.

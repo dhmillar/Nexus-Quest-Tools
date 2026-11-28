@@ -4348,3 +4348,16 @@ db.ClassicStarts={
  [8893]={{1446,0.5235,0.2697,0,142071,"Egg-O-Matic",1}},
 }
 -- END NQTDB classic start references
+-- BEGIN NQTDB completed turn-ins (generated)
+-- Efficient Games NPC hand-in observations and same-build recorded quest completions, CC BY 4.0.
+-- https://github.com/JIVESCORP/eg-link-output-wowf/tree/c1bf99bc2835bbe1b2dad82fb99f994c0cfffe33/data/wowf
+-- https://efficient.games | https://creativecommons.org/licenses/by/4.0/
+-- Use only for held quests ready to hand in; WoW's own marker always wins.
+db.VerifiedCompletionTurnIns={
+ [93443]={{2548,0.7708,0.5285,1,255897,1,"Friz Frazzlespark"}}, -- 1.60.1.71139
+ [94617]={{2548,0.5493,0.7298,1,258317,1,"Benjy Wheeler"}}, -- 1.60.1.71139
+ [94928]={{2548,0.7708,0.5285,1,255897,1,"Friz Frazzlespark"}}, -- 1.60.1.71139
+ [95943]={{2548,0.6331,0.8068,1,260070,1,"Bertrand Ironbrow"}}, -- 1.60.1.71139
+ [95984]={{2548,0.5945,0.6394,1,259352,1,"Watcher Cornelius"}}, -- 1.60.1.71139
+}
+-- END NQTDB completed turn-ins
