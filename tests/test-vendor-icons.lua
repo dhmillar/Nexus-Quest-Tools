@@ -147,3 +147,35 @@ faction="Alliance";AT.RefreshVendorIcons()
 check(smith,"Trade_BlackSmithing");check(weapon,"INV_Sword_04")
 assert(not overlays[rogue].shown and not overlays[decoy])
 print("PASS actual verified trainer ID art without a subtitle: rogue, blacksmith, weapon trainer, faction and same-name decoy")
+
+local live,livePlate,unit=npc(27,"Vendor Without Subtitle",nil)
+local decoy,decoyPlate=npc(28,"Vendor Without Subtitle",nil)
+local blocked,blockedPlate=npc(29,"Vendor Without Subtitle",nil,{forbidden=true})
+local oldGUID=UnitGUID
+function UnitGUID(t)
+ if t==live or t==blocked or t=="npc" then return "Creature-0-0-0-0-301123-00001" end
+ if t==decoy then return "Creature-0-0-0-0-301124-00001" end
+ return oldGUID(t)
+end
+event:event("NAME_PLATE_UNIT_ADDED",live)
+event:event("NAME_PLATE_UNIT_ADDED",decoy)
+event:event("NAME_PLATE_UNIT_ADDED",blocked)
+assert(not overlays[livePlate] and not overlays[decoyPlate])
+event:event("MERCHANT_SHOW")
+assert(not overlays[livePlate],"no current merchant NPC, must not learn target or name")
+npcs.npc=unit
+local repairs=false
+function CanMerchantRepair()return repairs end
+event:event("MERCHANT_SHOW")
+check(livePlate,"INV_Misc_Bag_10")
+assert(not overlays[decoyPlate] and not overlays[blockedPlate])
+repairs=true
+event:event("MERCHANT_SHOW")
+check(livePlate,"Trade_BlackSmithing")
+event:event("NAME_PLATE_UNIT_REMOVED",live)
+assert(not overlays[livePlate].shown)
+npcs.npc=nil
+event:event("NAME_PLATE_UNIT_ADDED",live)
+check(livePlate,"Trade_BlackSmithing")
+assert(not overlays[decoyPlate])
+print("PASS native merchant interaction immediately identifies exact previously uncatalogued vendor and repairs, without same-name, forbidden plate or missing-NPC aliases")

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.301 - 2026-11-28
+
+- Walking: preserve the verified line across outdoor map boundaries for tracked objectives, turn-ins and Level Guide destinations when the target and terrain are unchanged. Changing quest or objective still clears the old route immediately.
+- Vendor Icons: opening a merchant can identify an uncatalogued vendor or repair NPC without relying on its subtitle. This applies to that exact NPC for the current session and still requires a usable nameplate.
+
 ## 1.5.300 - 2026-11-28
 
 - Walking: recover longer routes when the terrain proves start and destination are connected. Two formerly capped outdoor test walks now finish at 8,079 and 11,317 yards; per-frame limits and uncertain-floor checks stay unchanged.

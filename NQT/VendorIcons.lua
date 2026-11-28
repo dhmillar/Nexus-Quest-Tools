@@ -132,6 +132,16 @@ local function displayedTitle(frame,name)
     if not plain(label) or not label or safe(label.IsShown,label)~=true then return "" end
     return clean(safe(label.GetText,label))
 end
+local function creatureID(guid)
+    return plain(guid) and type(guid)=="string" and tonumber(guid:match("^Creature%-%d+%-%d+%-%d+%-%d+%-(%d+)%-"))
+end
+local seenMerchants,merchantOrder={},{}
+local function withMerchantRole(roles,repair)
+    for _,role in ipairs(roles) do if role=="repair" then return roles end end
+    if repair then roles[#roles+1]="repair"
+    elseif #roles==0 then roles[1]="vendor" end
+    return roles
+end
 local function labelRole(token,plate,guid)
     local tooltip=C_TooltipInfo
     local offset=safe(C_CVar and C_CVar.GetCVar or GetCVar,"colorblindMode")
@@ -148,7 +158,8 @@ local function labelRole(token,plate,guid)
         return v
     end
     local subtitle=title(field(field(lines,index),"leftText"))
-    local id=type(guid)=="string" and tonumber(guid:match("^Creature%-%d+%-%d+%-%d+%-%d+%-(%d+)%-"))
+    local id=creatureID(guid)
+    local witnessed=id and seenMerchants[id]
     local catalog=AT.NQTDB and AT.NQTDB.VerifiedVendorServices
     local verified=id and catalog and catalog[id]
     local faction
@@ -170,10 +181,20 @@ local function labelRole(token,plate,guid)
             end
         end
         local roles={role}
-        if verified and allowed(verified[3]) then roles[2]=verified[4] and "repair" or "vendor" end
+        if witnessed or verified and allowed(verified[3]) then
+            roles[2]=(witnessed and witnessed.repair or verified and verified[4]) and "repair" or "vendor"
+        end
         return roles
     elseif trainer and (faction=="Alliance" or faction=="Horde") then
         return {}
+    end
+    if witnessed then
+        local roles=classify(subtitle,name,known)
+        local catalogVendor=verified and allowed(verified[3]) and verified
+        if #roles==0 and catalogVendor then
+            roles=classify(clean(catalogVendor[2]),clean(catalogVendor[1]),{vendor=true,repair=catalogVendor[4]})
+        end
+        return withMerchantRole(roles,witnessed.repair or catalogVendor and catalogVendor[4])
     end
     if verified then
         if allowed(verified[3]) then
@@ -250,6 +271,25 @@ local function update(token)
     entry.frame:Show()
     return true
 end
+local function observeMerchant()
+    if not active() then return end
+    -- Use the merchant interaction's native NPC, never the player's current
+    -- target, an unverified unit name, or a shopping UI opened by an object.
+    local npc,guid=isNPC("npc")
+    local id=npc and creatureID(guid)
+    if not id then return end
+    local repair=safe(C_MerchantFrame and C_MerchantFrame.CanMerchantRepair or CanMerchantRepair)==true
+    if not seenMerchants[id] then
+        if #merchantOrder>=128 then seenMerchants[table.remove(merchantOrder,1)]=nil end
+        merchantOrder[#merchantOrder+1]=id
+        seenMerchants[id]={repair=repair}
+    elseif repair then seenMerchants[id].repair=true end
+    -- Session-only evidence: do not edit nameplate CVars or saved settings.
+    -- Repaint only matching visible plates, retaining the normal safeguards.
+    for token in pairs(epochs) do
+        if creatureID(safe(UnitGUID,token))==id then update(token) end
+    end
+end
 local function added(token)
     if not tokenOK(token) then return end
     clear(token)
@@ -281,10 +321,12 @@ function AT.InitVendorIcons()
     eventFrame:RegisterEvent("NAME_PLATE_UNIT_ADDED")
     eventFrame:RegisterEvent("NAME_PLATE_UNIT_REMOVED")
     eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+    eventFrame:RegisterEvent("MERCHANT_SHOW")
     eventFrame:SetScript("OnEvent",function(_,event,token)
         if event=="NAME_PLATE_UNIT_ADDED" then added(token)
         elseif event=="NAME_PLATE_UNIT_REMOVED" and tokenOK(token) then clear(token)
-        elseif event=="PLAYER_ENTERING_WORLD" then AT.RefreshVendorIcons() end
+        elseif event=="PLAYER_ENTERING_WORLD" then AT.RefreshVendorIcons()
+        elseif event=="MERCHANT_SHOW" then observeMerchant() end
     end)
     if type(SlashCmdList)=="table" then
         SLASH_NQTVENDORS1="/nqtvendors"

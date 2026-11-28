@@ -3,7 +3,7 @@ local frame, lines, caption, elapsed = nil, nil, nil, 0
 local refreshPeriod, enterAreaYards, leaveAreaYards = 0.3, 35, 52
 local previewYards, renderLimit, offPathYards = 90, 30, 24
 local currentPath, cursor, projected, arrival, currentProjectionMap
-local scopeQuest, scopeTurnIn, scopeGuide, scopeWaypoint, scopeMap, positionLost, routeStatus, statusQuest
+local scopeQuest, scopeTurnIn, scopeGuide, scopeWaypoint, positionLost, routeStatus, statusQuest
 local meter, metadata, travelDetail, measure, mapRoute
 local bearing, bearingStatus, distanceSource, selectionSource, drawFailure
 
@@ -49,8 +49,6 @@ local function data(quest)
     end
     local playerMap = maps.GetBestMapForUnit("player")
     if not finite(playerMap) or playerMap <= 0 then return nil,"position" end
-    if scopeMap and scopeMap ~= playerMap and not scopeWaypoint and AT.CancelQuestWalking then AT.CancelQuestWalking() end
-    scopeMap = playerMap
     -- Both planners accept 2D quest POIs. Without a reliable objective floor,
     -- avoid drawing outdoor routes through cave walls, dungeons, or floor maps.
     if IsIndoors and IsIndoors() then return nil,"interior" end
@@ -551,7 +549,7 @@ local function draw()
     travelDetail,mapRoute=nil,nil
     if not (frame and Minimap and AT.db and AT.db.enabled ~= false and AT.db.showQuestRoute ~= false) then
         if AT.CancelQuestWalking then AT.CancelQuestWalking() end
-        arrival,scopeQuest,scopeTurnIn,scopeGuide,scopeWaypoint,scopeMap,positionLost = nil,nil,nil,nil,nil,nil,nil
+        arrival,scopeQuest,scopeTurnIn,scopeGuide,scopeWaypoint,positionLost = nil,nil,nil,nil,nil,nil
         routeStatus,statusQuest = "disabled",nil
         hide(); return
     end
@@ -564,7 +562,7 @@ local function draw()
     local guide=origin=="guide"
     if quest~=scopeQuest or turnIn~=scopeTurnIn or guide~=scopeGuide or waypoint~=scopeWaypoint then
         if AT.CancelQuestWalking then AT.CancelQuestWalking() end
-        arrival,scopeQuest,scopeTurnIn,scopeGuide,scopeWaypoint,scopeMap,positionLost = nil,quest,turnIn,guide,waypoint,nil,nil
+        arrival,scopeQuest,scopeTurnIn,scopeGuide,scopeWaypoint,positionLost = nil,quest,turnIn,guide,waypoint,nil
     end
     statusQuest=quest
     if not waypoint and (not finite(quest) or quest<=0) then routeStatus="no_quest"; hide(); return end

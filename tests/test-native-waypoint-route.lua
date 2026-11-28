@@ -116,3 +116,53 @@ goal={518,1599.7}
 function AT.GetQuestNavigationID()return q,"guide" end
 assert(AT.GetWalkingNavigationID()==q,"Level Guide's own native pin must remain a quest-giver route")
 print("PASS native tracked waypoint routes across two zone maps on real bundled terrain, rejects ambiguous/remote/instance pins, cancels a cleared pin, preserves Level Guide")
+
+-- Axis coordinates differ between both map canvases. Reuse terrain and
+-- renderer fixtures, but now drive three independent quest scopes.
+selected=false;goal={493,1607};bumpWorld=0;tw=0
+local navSource,ready="hud",false
+function AT.GetQuestNavigationID()return q,navSource end
+function AT.IsQuestTurnInNavigation(id)return id==q and ready end
+function AT.GetFocusedQuestRoutePoint()
+ local u,v=mp(goal[1],goal[2])
+ return q,dest,u,v,"verified quest point"
+end
+function AT.GetFocusedQuestRouteTargets(map)
+ local _,m,u,v=AT.GetFocusedQuestRoutePoint()
+ return q,{{map=m,x=u,y=v}},{}
+end
+local function atStart()
+ curMap=home;px,py=x,y;AT.CancelQuestWalking()
+ AT.RefreshQuestRoute();drain();AT.RefreshQuestRoute()
+ return assert(AT.snapshot,"initial quest path "..tostring(AT.status)).path
+end
+local function stepOver(path)
+ local pt=path.waypoints[2]
+ local _,p=C_Map.GetWorldPosFromMapPos(pt.map,vec(pt.x,pt.y))
+ px,py=p:GetXY();curMap=bump
+ AT.RefreshQuestRoute()
+end
+for _,scope in ipairs({{"hud",false},{"hud",true},{"guide",false}})do
+ navSource,ready=scope[1],scope[2]
+ local path=atStart()
+ stepOver(path)
+ assert(AT.snapshot and AT.snapshot.path==path and #pending==0,
+   "outdoor quest continuity requires unchanged quest, stage and goal: "..navSource.." "..tostring(ready))
+end
+navSource="order";ready=false
+local path=atStart()
+local oldResolver=AT.GetFocusedQuestRouteTargets
+function AT.GetFocusedQuestRouteTargets(map)
+ if map==bump then
+  local u,v=mp(517,1598.5)
+  return q,{{map=dest,x=u,y=v}},{}
+ end
+ return oldResolver(map)
+end
+stepOver(path)
+assert(not (AT.snapshot and AT.snapshot.path),"different objective on the new map cannot retain the old path")
+drain()
+AT.GetFocusedQuestRouteTargets=oldResolver
+path=atStart();ready=true;stepOver(path)
+assert(not (AT.snapshot and AT.snapshot.path==path),"a completed objective cannot follow a stale in-progress path across maps")
+print("PASS same-target seam continuity for tracked objectives, turn-ins and Level Guide; old routes do not survive a changed target or stage")

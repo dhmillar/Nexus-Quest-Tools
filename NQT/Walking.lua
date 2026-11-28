@@ -318,7 +318,7 @@ local function carryCenterline(quest,from,width,height)
     return nearby(1,math.min(#points-1,1600))
 end
 
-local function canCarryWaypointBoundary(from,now)
+local function canCarryRouteBoundary(from,now)
     local recent=lastRouteProgress
     if not recent or recent.path~=lastPublished.path or recent.from.map~=lastPublished.map
         or now<recent.at or now-recent.at>1.2 or not finite(recent.segment) then return false end
@@ -375,9 +375,9 @@ function AT.GetFocusedQuestWalkingPath(quest, from, width, height)
     if lastPublished and (lastPublished.quest~=quest
         or lastPublished.key~=cache.key or lastPublished.api~=api or lastPublished.nav~=nav) then lastPublished=nil end
     if lastPublished and lastPublished.map~=from.map then
-        if quest==WAYPOINT_ID and not road and state and state.path==lastPublished.path
-            and not state.cancel and canCarryWaypointBoundary(from,now) then
-            -- A verified dry origin and unchanged waypoint can keep its
+        if not road and state and state.path==lastPublished.path
+            and not state.cancel and canCarryRouteBoundary(from,now) then
+            -- A verified dry origin and unchanged destination can keep its
             -- already-planned suffix when only the UI map changes.
             state.from,state.width,state.height=from,width,height
             lastPublished.map=from.map
