@@ -1998,6 +1998,48 @@ for _,style in ipairs({"Map","Minimal"}) do
 end
 assert(AT.GetQuestNavigationID()==prevNav and opened==priorOpening,"filter only changes displayed rows")
 print("PASS both dungeon dropdowns: header and nested floor grouping, exact raid/group exclusions, held instances only, automatic status and All Dungeons")
+do
+    local oldBags,oldObjectives=C_Container,C_QuestLog.GetQuestObjectives
+    local bagItems={[1]=51001,[2]=51002,[3]=51003,[4]=51004}
+    C_Container={
+        GetContainerNumSlots=function(b) return b==0 and 4 or 0 end,
+        GetContainerItemID=function(_,s) return bagItems[s] end,
+        GetContainerItemQuestInfo=function(_,s)
+            if s==1 then return {questID=301,isQuestItem=true,isActive=true} end
+            if s==4 then return {questID=305,isQuestItem=true,isActive=false} end
+        end,
+    }
+    C_QuestLog.GetQuestObjectives=function(q)
+        if q==303 then return {{type="item",itemID=51002,text="Collection item: 1/2",numRequired=2}} end
+        if q==302 then return {{type="item",itemID=51003,text="Turn-in item: 1/1",numRequired=1}} end
+        return oldObjectives(q)
+    end
+    AT.BrowseQuestHUD(nil)
+    startupWatcher.scripts.OnEvent(startupWatcher,"BAG_UPDATE_DELAYED")
+    AT.RefreshQuestHUD()
+    clickButton("Zones")
+    local itemRow=assert(find("Quest Items"))
+    assert(itemRow.questCount.text=="3" and itemRow.anchor[5]<find("Stockade").anchor[5],"quest item scope below dungeons with unique count")
+    clickButton("Quest Items")
+    if not find("Quest categorized under dungeon") then clickButton("Completed") end
+    assert(find("Quest Items") and find("Quest categorized under dungeon") and find("Quest in the Stockade"))
+    assert(not find("Outdoor elite group") and not find("Quest inside dungeon subfloor"),"inactive starter and status are excluded")
+    clickButton("In Progress")
+    assert(find("Quest inside dungeon subfloor") and not find("Quest in the Stockade"))
+    clickButton("Completed")
+    bagItems[2]=nil
+    startupWatcher.scripts.OnEvent(startupWatcher,"BAG_UPDATE_DELAYED")
+    AT.RefreshQuestHUD()
+    assert(find("Quest categorized under dungeon") and not find("Quest in the Stockade"),"removing last held stack refreshes the actual display")
+    bagItems[2]=51002
+    startupWatcher.scripts.OnEvent(startupWatcher,"BAG_UPDATE_DELAYED")
+    AT.RefreshQuestHUD()
+    assert(find("Quest in the Stockade"),"a newly acquired collection item restores its quest")
+    C_Container,C_QuestLog.GetQuestObjectives=oldBags,oldObjectives
+    startupWatcher.scripts.OnEvent(startupWatcher,"BAG_UPDATE_DELAYED")
+    AT.BrowseQuestHUD(nil)
+    print("PASS Quest Items scope: footer order, active bag linkage, held collection objectives, completed view, ignores unaccepted starts, refreshes on bag changes")
+end
 local savedPOI=C_QuestLog.GetQuestsOnMap
 entries[#entries+1]={questID=309,title="Dungeon POI without waypoint"}
 C_QuestLog.GetQuestsOnMap=function(query)

@@ -1,4 +1,4 @@
-# Nexus Quest Tools 1.5.314
+# Nexus Quest Tools 1.5.315
 For World of Warcraft: Forever 1.60.1 (interface 16001). Uses the Blizzard quest tracker and a native character-specific action-bar macro. Quest data and tracking are standalone; Questie and QuestieDB are not used.
 
 **Rank Quest party announcements (on by default):** NQT announces every completed quest in party chat with your chosen Primary raid marker, including quests with no kill or collection objectives. Kill and collection milestones on unfinished quests still show. The final objective and quest completion are one announcement when confirmed together. Turn it off in **Rank Quest → Announce quest completion in party chat**. It does not replay old completions or post to raids.

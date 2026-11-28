@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.315 - 2026-11-28
+
+- Rank Quest: the Zones menu now includes Quest Items below the dungeon list. It shows quests linked to items in your carried bags, including collection items and ready-to-turn-in quests under Completed. The filter updates as items enter or leave your bags.
+
 ## 1.5.314 - 2026-11-28
 
 - Rank Quest and Level Guide show ten additional verified gathering-object sources. Duskweed Petals now point to Overgrown Duskweed without changing the sibling animal-blood objective. Existing route points and drop-rate data are unchanged.

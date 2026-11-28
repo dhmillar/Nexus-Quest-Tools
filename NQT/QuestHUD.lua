@@ -2,7 +2,7 @@ local _, AT = ...
 local Q,M=C_QuestLog,C_Map
 local hud, refreshPending, currentZone, currentDungeon, viewedZone, model
 local initialPaintPending
-local ALL_ZONES,ALL_DUNGEONS={},{}
+local ALL_ZONES,ALL_DUNGEONS,QUEST_ITEMS={},{},{}
 local popupOpen,completedView,toolbarOpen=false,false,false
 local preferredCompleted,resolveStatusOnSelection=false,false
 local visibleAutoTurnIn,renderedNavigationID
@@ -1176,7 +1176,7 @@ local function questItemID(link)
 end
 
 
-local questBagActions, pendingItemData
+local questBagActions, pendingItemData, bagQuestItems
 local function requestRankQuestItemData(item)
     if not id(item) or not (C_Item and C_Item.RequestLoadItemDataByID) then return end
     pendingItemData=pendingItemData or {}
@@ -1964,8 +1964,71 @@ local function applyAtlas(region,atlas,useNativeSize)
     return ok and result~=false
 end
 
+local function questHasBagItem(row)
+    if row.partyOnly or not Q then return false end
+    if not bagQuestItems then
+        bagQuestItems={held={},linked={}}
+        local c=C_Container
+        if c then
+            local function scan(bag)
+                local n=call(c.GetContainerNumSlots,bag)
+                if not id(n) or n>200 then return end
+                for slot=1,n do
+                    local item=call(c.GetContainerItemID,bag,slot)
+                    if id(item) then
+                        bagQuestItems.held[item]=true
+                        local info=call(c.GetContainerItemQuestInfo,bag,slot)
+                        local q=field(info,"questID")
+                        if id(q) and field(info,"isQuestItem")==true and field(info,"isActive")==true then
+                            bagQuestItems.linked[q]=true
+                        end
+                    end
+                end
+            end
+            local last=NUM_BAG_SLOTS or 4
+            for b=0,last do scan(b) end
+            local reagent=Enum and Enum.BagIndex and Enum.BagIndex.ReagentBag
+            if id(reagent) and reagent>last then scan(reagent) end
+        end
+    end
+    local q,bag=row.id,bagQuestItems
+    if bag.linked[q] then return true end
+    if not next(bag.held) then return false end
+    local index=call(Q.GetLogIndexForQuestID,q) or row.logIndex
+    if id(index) and field(call(Q.GetInfo,index),"questID")==q then
+        local item=questItemID(call(GetQuestLogSpecialItemInfo,index))
+        if item and bag.held[item] then return true end
+    end
+    local live=call(Q.GetQuestObjectives,q)
+    local resolved=false
+    if is(live,"table") and next(live) then
+        resolved=true
+        for _,o in pairs(live) do
+            if field(o,"type")=="item" then
+                local label=field(o,"text")
+                local item=objectiveDropItem(q,o,is(label,"string") and label or "")
+                if item and bag.held[item] then return true end
+                if not item then resolved=false end
+            end
+        end
+    end
+    if not resolved then
+        local data=AT.NQTDB
+        local facts=(AT.ForeverQuestFacts and AT.ForeverQuestFacts[q])
+            or (data and data.NativeQuestItemFacts and data.NativeQuestItemFacts[q])
+        for i=3,#(facts or {}) do if bag.held[facts[i][1]] then return true end end
+    end
+    local function uses(pool)
+        for _,record in ipairs(pool and pool[q] or {}) do
+            if bag.held[record[1]] then return true end
+        end
+    end
+    return uses(AT.NQTDB and AT.NQTDB.QuestUses) or uses(AT.ForeverObservedQuestUses)
+        or uses(AT.ForeverProvidedQuestUses) or uses(AT.ForeverInstructedQuestUses) or false
+end
+
 local zoneMenuLayout={buttonFromTop=35,buttonHeight=20,gap=3,bottom=3}
-local function arrangeZonesMenu(theme,offset,allZones)
+local function arrangeZonesMenu(theme,offset,allZones,itemCount)
     local menu=hud.zoneMenu
     menu:SetShown(popupOpen)
     if not popupOpen then
@@ -2064,6 +2127,22 @@ local function arrangeZonesMenu(theme,offset,allZones)
     hud.noZones:Hide();hud.noDungeons:Hide()
     section(hud.zonesHeading,zones,false)
     section(hud.dungeonsHeading,dungeons,true)
+    used=used+1
+    local items=hud.zoneRows[used]
+    if not items then
+        items=button(hud.zoneMenuContent,"",0,0,inner,step-3,function(self)
+            if not popupOpen or not self.choice then return end
+            if self.isDungeon then hud.selectDungeon(self.choice)
+            elseif AT.BrowseQuestHUD then AT.BrowseQuestHUD(self.choice) end
+        end)
+        items.label:ClearAllPoints();items.label:SetPoint("LEFT",9,0);items.label:SetWordWrap(false)
+        hud.zoneRows[used]=items
+    end
+    items.choice,items.isDungeon=QUEST_ITEMS,false
+    items:ClearAllPoints();items:SetPoint("TOPLEFT",hud.zoneMenuContent,"TOPLEFT",0,-y)
+    items:SetSize(inner,step-3);items.label:SetText("Quest Items")
+    style(items,viewedZone==QUEST_ITEMS,itemCount)
+    y=y+step
     for i=used+1,#hud.zoneRows do local row=hud.zoneRows[i];row.choice=nil;row:Hide() end
     local top=12+3*step
     -- The menu is anchored just below Zones. Use only the available panel
@@ -2179,7 +2258,7 @@ local function arrange()
     local automaticTurnIn=source=="nearby-turn-in" and activeID or nil
     renderedNavigationID=activeID
     if automaticTurnIn~=visibleAutoTurnIn then
-        completedView=automaticTurnIn~=nil
+        if viewedZone~=QUEST_ITEMS then completedView=automaticTurnIn~=nil end
         resolveStatusOnSelection=false
         visibleAutoTurnIn=automaticTurnIn
     end
@@ -2227,6 +2306,14 @@ local function arrange()
     end
     local function inProgress(row) return not row.complete or row.partyPending end
     local function readyToTurnIn(row) return row.complete and not row.partyOnly end
+    local itemView=not selectedDungeon and viewedZone==QUEST_ITEMS
+    local itemRows,itemCount={},0
+    if itemView or popupOpen then
+        for qid,row in pairs(model.rows) do
+            if questHasBagItem(row) then itemRows[qid]={row=row,kind="unassigned"};itemCount=itemCount+1 end
+        end
+    end
+    if itemView then selected={key=QUEST_ITEMS,name="Quest Items",rows=itemRows} end
     if resolveStatusOnSelection then
         resolveStatusOnSelection=false
         local anyProgress,anyReady=false,false
@@ -2312,7 +2399,7 @@ local function arrange()
         end
     elseif searching then
         for qid,haystack in pairs(questSearchIndex(model)) do
-            if matchesSearch(haystack) then entries[#entries+1]={row=model.rows[qid],kind="unassigned"} end
+            if matchesSearch(haystack) and (not itemView or itemRows[qid]) then entries[#entries+1]={row=model.rows[qid],kind="unassigned"} end
         end
     elseif allZones then
         -- Quest IDs can belong to several zones. Use the unique log rows.
@@ -2342,7 +2429,7 @@ local function arrange()
     hud.zoneName:SetText(searching and "Search Results" or allZones and "All Zones" or (selected and selected.name or "Finding your zone"))
     local groupWord=(selectedDungeon or currentDungeonView) and "dungeon" or "zone"
     local emptyLabel=completedView and "No quests ready to turn in" or "No quests in progress"
-    hud.empty:SetText(searching and "No matching quests." or (emptyLabel .. (allZones and "." or (" for this " .. groupWord .. "."))))
+    hud.empty:SetText(searching and "No matching quests." or (emptyLabel .. (itemView and " with quest items in your bags." or allZones and "." or (" for this " .. groupWord .. "."))))
     hud.empty:SetShown(#entries==0)
     hud.empty:ClearAllPoints()
     hud.empty:SetPoint("TOPLEFT",hud.scroll,"TOPLEFT",11,-16)
@@ -2544,7 +2631,7 @@ local function arrange()
     for n=shownRows+1,#hud.rows do hud.rows[n].qid=nil;hud.rows[n].item.link=nil;hud.rows[n]:Hide() end
     for n=shownGroups+1,#hud.branches do hud.branches[n].branchKey=nil;hud.branches[n]:Hide() end
     setExtent(hud.scroll,hud.content,yOffset)
-    arrangeZonesMenu(a,offset,allZones)
+    arrangeZonesMenu(a,offset,allZones,itemCount)
     if AT.SetRankQuestItemTargets then AT.SetRankQuestItemTargets(hud.rows,hud.scroll,verifiedQuestItem) end
 end
 local function browse(z)
@@ -3185,7 +3272,7 @@ function AT.InitQuestHUD()
         if event=="BAG_UPDATE_DELAYED" or event=="GET_ITEM_INFO_RECEIVED" or event=="ITEM_DATA_LOAD_RESULT"
             or event=="QUEST_LOG_UPDATE" or event=="QUEST_ACCEPTED" or event=="QUEST_REMOVED"
             or event=="QUEST_TURNED_IN" or event=="PLAYER_ENTERING_WORLD" then
-            questBagActions=nil
+            questBagActions,bagQuestItems=nil,nil
         end
         if event=="CHAT_MSG_SYSTEM" or event=="UI_ERROR_MESSAGE" then
             Share.feedback(event=="CHAT_MSG_SYSTEM" and first or second);return
