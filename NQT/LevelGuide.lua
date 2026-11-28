@@ -1246,10 +1246,57 @@ function AT.GetLevelGuideObjectiveText(qid)
     for _,row in ipairs(rows) do lines[#lines+1]=row.text end
     return #lines>0 and table.concat(lines,"\n") or nil,live
 end
+-- Recorded client metadata for quests the character has not accepted yet.
+-- Do not turn XP difficulty tiers into an XP amount or treat spells applied
+-- by the server as rewards the player necessarily learns.
+function AT.GetLevelGuideRewardRows(qid)
+    if not positive(qid) then return {} end
+    local db=AT.NQTDB
+    local rewards=db and db.Rewards and db.Rewards[qid]
+    if not rewards then return {} end
+    local rows={}
+    if positive(rewards[1]) then
+        local copper=rewards[1]
+        local coins=safe(GetCoinTextureString,copper)
+        if not validName(coins) then
+            local g,s,c=floor(copper/10000),floor(copper/100)%100,copper%100
+            local parts={}
+            if g>0 then parts[#parts+1]=g.."g" end
+            if s>0 then parts[#parts+1]=s.."s" end
+            if c>0 then parts[#parts+1]=c.."c" end
+            coins=table.concat(parts," ")
+        end
+        rows[#rows+1]={kind="reward",text=coins,icon="Interface\\MoneyFrame\\UI-GoldIcon"}
+    end
+    local function items(group)
+        for _,r in ipairs(group or {}) do
+            local id,count=r[1],r[2]
+            local name=objectiveItemName(id)
+            local icon=safe(C_Item and C_Item.GetItemIconByID,id) or safe(GetItemIcon,id)
+            rows[#rows+1]={kind="reward",item=id,text=("%s  ×%d"):format(name or ("Item #"..id),count),icon=icon or badges[2][3]}
+        end
+    end
+    items(rewards[2])
+    for _,r in ipairs(rewards[4] or {}) do
+        local detail=safe(C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo,r[1])
+        local name,icon=field(detail,"name"),field(detail,"iconFileID")
+        rows[#rows+1]={kind="reward",text=("%s  ×%d"):format(validName(name) and name or ("Currency #"..r[1]),r[2]),icon=icon or GUIDE_BOOK}
+    end
+    if rewards[3] then
+        rows[#rows+1]={kind="description",text="Choose one"}
+        items(rewards[3])
+    end
+    return rows
+end
 local startDescription
 local function drawGuideObjectives(w,q)
     local panel,content=w.objectives,w.objectivesContent
     local rows=AT.GetLevelGuideObjectiveRows(q.id)
+    local rewards=AT.GetLevelGuideRewardRows(q.id)
+    if #rewards>0 then
+        rows[#rows+1]={kind="description",text="Quest Rewards"}
+        for _,r in ipairs(rewards) do rows[#rows+1]=r end
+    end
     local info=startDescription(q.giver)
     panel.start:SetText(info~="" and info or "Quest start not recorded")
     local startH=max(13,min(43,safe(panel.start.GetStringHeight,panel.start) or 13))

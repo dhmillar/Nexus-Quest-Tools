@@ -204,6 +204,34 @@ function api.EstimateWalks(_,from,targets,callback)
     C_Timer.After(0,nextGoal)
     return function()stop=true;if cancel then cancel()end end
 end
+local function mapCandidates(from,to)
+    local out,seen={},{}
+    local function add(map)
+        if finite(map) and map>0 and not seen[map] then seen[map]=true;out[#out+1]=map end
+    end
+    add(from.map);add(to.map)
+    -- Walk known map ancestors only. Never project through another continent.
+    for _,p in ipairs({from,to}) do
+        local map=p.map
+        for _=1,5 do
+            local info=call(C_Map.GetMapInfo,map)
+            if not info or issecretvalue and issecretvalue(info) or type(info)~="table" then break end
+            local up=info.parentMapID
+            if not finite(up) or up<=0 or up==map then break end
+            add(up);map=up
+        end
+    end
+    return out
+end
+local function projectOut(world,x,y,hint)
+    local map,p=call(C_Map.GetMapPosFromWorldPos,world,CreateVector2D(x,y),hint)
+    if not finite(map) or not p or issecretvalue and issecretvalue(p) then return end
+    local u,v=call(p.GetXY,p)
+    if not(finite(u) and finite(v) and u>=0 and u<=1 and v>=0 and v<=1) then return end
+    local result={map=map,x=u,y=v}
+    local w,rx,ry=project(result)
+    if w==world and (rx-x)^2+(ry-y)^2<=1 then return result end
+end
 function api.WalkPath(_,from,to,callback)
     local D=data(from)
     local sx,sy=transform(D,from,true)
@@ -221,6 +249,8 @@ function api.WalkPath(_,from,to,callback)
         local points={}
         local W=D.ny*D.cells
         local i=#keys
+        local candidates=mapCandidates(from,to)
+        local lastHint=candidates[1]
         local function projectBatch()
             if stopped then return end
             -- Small batches keep long multi-tile paths from blocking a frame.
@@ -232,11 +262,17 @@ function api.WalkPath(_,from,to,callback)
                 local k=keys[i]
                 local x=(D.tx+(floor(k/W)+.5)/D.cells)*TILE
                 local y=(D.ty+(k%W+.5)/D.cells)*TILE
-                local map,p=call(C_Map.GetMapPosFromWorldPos,D.world,CreateVector2D(x,y),from.map)
-                if not finite(map) or not p or issecretvalue and issecretvalue(p) then callback(nil,"projection");return end
-                local u,v=call(p.GetXY,p)
-                if not(finite(u) and finite(v) and u>=0 and u<=1 and v>=0 and v<=1) then callback(nil,"projection");return end
-                points[#points+1]={map=map,x=u,y=v}
+                local point=projectOut(D.world,x,y,lastHint)
+                if not point then
+                    for _,hint in ipairs(candidates) do
+                        if hint~=lastHint then
+                            point=projectOut(D.world,x,y,hint)
+                            if point then lastHint=hint;break end
+                        end
+                    end
+                end
+                if not point then callback(nil,"projection");return end
+                points[#points+1]=point
                 i=i-1
             end
             C_Timer.After(0,projectBatch)

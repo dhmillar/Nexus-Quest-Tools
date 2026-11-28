@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.268 - 2026-11-28
+
+- NQTDB adds 3,380 exact-match quest reward records from captured Forever quest metadata. The Level Guide shows recorded money, guaranteed items, choices, and currency.
+- A valid walking route can now keep its shape across zone boundaries. Each projected point is checked against its original world coordinate before drawing it.
+- Added a developer audit for terrain coverage at observed quest objectives and NPC positions. A point on dry terrain is not proof of a connected route.
+
 ## 1.5.267 - 2026-11-28
 
 - NQTDB adds verified local merchant sources for 24 item objectives across 21 quests. Filters by faction and map, excludes non-targetable props, and leaves known loot sources and curated vendors alone.

@@ -103,10 +103,12 @@ const catalogBindings=[
  "db.ClassicDropRefs=AT.ClassicQuestDropReferences",
  "db.ClassicCreatureRefs=AT.ClassicQuestCreatureProfiles",
 ];
-// Independent merchant facts have their own pinned importer and inputs.
+// Keep independent generated sections, whose inputs and provenance are
+// verified separately. The builder above owns the quest/location core only.
 const dest=path.join(N,"NQTDB.lua");
-const merchant=fs.existsSync(dest)&&fs.readFileSync(dest,"utf8").match(
- /-- BEGIN NQTDB merchant facts \(generated\)\r?\n[\s\S]*?-- END NQTDB merchant facts\r?\n/);
-fs.writeFileSync(dest,generated+"\n"+catalogBindings.join("\n")+"\n"+(merchant?.[0]||""));
+const old=fs.existsSync(dest)?fs.readFileSync(dest,"utf8").replace(/\r\n/g,"\n"):"";
+const blocks=["merchant facts","reward facts"].map(name=>old.match(new RegExp(
+ "-- BEGIN NQTDB "+name+" \\(generated\\)\\n[\\s\\S]*?-- END NQTDB "+name+"\\n"))?.[0]||"");
+fs.writeFileSync(dest,generated+"\n"+catalogBindings.join("\n")+"\n"+blocks.join(""));
 console.log(result);
 
