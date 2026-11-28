@@ -3,6 +3,7 @@ local base="Interface\\Icons\\"
 local art={
     vendor="INV_Misc_Bag_10", reagent="INV_Misc_Dust_02", repair="Trade_BlackSmithing",
     ammo="INV_Ammo_Bullet_01", arrows="INV_Ammo_Arrow_02", weapon="INV_Sword_04",
+    fishvendor="INV_Misc_Fish_02", fishingsupplies="Trade_Fishing",
     class="INV_Misc_Book_11", profession="INV_Misc_Gear_01",
     warrior="Ability_Warrior_BattleShout", paladin="Spell_Holy_HolyBolt",
     hunter="Ability_Hunter_AimedShot", rogue="Ability_Rogue_SliceDice",
@@ -88,6 +89,8 @@ local function classify(title,name,known)
     if reagent then roles[#roles+1]="reagent"
     elseif arrows then roles[#roles+1]="arrows"
     elseif bullets then roles[#roles+1]="ammo"
+    elseif has("fishing supplies") then roles[#roles+1]="fishingsupplies"
+    elseif has("fish vendor") then roles[#roles+1]="fishvendor"
     elseif vendor and not repair then roles[#roles+1]="vendor" end
     if repair then roles[#roles+1]="repair" end
     return roles
@@ -106,34 +109,70 @@ local function tokenOK(token)
     return plain(token) and type(token)=="string" and token:match("^nameplate%d+$")~=nil
 end
 local function isNPC(token)
-    if safe(UnitExists,token)~=true or safe(UnitIsPlayer,token)~=false
-        or safe(UnitIsDeadOrGhost,token)~=false or safe(UnitCanAttack,"player",token)~=false then return false end
+    local function yes(v)return v==true or v==1 end
+    local attack=safe(UnitCanAttack,"player",token)
+    if not yes(safe(UnitExists,token)) or yes(safe(UnitIsPlayer,token))
+        or yes(safe(UnitIsDeadOrGhost,token)) or yes(safe(UnitIsDead,token))
+        or yes(attack) or yes(safe(UnitPlayerControlled,token)) then return false end
     local g=safe(UnitGUID,token)
-    if type(g)=="string" then return g:match("^Creature%-") or g:match("^Vehicle%-") end
-    -- The tooltip can still expose a role when identity is protected. Do not infer one from other units.
     local reaction=safe(UnitReaction,token,"player")
-    return safe(UnitPlayerControlled,token)==false and type(reaction)=="number" and reaction>=4
+    local friendly=attack==false or yes(safe(UnitIsFriend,"player",token))
+        or type(reaction)=="number" and reaction>=4
+    if not friendly then return false end
+    if type(g)=="string" then return g:match("^Creature%-") or g:match("^Vehicle%-"),g end
+    return safe(UnitIsPlayer,token)==false and safe(UnitPlayerControlled,token)==false
+        and type(reaction)=="number" and reaction>=4
 end
-local function labelRole(token)
-    local info=safe(C_TooltipInfo and C_TooltipInfo.GetUnit,token)
-    local lines=field(info,"lines")
+local function displayedTitle(frame,name)
+    if not plain(frame) or not frame then return "" end
+    local n=frame.ActorNameSpecial
+    local shownName=plain(n) and n and clean(safe(n.GetText,n)) or ""
+    if shownName~="" and name~="" and shownName~=name then return "" end
+    local label=frame.ActorTitleSpecial
+    if not plain(label) or not label or safe(label.IsShown,label)~=true then return "" end
+    return clean(safe(label.GetText,label))
+end
+local function labelRole(token,plate,guid)
+    local tooltip=C_TooltipInfo
+    local offset=safe(C_CVar and C_CVar.GetCVar or GetCVar,"colorblindMode")
+    local index=tonumber(offset)==1 and 3 or 2
+    local data=safe(tooltip and tooltip.GetUnit,token)
+    local lines=field(data,"lines")
     local first=field(field(lines,1),"leftText")
-    local second=field(field(lines,2),"leftText")
     local name=clean(safe(UnitName,token))
     if name=="" then name=clean(first) end
-    local localizedName=name~="" and serviceNames()[name]
-    local subtitle=clean(second)
-    if subtitle==name or subtitle:find("^level%s") then subtitle="" end
-    return classify(subtitle,name,localizedName),type(lines)=="table" and subtitle~=""
+    local known=name~="" and serviceNames()[name]
+    local function title(v)
+        v=clean(v)
+        if v==name or v:find("^level%s") or v:find("^quest:") then return "" end
+        return v
+    end
+    local subtitle=title(field(field(lines,index),"leftText"))
+    local roles=classify(subtitle,name,known)
+    if #roles>0 then return roles end
+    if guid and tooltip and tooltip.GetHyperlink then
+        local h=safe(tooltip.GetHyperlink,"unit:"..guid)
+        local ht=title(field(field(field(h,"lines"),index),"leftText"))
+        roles=classify(ht,name,known)
+        if #roles>0 then return roles end
+    end
+    -- Optional visual fallback, never a Plater API call or dependency.
+    -- Unit has already been confirmed to be a non-player friendly NPC.
+    for _,f in ipairs({plate,plate.unitFramePlater or plate,plate.UnitFrame or plate}) do
+        roles=classify(title(displayedTitle(f,name)),name,known)
+        if #roles>0 then return roles end
+    end
+    return roles
 end
 local plateCache=setmetatable({},{__mode="k"})
 local function frameFor(plate)
     local existing=plateCache[plate]
     if existing then return existing end
-    local f=CreateFrame("Frame",nil,plate)
-    f:SetPoint("BOTTOM",plate,"TOP",0,7)
+    local f=CreateFrame("Frame",nil,UIParent)
+    if not pcall(f.SetPoint,f,"BOTTOM",plate,"TOP",0,13) then f:Hide();return end
     f:EnableMouse(false)
-    f:SetFrameLevel(plate:GetFrameLevel()+6)
+    if f.SetFrameStrata then f:SetFrameStrata("MEDIUM") end
+    f:SetFrameLevel(6)
     f:Hide()
     local icons={}
     for i=1,3 do
@@ -145,17 +184,20 @@ local function frameFor(plate)
         icon:SetTexCoord(.07,.93,.07,.93)
         icons[i]={border=border,icon=icon}
     end
-    local item={frame=f,icons=icons}
+    local item={frame=f,icons=icons,plate=plate}
     plateCache[plate]=item
     return item
 end
 local function update(token)
-    if not active() or not tokenOK(token) or not isNPC(token) then return false end
+    if not active() or not tokenOK(token) then return false end
+    local npc,guid=isNPC(token)
+    if not npc then return false end
     local plate=safe(C_NamePlate and C_NamePlate.GetNamePlateForUnit,token)
     if not plate or safe(plate.IsForbidden,plate)~=false then return false end
-    local roles,evidence=labelRole(token)
-    if #roles==0 then return evidence end
+    local roles=labelRole(token,plate,guid)
+    if #roles==0 then return false end
     local entry=frameFor(plate)
+    if not entry then return false end
     local n=math.min(3,#roles)
     entry.frame:SetSize(46+(n-1)*49,46)
     for i,c in ipairs(entry.icons) do
@@ -174,7 +216,10 @@ local function added(token)
     if update(token) then return end
     if C_Timer and C_Timer.After then
         C_Timer.After(.35,function()
-            if epochs[token]==generation and active() then update(token) end
+            if epochs[token]~=generation or not active() or update(token) then return end
+            C_Timer.After(1,function()
+                if epochs[token]==generation and active() then update(token) end
+            end)
         end)
     end
 end
@@ -199,5 +244,19 @@ function AT.InitVendorIcons()
         elseif event=="NAME_PLATE_UNIT_REMOVED" and tokenOK(token) then clear(token)
         elseif event=="PLAYER_ENTERING_WORLD" then AT.RefreshVendorIcons() end
     end)
+    if type(SlashCmdList)=="table" then
+        SLASH_NQTVENDORS1="/nqtvendors"
+        SlashCmdList.NQTVENDORS=function()
+            local count,withIcon=0,0
+            for _ in pairs(overlays) do withIcon=withIcon+1 end
+            for _,p in ipairs(safe(C_NamePlate.GetNamePlates) or {}) do
+                if safe(p.IsForbidden,p)==false then count=count+1 end
+            end
+            local cvar=safe(C_CVar and C_CVar.GetCVar or GetCVar,"nameplateShowFriendlyNpcs") or "not exposed"
+            local message=("Vendor Icons %s: %d visible NPC icons, %d available nameplate anchors (friendly NPCs: %s)."):format(active() and "on" or "off",withIcon,count,tostring(cvar))
+            if AT.Say then AT.Say(message) else print(message) end
+        end
+    end
     AT.RefreshVendorIcons()
+    if C_Timer and C_Timer.After then C_Timer.After(1,function() if active() then AT.RefreshVendorIcons() end end) end
 end

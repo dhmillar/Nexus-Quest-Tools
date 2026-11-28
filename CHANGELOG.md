@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.266 - 2026-11-28
+
+- Overhead Vendor Icons now recover missing unit tooltip data from the exact NPC link or its visible nameplate title, retry delayed titles, and render independently of faded friendly nameplate art.
+- Fishing suppliers and fish vendors get distinct icons. Added `/nqtvendors` to report whether WoW supplied nameplate anchors. No nameplate settings are changed.
+
 ## 1.5.265 - 2026-11-28
 
 - Standalone NQTDB adds 461 Eastern Kingdoms and 633 Kalimdor terrain tiles for supported dry outdoor routes. Zephras remains included.
