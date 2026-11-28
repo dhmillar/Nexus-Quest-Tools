@@ -27,8 +27,9 @@ assert(id==7 and #route==6 and route[1].map==1429)
 local id,m,x,y,source=AT.GetFocusedQuestRoutePoint()
 assert(id==7 and m==1429 and x and y and source=="observed objective area")
 native=true
-local _,targets=AT.GetFocusedQuestRouteTargets(1429)
+local _,targets,backup=AT.GetFocusedQuestRouteTargets(1429)
 assert(#targets==1 and targets[1].x==.7,"native route wins")
+assert(#backup==6 and backup[1].map==1429,"verified observed points are kept separate as walking backups")
 native=false
 live[1].npcID=999999
 assert(#AT.GetObservedQuestObjectiveSpots(7,1429)==0,"wrong live entity")

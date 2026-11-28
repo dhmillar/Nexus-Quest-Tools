@@ -109,6 +109,7 @@ local function acceptPath(job,path,why)
             if not goodPlace(point) then fail(job, "invalid"); return end
         end
         path.roadAware = job.road == true and path.roadAware == true
+        if job.usingBackup then path.observedApproach=true end
         if latest.stale then job.waitingPath = path else job.path = path end
 end
 local function requestPath(job)
@@ -148,38 +149,55 @@ local function estimateNext(job, first)
 end
 
 local function chooseWalkingPath(job)
+    local function retry(why)
+        if not job.usingBackup and #job.backups>0
+            and (why=="offmesh" or why=="unreachable" or why=="projection") then
+            job.usingBackup=true
+            job.targets=job.backups
+            job.best,job.cost=nil,nil
+            chooseWalkingPath(job)
+            return true
+        end
+        return false
+    end
     local function budget(why)
         if why~="budget" then return false end
         estimateNext(job,1)
         return true
     end
     request(job,job.api.WalkBestPath,job.targets,function(path,why)
-        if budget(why) then return end
+        if budget(why) or retry(why) then return end
         if type(path)=="table" and finite(path.targetIndex) then job.best=job.targets[path.targetIndex] end
         if not job.best then fail(job,why);return end
         acceptPath(job,path,why)
-    end,budget)
+    end,function(why) return budget(why) or retry(why) end)
 end
 
 currentTargets = function(quest, map, force)
     if not force and candidateCache and candidateCache.quest == quest and candidateCache.map == map
         and time() < candidateCache.at + SAMPLE_SECONDS then return candidateCache end
-    local ok, id, points = pcall(AT.GetFocusedQuestRouteTargets, map)
-    if not ok or id ~= quest or type(points) ~= "table" then points = {} end
-    local list, signature = {}, {}
+    local ok,id,points,backup = pcall(AT.GetFocusedQuestRouteTargets,map)
+    if not ok or id~=quest or type(points)~="table" then points,backup={},nil end
+    local list,signature,backups={},{},{}
     for _, point in ipairs(points) do
         if goodPlace(point) then
             list[#list+1] = point
             signature[#signature+1] = point.map .. ":" .. point.x .. ":" .. point.y
         end
     end
+    for _,point in ipairs(type(backup)=="table" and backup or {}) do
+        if goodPlace(point) then
+            backups[#backups+1]=point
+            signature[#signature+1]="B:"..point.map..":"..point.x..":"..point.y
+        end
+    end
     local now=time()
     if #list==0 and lastGoodTargets and lastGoodTargets.quest==quest and lastGoodTargets.map==map
         and now-lastGoodTargets.at < 2 then
-        candidateCache={quest=quest,map=map,at=now,points=lastGoodTargets.points,key=lastGoodTargets.key,stale=true}
+        candidateCache={quest=quest,map=map,at=now,points=lastGoodTargets.points,backups=lastGoodTargets.backups,key=lastGoodTargets.key,stale=true}
         return candidateCache
     end
-    candidateCache = {quest=quest, map=map, at=now, points=list, key=table.concat(signature, "|")}
+    candidateCache = {quest=quest, map=map, at=now, points=list, backups=backups, key=table.concat(signature, "|")}
     if #list>0 then lastGoodTargets=candidateCache end
     return candidateCache
 end
@@ -214,7 +232,7 @@ function AT.GetFocusedQuestWalkingPath(quest, from, width, height)
             or (state.retry and now >= state.retry) then clear() end
     end
     if not state and not cache.stale then
-        state = {quest=quest, from=from, api=api, nav=nav, targets=cache.points, key=cache.key,
+        state = {quest=quest, from=from, api=api, nav=nav, targets=cache.points, backups=cache.backups, key=cache.key,
             started=now, phase=0, road=road}
         if #cache.points==1 and AT.IsQuestTurnInNavigation and AT.IsQuestTurnInNavigation(quest) then
             state.best=cache.points[1]

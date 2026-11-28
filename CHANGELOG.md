@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.272 - 2026-11-28
+
+- If a native in-progress quest pin cannot be routed, NQT can try a same-zone location where progress on the exact objective was observed. Reachable native pins remain first choice. No guessed NPC, off-zone target, or turn-in is substituted.
+
 ## 1.5.271 - 2026-11-28
 
 - Fix routes being rejected when Forever reports a placeholder player height. Verified single-floor routes can start from matching readable map coordinates even when the separate unit-position data is withheld. Instances and ambiguous floors are still excluded.

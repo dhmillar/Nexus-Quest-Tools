@@ -1080,8 +1080,8 @@ function AT.GetFocusedQuestRouteTargets(mapID)
     if not id then return end
     local ctx = mapContext()
     if not ctx or ctx.id ~= mapID then return id end
-    local targets, seen = {}, {}
-    local function capture(x, y, otherMap)
+    local targets, seen, backups = {}, {}, {}
+    local function capture(x, y, otherMap, into)
         if not xyValid(x, y) then return end
         local useMap = otherMap or mapID
         if useMap ~= mapID then
@@ -1094,7 +1094,8 @@ function AT.GetFocusedQuestRouteTargets(mapID)
         local key = useMap .. ":" .. x .. ":" .. y
         if seen[key] then return end
         seen[key] = true
-        targets[#targets+1] = {map=useMap, x=x, y=y}
+        into=into or targets
+        into[#into+1] = {map=useMap, x=x, y=y}
     end
     if AT.IsQuestTurnInNavigation(id) then
         local m,x,y=AT.GetQuestTurnInPoint(id,mapID)
@@ -1112,18 +1113,19 @@ function AT.GetFocusedQuestRouteTargets(mapID)
     for _, poi in ipairs(ctx.points or {}) do
         if field(poi, "questID") == id then capture(field(poi, "x"), field(poi, "y")) end
     end
-    if #targets==0 then
-        for _,p in ipairs(AT.GetObservedQuestObjectiveSpots(id,mapID) or {}) do capture(p[2],p[3],p[1]) end
-    end
-    table.sort(targets, function(a,b)
+    local into=#targets==0 and targets or backups
+    for _,p in ipairs(AT.GetObservedQuestObjectiveSpots(id,mapID) or {}) do capture(p[2],p[3],p[1],into) end
+    local function rank(a,b)
         if a.map~=b.map then
             if a.map==mapID then return true end
             if b.map==mapID then return false end
             return a.map<b.map
         end
         return a.x==b.x and a.y<b.y or a.x<b.x
-    end)
-    return id,targets
+    end
+    table.sort(targets,rank)
+    table.sort(backups,rank)
+    return id,targets,backups
 end
 function AT.GetFocusedQuestRoutePoint()
     local focus,source = AT.GetQuestNavigationID()
