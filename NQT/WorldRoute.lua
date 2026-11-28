@@ -108,26 +108,42 @@ local function line(i,w,h,ax,ay,bx,by,isRoute,turnIn,artScale)
         region.autoTrackGlow=glow
         lines[i]=region
     end
-    region:SetThickness(1.65/artScale)
-    local glow=region.autoTrackGlow; glow:SetThickness(4/artScale)
-    if isRoute then
-        if turnIn then
+    local glow=region.autoTrackGlow
+    if region.nqtScale~=artScale then
+        region:SetThickness(1.65/artScale)
+        glow:SetThickness(4/artScale)
+        region.nqtScale=artScale
+    end
+    local style=isRoute and (turnIn and 2 or 1) or 0
+    if region.nqtStyle~=style then
+        if style==2 then
             region:SetColorTexture(.32,1,.22,1)
             glow:SetColorTexture(.22,.85,.14,.29)
-        else
+        elseif style==1 then
             region:SetColorTexture(1,.85,.13,1)
             glow:SetColorTexture(1,.64,.08,.34)
+        else
+            region:SetColorTexture(1,.66,.29,1)
+            glow:SetColorTexture(1,.47,.12,.28)
         end
-    else
-        region:SetColorTexture(1,.66,.29,1)
-        glow:SetColorTexture(1,.47,.12,.28)
+        region.nqtStyle=style
     end
-    glow:SetStartPoint("TOPLEFT",canvas,x*w,-y*h)
-    glow:SetEndPoint("TOPLEFT",canvas,u*w,-v*h)
-    glow:Show()
-    region:SetStartPoint("TOPLEFT",canvas,x*w,-y*h)
-    region:SetEndPoint("TOPLEFT",canvas,u*w,-v*h)
-    region:Show()
+    -- Existing lines usually retain all or most of their geometry. Avoid
+    -- resetting native anchor points every refresh just to redraw them.
+    local a,b,c,d=x*w,-y*h,u*w,-v*h
+    if a~=region.nqtX or b~=region.nqtY then
+        glow:SetStartPoint("TOPLEFT",canvas,a,b)
+        region:SetStartPoint("TOPLEFT",canvas,a,b)
+        region.nqtX,region.nqtY=a,b
+    end
+    if c~=region.nqtEndX or d~=region.nqtEndY then
+        glow:SetEndPoint("TOPLEFT",canvas,c,d)
+        region:SetEndPoint("TOPLEFT",canvas,c,d)
+        region.nqtEndX,region.nqtEndY=c,d
+    end
+    if not region.nqtShown then
+        glow:Show();region:Show();region.nqtShown=true
+    end
     return true
 end
 local function setup(parent)
@@ -246,18 +262,25 @@ function AT.RenderWorldQuestRoute(status,quest,snapshot)
             viewBounds={l,right,t,b}
             if finite(scale) and scale>0 then artScale=math.max(1,scale) end
         end
-    elseif stitch then
-        local art=stitch.ArtTopLevel and stitch.ArtTopLevel()
+    else
+        local art=stitch and stitch.ArtTopLevel and stitch.ArtTopLevel()
         if finite(art) then level=math.max(level,art+2) end
         if port and port.GetRect and port.GetEffectiveScale and canvas.GetRect and canvas.GetEffectiveScale then
             local l,b,pw,ph=port:GetRect()
             local cl,cb,_,ch=canvas:GetRect()
             local ps,cs=port:GetEffectiveScale(),canvas:GetEffectiveScale()
             if finite(l) and finite(b) and finite(pw) and finite(ph) and pw>0 and ph>0
-                and finite(cl) and finite(cb) and finite(ch) and finite(ps) and finite(cs) and cs>0 then
+                and finite(cl) and finite(cb) and finite(ch) and finite(ps) and ps>0 and finite(cs) and cs>0 then
                 local left,right=(l*ps-cl*cs)/(w*cs),((l+pw)*ps-cl*cs)/(w*cs)
                 local top,bottom=((cb+ch)*cs-(b+ph)*ps)/(h*cs),((cb+ch)*cs-b*ps)/(h*cs)
-                viewBounds={left,right,top,bottom}
+                if not stitch then
+                    left,right=math.max(0,left),math.min(1,right)
+                    top,bottom=math.max(0,top),math.min(1,bottom)
+                end
+                if right>left and bottom>top then
+                    viewBounds={left,right,top,bottom}
+                    artScale=math.max(1,cs/ps)
+                end
             end
         end
     end
@@ -353,7 +376,12 @@ function AT.RenderWorldQuestRoute(status,quest,snapshot)
             end
         end
     end
-    for i=used+1,#lines do lines[i]:Hide(); lines[i].autoTrackGlow:Hide() end
+    for i=used+1,#lines do
+        local hidden=lines[i]
+        if hidden.nqtShown then
+            hidden:Hide();hidden.autoTrackGlow:Hide();hidden.nqtShown=false
+        end
+    end
     if inView(x,y) then
         pin:ClearAllPoints()
         pin:SetPoint("CENTER",canvas,"TOPLEFT",x*w,-y*h)

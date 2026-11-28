@@ -7,7 +7,7 @@ local function makeLayer(level)
         GetFrameLevel=function()return level end,IsVisible=function(self)return not self.hidden end}
 end
 local stock,terrain=makeLayer(2),makeLayer(12)
-local overlays={}
+local overlays={}; local writes=0
 CreateFrame=function(_,_,parent)
     local overlay={parent=parent,SetAllPoints=nop,EnableMouse=nop,
         SetFrameLevel=function(self,level)self.level=level end,parts={}}
@@ -15,10 +15,10 @@ CreateFrame=function(_,_,parent)
         return {SetShadowOffset=nop,SetText=function(_,value) self.legendText=value end,SetTextColor=nop,SetPoint=nop,ClearAllPoints=nop,Show=nop,Hide=nop}
     end
     function overlay:CreateLine(_,layer)
-        local line={SetThickness=nop,SetColorTexture=function(self,...)self.color={...}end,
-            SetStartPoint=function(self,_,_,x,y)self.x=x;self.y=y end,
-            SetEndPoint=function(self,_,_,x,y)self.endX=x;self.endY=y end,
-            Show=function(self)self.shown=true end,Hide=function(self)self.shown=false end}
+        local line={SetThickness=function(self,n)writes=writes+1;self.thickness=n end,SetColorTexture=function(self,...)writes=writes+1;self.color={...}end,
+            SetStartPoint=function(self,_,_,x,y)writes=writes+1;self.x=x;self.y=y end,
+            SetEndPoint=function(self,_,_,x,y)writes=writes+1;self.endX=x;self.endY=y end,
+            Show=function(self)writes=writes+1;self.shown=true end,Hide=function(self)writes=writes+1;self.shown=false end}
         if layer=="OVERLAY" then self.parts[#self.parts+1]=line end
         return line
     end
@@ -86,3 +86,25 @@ assert(overlay.legendText=="ESTIMATED DIRECTION  |  NOT A WALKING ROUTE")
 AT.RenderWorldQuestRoute("no_quest",nil,nil)
 assert(not overlay.shown)
 print("PASS MapWise shares full NQT route, clips on the visible terrain, reprojects when switching map mode, and matches yellow/green stock colors")
+
+-- Test the actual stock viewport as well, including offsets used for panning.
+MapWiseAPI.UI.frame.hidden=true
+WorldMapFrame.IsVisible=function()return true end
+WorldMapFrame.ScrollContainer={GetRect=function()return 30,20,20,60 end,GetEffectiveScale=function()return 1 end}
+stock.GetEffectiveScale=function()return 2 end
+stock.GetRect=function()return 0,0,100,100 end
+C_Map.GetMapPosFromWorldPos=function(_,vec,map)return map,vec end
+route.path.waypoints={{map=120,x=.05,y=.7},{map=120,x=.2,y=.7},{map=120,x=.5,y=.7}}
+route.fraction=0
+AT.RenderWorldQuestRoute("routed",20,route)
+local layer=overlays[stock]
+assert(layer.shown and #layer.parts==2)
+assert(math.abs(layer.parts[1].x-15)<.00001 and math.abs(layer.parts[2].endX-25)<.00001)
+assert(layer.parts[1].thickness==.825,"retain readable screen-pixel line weight during stock zoom")
+local previous=writes
+AT.RenderWorldQuestRoute("routed",20,route)
+assert(writes==previous,"unchanged view does not re-anchor or repaint native route lines")
+route.fraction=.8
+AT.RenderWorldQuestRoute("routed",20,route)
+assert(writes-previous==2 and math.abs(layer.parts[1].x-17)<.00001,"route progress moves only its first glow and line anchor")
+print("PASS native zoom/pan clipping, line weight, and redraw work bounded to changed native properties")

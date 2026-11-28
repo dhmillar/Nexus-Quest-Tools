@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.285 - 2026-11-28
+
+- Stock world map routes now follow the visible map bounds when zoomed or panned and maintain a readable line weight.
+- World map route drawing updates only the segments whose appearance or position changed.
+
 ## 1.5.284 - 2026-11-28
 
 - Rank Quest now shows the Gem of the First Khan as a usable item for The Pariah's Instructions, even when it is the only Khan gem in your bags.
