@@ -5299,3 +5299,21 @@ db.CreaturePortraitVariants={
  [278644]={"Warbringer Construct",8289},
 }
 -- END NQTDB creature portrait variants
+-- BEGIN NQTDB exact quest corpse rates (generated)
+-- Exact quest-conditioned rate evidence from Efficient Games Forever, CC BY 4.0.
+-- https://github.com/JIVESCORP/eg-link-output-wowf/blob/c1bf99bc2835bbe1b2dad82fb99f994c0cfffe33/DATASETS.md#loot
+-- https://efficient.games | https://creativecommons.org/licenses/by/4.0/
+-- Current-mode estimates only: {npc,drops,windows,nonempty known deaths,known deaths,build}.
+db.ExactQuestCorpseRates={
+ [92551]={[252760]={[0]={{252068,10,16,16,16,70959}}}},
+ [92909]={[255010]={[0]={{36,4,30,30,30,70790}}}},
+ [94842]={[267266]={[0]={{258573,6,12,12,12,71139}}}},
+ [95121]={[268345]={[0]={{255901,6,13,13,13,70938},{256807,5,12,12,12,71139}}}},
+ [95261]={[268632]={[0]={{263307,10,24,33,33,71139}}}},
+ [95317]={[274396]={[0]={{260422,11,18,18,18,71037}}}},
+ [95380]={[273008]={[0]={{243509,8,23,23,23,71037}}}},
+ [97009]={[276100]={[0]={{249230,12,19,32,36,71091}}}},
+ [98407]={[280911]={[0]={{712,4,13,12,12,70862}}}},
+ [99152]={[286259]={[0]={{260428,5,13,13,13,71037}}}},
+}
+-- END NQTDB exact quest corpse rates

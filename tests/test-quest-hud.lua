@@ -528,6 +528,16 @@ do
         assert(not find("A flight to Duskwood").objectives[1].text:find("43%",1,true),"do not cross quest IDs")
         AT.db.rankQuestLegacyDropRates=false
         assert(not text12():find("43%",1,true),"Classic setting off")
+        local dbPack,priorDB,mode={},AT.NQTDB,IsInGroup
+        assert(loadfile("NQT/NQTDB.lua"))("NQT",dbPack)
+        local row=assert(dbPack.NQTDB.ExactQuestCorpseRates[92551][252760])
+        AT.NQTDB={ExactQuestCorpseRates={[12]={[990005]=row}}}
+        IsInGroup=function()return false end
+        assert(text12():find("(63%)",1,true),"measured Forever rate visible with Classic disabled")
+        AT.db.rankQuestDropRates=false
+        assert(not text12():find("63%",1,true),"master switch hides true Forever rates")
+        AT.db.rankQuestDropRates=nil
+        IsInGroup,AT.NQTDB=mode,priorDB
         AT.db.rankQuestLegacyDropRates=true
         AT.db.rankQuestDropRates=false
         assert(not text12():find("43%",1,true),"master off")

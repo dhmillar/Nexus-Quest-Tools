@@ -9,6 +9,7 @@ for _,name in ipairs({"LevelGuideData","ForeverQuestFacts","QuestMobData","Everl
     local path=(name=="EverlootDrops" and arg and arg[2]~="" and arg[2]) or ("NQT/"..name..".lua")
     assert(loadfile(path))("NQT",AT)
 end
+if arg and arg[4]=="before-exact-rates" then AT.NQTDB.ExactQuestCorpseRates=nil end
 local output=arg and arg[1] and assert(io.open(arg[1],"w"))
 if output then
     output:write("quest_id\tobjective_item_id\tmob_source\tobject_witness\tknown_vendor\tshown_solo_without_classic\tshown_party_without_classic\tclassic_fallback\n")

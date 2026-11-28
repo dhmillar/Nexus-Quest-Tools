@@ -1462,6 +1462,23 @@ local function objectiveDropSuffix(qid,item)
     end
     local low,high=observedRecord(item)
     if not low then
+        local exact=AT.NQTDB and AT.NQTDB.ExactQuestCorpseRates
+        local quest=exact and exact[qid]
+        local itemRows=quest and quest[item]
+        local sources=itemRows and itemRows[currentMode]
+        if sources then
+            local minRate,maxRate
+            for _,r in ipairs(sources) do
+                -- Expected per kill: chance the corpse has loot times slots per window.
+                local rate=100*r[2]*r[4]/(r[3]*r[5])
+                minRate=not minRate and rate or math.min(minRate,rate)
+                maxRate=not maxRate and rate or math.max(maxRate,rate)
+            end
+            if minRate then
+                local a,b=fmtDrop(minRate),fmtDrop(maxRate)
+                return " ("..(a==b and a or a.."\226\128\147"..b)..")"
+            end
+        end
         local estimate=earlyRate(1-currentMode)
         if estimate then return estimate end
         local ref=AT.ForeverReportedQuestDropReferences and AT.ForeverReportedQuestDropReferences[qid]

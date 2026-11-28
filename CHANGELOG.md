@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.287 - 2026-11-28
+
+- Filled ten previously blank solo quest drop rates using observed Forever loot and kill records for the exact quests and items.
+- Preserves separate solo and group data, stronger existing evidence, and the Classic fallback setting.
+
 ## 1.5.286 - 2026-11-28
 
 - Restored missing creature portraits for 27 kill objectives and 24 collection objectives using models confirmed for those exact Forever creatures.
