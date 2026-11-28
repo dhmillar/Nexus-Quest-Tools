@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.303 - 2026-11-28
+
+- Routing: try the independently verified turn-in or objective approach when the fallback per-map search finds no reachable native destination or when the final path cannot be projected. Keep the native destination when it routes; never switch just because combat or a search budget delayed planning.
+
 ## 1.5.302 - 2026-11-28
 
 - Level Guide: show verified creature portraits alongside kill and collection objectives using the same bundled sources as Rank Quest. The guide keeps the live objective text and uses item art when a drop-source portrait is unknown.

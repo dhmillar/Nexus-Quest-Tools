@@ -177,9 +177,27 @@ local function acceptPath(job,path,why)
         end
         if latest.stale then job.waitingPath = path else job.path = path end
 end
+local chooseWalkingPath
+local function tryVerifiedBackup(job,why)
+    if job.usingBackup or #job.backups==0
+        or (why~="offmesh" and why~="unreachable" and why~="projection") then return false end
+    job.usingBackup=true
+    job.targets=job.backups
+    job.best,job.cost=nil,nil
+    chooseWalkingPath(job)
+    return true
+end
+
+local function failDestination(job,why)
+    if not tryVerifiedBackup(job,why) then fail(job,why) end
+    return true -- request() must not apply its default failure a second time.
+end
+
 local function requestPath(job)
-    if not job.best then fail(job, "unreachable"); return end
-    request(job,job.api.WalkPath,job.best,function(path,why) acceptPath(job,path,why) end)
+    if not job.best then failDestination(job,"unreachable"); return end
+    request(job,job.api.WalkPath,job.best,function(path,why)
+        if not tryVerifiedBackup(job,why) then acceptPath(job,path,why) end
+    end,function(why) return failDestination(job,why) end)
 end
 
 local function estimateNext(job, first)
@@ -199,7 +217,7 @@ local function estimateNext(job, first)
     end
     request(job, job.api.EstimateWalks, batch, function(costs, why)
         if why or type(costs) ~= "table" then
-            if not skipCrossMap(why) then fail(job,why) end
+            if not skipCrossMap(why) then failDestination(job,why) end
             return
         end
         for i, target in ipairs(batch) do
@@ -210,32 +228,22 @@ local function estimateNext(job, first)
             end
         end
         estimateNext(job, final + 1)
-    end, skipCrossMap)
+    end, function(why) return skipCrossMap(why) or failDestination(job,why) end)
 end
 
-local function chooseWalkingPath(job)
-    local function retry(why)
-        if not job.usingBackup and #job.backups>0
-            and (why=="offmesh" or why=="unreachable" or why=="projection") then
-            job.usingBackup=true
-            job.targets=job.backups
-            job.best,job.cost=nil,nil
-            chooseWalkingPath(job)
-            return true
-        end
-        return false
-    end
+chooseWalkingPath = function(job)
+    if type(job.api.WalkBestPath)~="function" then estimateNext(job,1); return end
     local function budget(why)
         if why~="budget" then return false end
         estimateNext(job,1)
         return true
     end
     request(job,job.api.WalkBestPath,job.targets,function(path,why)
-        if budget(why) or retry(why) then return end
+        if budget(why) or tryVerifiedBackup(job,why) then return end
         if type(path)=="table" and finite(path.targetIndex) then job.best=job.targets[path.targetIndex] end
         if not job.best then fail(job,why);return end
         acceptPath(job,path,why)
-    end,function(why) return budget(why) or retry(why) end)
+    end,function(why) return budget(why) or tryVerifiedBackup(job,why) end)
 end
 
 currentTargets = function(quest, map, force)

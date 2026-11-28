@@ -58,3 +58,42 @@ function AT.IsQuestTurnInNavigation()return true end
 route,p=AT.GetFocusedQuestWalkingPath(focus,origin,1000,1000)
 assert(route and p==observed and route.verifiedTurnInApproach and not route.observedApproach and #req==2)
 print("PASS verified turn-in uses distinct fallback label and still tries native first")
+
+
+-- A combined search that budgets out can fall back to per-map estimates.
+-- If those prove every primary unreachable, it still owes the verified backup a try.
+for _,case in ipairs({"none reachable","projected path rejected","async path rejected","combat","both budget"}) do
+ focus=focus+1
+ AT.CancelQuestWalking()
+ local pending,trace=nil,{}
+ engine.WalkBestPath=function(_,from,spots,reply)
+  trace[#trace+1]=spots[1]
+  if spots[1]==blocked then return nil,"budget" end
+  assert(spots[1]==observed)
+  reply({targetIndex=1,navVersion="bundled-test",yards=95,waypoints={origin,observed}})
+  return cleanStop
+ end
+ engine.EstimateWalks=function(_,from,spots,reply)
+  assert(spots[1]==blocked)
+  if case=="both budget" then return nil,"budget" end
+  reply({case~="none reachable" and 100 or false})
+  return cleanStop
+ end
+ engine.WalkPath=function(_,from,target,reply)
+  assert(target==blocked)
+  if case=="async path rejected" then pending=reply;return cleanStop end
+  return nil,case=="combat" and "combat" or "projection"
+ end
+ route,p=AT.GetFocusedQuestWalkingPath(focus,origin,1000,1000)
+ if pending then
+  assert(not route and #trace==1,"pending path must not draw prematurely")
+  pending(nil,"projection")
+  route,p=AT.GetFocusedQuestWalkingPath(focus,origin,1000,1000)
+ end
+ if case=="combat" or case=="both budget" then
+  assert(not route and #trace==1,"temporary refusal must not replace the destination")
+ else
+  assert(route and p==observed and route.verifiedTurnInApproach and #trace==2,"verified fallback lost: "..case)
+ end
+end
+print("PASS verified fallback survives estimate and final-projection failures without bypassing combat or budget")
