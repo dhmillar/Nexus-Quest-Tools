@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.264
+
+- Pet Bar: recover stock pet nameplates before unit metadata loads, keep following the actual pet, and recover when a nameplate addon resets the pet category after startup. No stationary bar or player anchor.
+
 ## 1.5.263 - 2026-11-28
 
 - First standalone NQTDB terrain slice: dry walking routes on eligible Zephras Isle ground, using 25 converted tiles. Shortest Path Forever does not have to be installed.

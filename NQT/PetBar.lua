@@ -1,6 +1,6 @@
 local _,AT=...
 local bar,events,listening,anchoredPlate,anchoredToken
-local tokenHint,removedPlate,recheck,bootstrapGeneration
+local tokenHint,removedPlate,recheck,bootstrapGeneration,cvarRetried
 local healthColorCurve,renderStatus,followElapsed
 local masked={}
 local settingMode,leasePending,writing
@@ -132,18 +132,28 @@ local function filterExistingPlates()
         end
     end
 end
+-- Resolve stock nameplates even before their Lua unit fields populate.
+-- Only the exact client lookup (never frame position or a name match) can
+-- stand in for missing identity. A contradictory owner always wins.
+local function confirmedToken(plate)
+    if not plate then return end
+    local token=plateToken(plate)
+    if token then return ownsUnit(token) and token or nil end
+    if ownsUnit(tokenHint) and safe(C_NamePlate.GetNamePlateForUnit,tokenHint)==plate then return tokenHint end
+    if outdoor() and safe(C_NamePlate.GetNamePlateForUnit,"pet")==plate then return "pet" end
+end
 local function petPlate()
     if not C_NamePlate then return end
     local plate=safe(C_NamePlate.GetNamePlateForUnit,"pet")
     if usable(plate) then
-        local token=plateToken(plate)
-        if ownsUnit(token) then return plate,token end
+        local token=confirmedToken(plate)
+        if token then return plate,token end
     end
     if ownsUnit(tokenHint) then
         plate=safe(C_NamePlate.GetNamePlateForUnit,tokenHint)
         if usable(plate) then
-            local token=plateToken(plate)
-            if ownsUnit(token) then return plate,token end
+            local token=confirmedToken(plate)
+            if token then return plate,token end
         end
     end
     local list=safe(C_NamePlate.GetNamePlates)
@@ -222,7 +232,7 @@ local function bindToPlate(plate,token)
         followElapsed=followElapsed+dt
         if followElapsed<.04 then return end
         followElapsed=0
-        local currentToken=usable(plate) and plateToken(plate)
+        local currentToken=usable(plate) and confirmedToken(plate)
         if not usable(plate) or not ownsUnit(currentToken) then
             if not outdoor() then AT.RefreshPetBar()
             else bar:Hide();restorePetLabels() end
@@ -267,7 +277,18 @@ local function scheduleBootstrap()
     end
 end
 local function petEvent(_,event,unit)
-    if event=="PLAYER_LOGOUT" then
+    if writing then return end
+    if event=="CVAR_UPDATE" then
+        if type(unit)=="string" and (not issecretvalue or not issecretvalue(unit)) then
+            local key=unit:lower()
+            if not cvarRetried and (key==modernPetCVar:lower() or key==legacyPetCVar:lower()) and getPetCVar(unit)=="0" then
+                cvarRetried=true
+                settingMode=nil
+                scheduleBootstrap()
+            end
+        end
+        return
+    elseif event=="PLAYER_LOGOUT" then
         bootstrapGeneration=nil
         syncPetCVar(false)
         restoreAllArt()
@@ -278,7 +299,12 @@ local function petEvent(_,event,unit)
     elseif event=="NAME_PLATE_UNIT_ADDED" then
         if not ownsUnit(unit) then
             if C_NamePlate and read(UnitExists,"pet","boolean")==true then
-                hideStockArt(safe(C_NamePlate.GetNamePlateForUnit,unit),unit)
+                local candidate=safe(C_NamePlate.GetNamePlateForUnit,unit)
+                if usable(candidate) and confirmedToken(candidate) then
+                    AT.RefreshPetBar()
+                else
+                    hideStockArt(candidate,unit)
+                end
             end
             return
         end
@@ -290,13 +316,15 @@ local function petEvent(_,event,unit)
         end
     elseif event=="NAME_PLATE_UNIT_REMOVED" then
         for frame,state in pairs(masked) do if state.token==unit then restoreArt(frame) end end
-        if unit==anchoredToken or unit==tokenHint or ownsUnit(unit) then
+        if unit==anchoredToken or unit==tokenHint or ownsUnit(unit)
+            or anchoredToken=="pet" and not confirmedToken(anchoredPlate) then
+            if anchoredPlate and anchoredToken=="pet" then restoreArt(anchoredPlate.UnitFrame) end
             removedPlate,tokenHint=anchoredPlate,nil
             detach()
             if not outdoor() then AT.RefreshPetBar() end
         end
     elseif event=="PLAYER_ENTERING_WORLD" or event=="UNIT_PET" and unit=="player" then
-        tokenHint,removedPlate=nil,nil
+        tokenHint,removedPlate,cvarRetried=nil,nil,nil
         detach()
         restoreAllArt()
         AT.RefreshPetBar()
@@ -316,12 +344,13 @@ function AT.RefreshPetBar()
         bootstrapGeneration=(bootstrapGeneration or 0)+1
         if not leasePending then events:UnregisterAllEvents();listening=nil end
         detach()
-        tokenHint,removedPlate=nil,nil
+        tokenHint,removedPlate,cvarRetried=nil,nil,nil
         return
     end
     if not listening then
         events:RegisterEvent("PLAYER_ENTERING_WORLD")
         events:RegisterEvent("PLAYER_LOGOUT")
+        events:RegisterEvent("CVAR_UPDATE")
         events:RegisterEvent("PLAYER_REGEN_ENABLED")
         events:RegisterEvent("NAME_PLATE_UNIT_ADDED")
         events:RegisterEvent("NAME_PLATE_UNIT_REMOVED")

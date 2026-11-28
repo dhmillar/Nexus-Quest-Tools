@@ -233,5 +233,35 @@ assert(timers[2][1]==.6);timers[2][2]()
 assert(bar.shown and cv.nameplateShowFriendlyPlayerPets=="1","late Plater setting and plate are reconciled without toggling")
 AT.db.petBarEnabled=false;AT.RefreshPetBar()
 timers[4][2]();assert(not bar.shown and cv.nameplateShowFriendlyPlayerPets=="0","stale startup callback cannot re-enable disabled bar")
+-- A stock plate can be returned by exact pet lookup before its Lua fields
+-- exist. Test both initial display and continued movement with no token.
+local stockPet=plate(nil)
+stockPet.GetCenter=function()return 450 end
+stockPet.GetTop=function()return 320 end
+stockPet.GetEffectiveScale=function()return 1 end
+stockPet.UnitFrame=stock(.89)
+direct,listed=stockPet,{stockPet,other}
+AT.db.petBarEnabled=true
+AT.RefreshPetBar()
+assert(bar.shown and bar.point[4]==450,"exact outdoor pet lookup recovers stock plates without Lua fields")
+stockPet.GetCenter=function()return 465 end
+watcher.onUpdate(watcher,.05)
+assert(bar.shown and bar.point[4]==465,"movement does not drop an exact stock pet plate")
+direct=nil;listed={other}
+watcher.onEvent(watcher,"NAME_PLATE_UNIT_REMOVED","nameplate14")
+assert(not bar.shown and stockPet.UnitFrame.a==.89,"restore stock art when provisional plate is removed")
+direct=ownPlayerPlate
+AT.RefreshPetBar()
+assert(not bar.shown,"explicit player ownership must override an inconsistent pet lookup")
+direct,listed=stockPet,{stockPet,other}
+watcher.onEvent(watcher,"PLAYER_ENTERING_WORLD")
+cv.nameplateShowFriendlyPlayerPets="0"
+timers={}
+watcher.onEvent(watcher,"CVAR_UPDATE","nameplateShowFriendlyPlayerPets")
+assert(#timers==4)
+timers[1][2]()
+assert(cv.nameplateShowFriendlyPlayerPets=="1" and bar.shown,"recover when another addon resets the category after startup")
+AT.db.petBarEnabled=false
+AT.RefreshPetBar()
 for _,key in ipairs(writes) do assert(key=="nameplateShowFriendlyPlayerPets") end
 print("PASS Pet Bar: bright green and red threshold, exact pet anchor, pet-only category lease and restoration, confirmed friendly pet filtering and instance guards")
