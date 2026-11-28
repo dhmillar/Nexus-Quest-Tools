@@ -2,7 +2,7 @@ local _, AT = ...
 local frame, lines, caption, elapsed = nil, nil, nil, 0
 local refreshPeriod, enterAreaYards, leaveAreaYards = 0.3, 35, 52
 local previewYards, renderLimit, offPathYards = 90, 30, 24
-local currentPath, cursor, projected, arrival
+local currentPath, cursor, projected, arrival, currentProjectionMap
 local scopeQuest, scopeTurnIn, scopeGuide, scopeWaypoint, scopeMap, positionLost, routeStatus, statusQuest
 local meter, metadata, travelDetail, measure, mapRoute
 local bearing, bearingStatus, distanceSource, selectionSource, drawFailure
@@ -49,7 +49,7 @@ local function data(quest)
     end
     local playerMap = maps.GetBestMapForUnit("player")
     if not finite(playerMap) or playerMap <= 0 then return nil,"position" end
-    if scopeMap and scopeMap ~= playerMap and AT.CancelQuestWalking then AT.CancelQuestWalking() end
+    if scopeMap and scopeMap ~= playerMap and not scopeWaypoint and AT.CancelQuestWalking then AT.CancelQuestWalking() end
     scopeMap = playerMap
     -- Both planners accept 2D quest POIs. Without a reliable objective floor,
     -- avoid drawing outdoor routes through cave walls, dungeons, or floor maps.
@@ -238,7 +238,10 @@ local function detailedProgress(d,candidate,fraction,best,count)
     return {remain=remain,turn=turn,toTurn=toTurn}
 end
 local function walk(d, radius, yardRadius)
-    if d.path ~= currentPath then currentPath, cursor, projected, measure = d.path, 1, {}, nil end
+    if d.path ~= currentPath then currentPath,cursor,currentProjectionMap=d.path,1,nil end
+    if currentProjectionMap~=d.origin.map then
+        currentProjectionMap,projected,measure=d.origin.map,{},nil
+    end
     local count = #d.path.waypoints
     if count < 2 then return 0 end
     measureSome(d,count)
@@ -265,7 +268,7 @@ local function walk(d, radius, yardRadius)
         elseif AT.CancelQuestWalking then AT.CancelQuestWalking() end
         return
     end
-    if AT.NoteQuestWalkingProgress then AT.NoteQuestWalkingProgress(d.path,d.origin,math.sqrt(best)) end
+    if AT.NoteQuestWalkingProgress then AT.NoteQuestWalkingProgress(d.path,d.origin,math.sqrt(best),candidate) end
     cursor = candidate
     travelDetail = detailedProgress(d,candidate,fraction,best,count)
     local targetX, targetY

@@ -45,6 +45,64 @@ assert(not walk());drain()
 local path,where=walk()
 assert(path and path.yards>0 and #path.waypoints>2 and where.map==dest)
 local a,b=mp(goal[1],goal[2]);assert(where.x==a and where.y==b)
+
+-- UI map layouts need not share normalized coordinates. Cross the same
+-- verified outdoor path into a neighboring UI map without another search.
+local curMap,bump=home,1422
+local px,py=x,y
+local bumpWorld=0
+local baseWF=C_Map.GetWorldPosFromMapPos
+local baseMF=C_Map.GetMapPosFromWorldPos
+C_Map.GetWorldPosFromMapPos=function(m,p)
+ if m~=bump then return baseWF(m,p) end
+ local a,b=p:GetXY();return bumpWorld,vec(x+(a-.25)*42000,y+(b-.7)*42000)
+end
+C_Map.GetMapPosFromWorldPos=function(w,p,m)
+ if m~=bump then return baseMF(w,p,m) end
+ local a,b=p:GetXY();return m,vec((a-x)/42000+.25,(b-y)/42000+.7)
+end
+C_Map.GetBestMapForUnit=function()return curMap end
+C_Map.GetPlayerMapPosition=function(m)
+ local _,p=C_Map.GetMapPosFromWorldPos(0,vec(px,py),m);return p
+end
+UnitPosition=function()return px,py,0,bumpWorld end
+local function region()
+ return setmetatable({}, {__index=function()return function()end end})
+end
+function CreateFrame()
+ local f=region();f.CreateLine=region;f.CreateFontString=region;return f
+end
+Minimap={GetWidth=function()return 170 end,GetHeight=function()return 170 end,GetFrameLevel=function()return 1 end}
+function AT.RenderWorldQuestRoute(status,k,snapshot) AT.status,AT.snapshot=status,snapshot end
+assert(loadfile("NQT/Route.lua"))("NQT",AT)
+AT.InitQuestRoute();drain();AT.RefreshQuestRoute()
+local first=assert(AT.snapshot,"already-visible actual route")
+path=first.path
+local p=path.waypoints[2]
+local w,v=C_Map.GetWorldPosFromMapPos(p.map,vec(p.x,p.y));assert(w==0)
+px,py=v:GetXY()
+curMap=bump
+AT.RefreshQuestRoute()
+assert(AT.snapshot and AT.snapshot.path==path and AT.status=="routed" and #pending==0,
+ "crossing an outdoor map boundary immediately keeps actual verified route and reprojects to the new layout")
+inside=true
+AT.RefreshQuestRoute()
+assert(not AT.snapshot,"an instance must not keep outdoor geometry")
+inside=false;curMap=home;px,py=x,y
+AT.RefreshQuestRoute();drain();AT.RefreshQuestRoute()
+path=assert(AT.snapshot).path
+curMap=bump;px,py=x+200,y+200
+AT.RefreshQuestRoute()
+assert(not AT.snapshot,"a jump off the active path cannot retain previous geometry")
+curMap=home;px,py=x,y
+AT.RefreshQuestRoute();drain();AT.RefreshQuestRoute()
+assert(AT.snapshot)
+curMap=bump;bumpWorld=1
+AT.RefreshQuestRoute()
+assert(not AT.snapshot,"a different world never keeps the previous tile path")
+bumpWorld=0;curMap=home
+AT.CancelQuestWalking()
+print("PASS verified native waypoint route remains continuous across a map seam, rejects interior and other-world transitions")
 -- A new pin, a map with no outdoor surface, and a different continent
 -- never recycle the old path or draw a guessed crossing.
 goal={517,1598.5};assert(not walk());drain()

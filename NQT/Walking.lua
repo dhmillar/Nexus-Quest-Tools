@@ -102,9 +102,9 @@ function AT.CancelQuestWalking()
     candidateCache, lastGoodTargets, lastPublished, lastRouteProgress = nil, nil, nil, nil
 end
 
-function AT.NoteQuestWalkingProgress(path, from, yards)
+function AT.NoteQuestWalkingProgress(path, from, yards, segment)
     if lastPublished and path==lastPublished.path and goodPlace(from) and finite(yards) and yards<=8 then
-        lastRouteProgress={path=path, from=from, at=time()}
+        lastRouteProgress={path=path, from=from, at=time(), segment=segment}
     else
         lastRouteProgress=nil
     end
@@ -318,6 +318,39 @@ local function carryCenterline(quest,from,width,height)
     return nearby(1,math.min(#points-1,1600))
 end
 
+local function canCarryWaypointBoundary(from,now)
+    local recent=lastRouteProgress
+    if not recent or recent.path~=lastPublished.path or recent.from.map~=lastPublished.map
+        or now<recent.at or now-recent.at>1.2 or not finite(recent.segment) then return false end
+    local function world(p)
+        if not CreateVector2D or not C_Map or not C_Map.GetWorldPosFromMapPos then return end
+        local ok,w,x,y=pcall(function()
+            local w,v=C_Map.GetWorldPosFromMapPos(p.map,CreateVector2D(p.x,p.y))
+            if not clean(v) or not v then return end
+            local x,y=v:GetXY()
+            return w,x,y
+        end)
+        if ok and finite(w) and finite(x) and finite(y) then return w,x,y end
+    end
+    local w,x,y=world(from)
+    local old,px,py=world(recent.from)
+    if not w or w~=old or (x-px)^2+(y-py)^2>18^2 then return false end
+    local points=lastPublished.path.waypoints
+    for i=recent.segment,math.min(#points-1,recent.segment+7) do
+        local a,ax,ay=world(points[i])
+        local b,bx,by=world(points[i+1])
+        if a==w and b==w then
+            local dx,dy=bx-ax,by-ay
+            local squared=dx*dx+dy*dy
+            if squared>0 then
+                local t=math.max(0,math.min(1,((x-ax)*dx+(y-ay)*dy)/squared))
+                if (x-ax-t*dx)^2+(y-ay-t*dy)^2<=8^2 then return true end
+            end
+        end
+    end
+    return false
+end
+
 function AT.GetFocusedQuestWalkingPath(quest, from, width, height)
     if not active(quest) or not goodPlace(from) or not (finite(width) and width > 0 and finite(height) and height > 0)
         or (quest~=WAYPOINT_ID and not AT.GetFocusedQuestRouteTargets) then
@@ -339,8 +372,19 @@ function AT.GetFocusedQuestWalkingPath(quest, from, width, height)
         return nil,nil,"objective_missing"
     end
     local now = time()
-    if lastPublished and (lastPublished.quest~=quest or lastPublished.map~=from.map
+    if lastPublished and (lastPublished.quest~=quest
         or lastPublished.key~=cache.key or lastPublished.api~=api or lastPublished.nav~=nav) then lastPublished=nil end
+    if lastPublished and lastPublished.map~=from.map then
+        if quest==WAYPOINT_ID and not road and state and state.path==lastPublished.path
+            and not state.cancel and canCarryWaypointBoundary(from,now) then
+            -- A verified dry origin and unchanged waypoint can keep its
+            -- already-planned suffix when only the UI map changes.
+            state.from,state.width,state.height=from,width,height
+            lastPublished.map=from.map
+        else
+            lastPublished=nil
+        end
+    end
     if state then
         local old = state.from
         local dx, dy = (from.x-old.x)*width, (from.y-old.y)*height

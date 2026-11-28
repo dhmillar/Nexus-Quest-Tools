@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.298 - 2026-11-28
+
+- Walking: keep the verified route to a tracked map waypoint across an outdoor zone boundary when you are still on the line. Reproject the line for the new map; a replaced waypoint, interior, another world or a move away from the path still starts fresh.
+
 ## 1.5.297 - 2026-11-28
 
 - Walking: keep one pending search entry per terrain cell instead of spending route budget on duplicates. The fixed 4,983-yard outdoor benchmark kept the same shortest cost and completed in 205 rather than 249 timer slices.
