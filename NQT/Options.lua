@@ -368,7 +368,9 @@ local function buildPanel()
     friendlySlider("friendlyBarWidth","Bar width",-192,32,160,1,64," px")
     friendlySlider("friendlyBarHeight","Bar height",-233,4,26,1,9," px")
     makeText(general,"GameFontDisableSmall",-272,"These replace friendly player plates outdoors only. Enemy and NPC plates stay unchanged.")
-    status = makeText(general, "GameFontHighlightSmall", -305, "")
+    option(general, "enemyPlayerNames", "Enemy Player Names", -306,
+        "Show a clean name on hostile player nameplates, with a Horde badge when the game confirms their faction. Requires the native enemy nameplates to be on. Does not change enemy mobs.")
+    status = makeText(general, "GameFontHighlightSmall", -350, "")
     status:SetTextColor(.86,.72,.46)
 
     option(macro, "quietTarget", "Mute target macro sounds", -2)

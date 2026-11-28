@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.318 - 2026-11-28
+
+- General: added Enemy Player Names for editable hostile player plates, with a Horde icon when the faction is confirmed. Existing enemy health bars and all enemy mob plates are preserved. Requests up to 45 yards through the player-only range setting; the client still limits which plates are available.
+
 ## 1.5.317 - 2026-11-28
 
 - Friendly Names show both names on WoW Forever. Friendly Bars use the native WoW status bar when raw health is restricted, and have separate width and height sliders. Previous size settings carry over.

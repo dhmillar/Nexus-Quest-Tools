@@ -11,6 +11,7 @@ local defaults = {
     showQuestRoute = true,
     vendorIcons = true,
     friendlyNames = false,
+    enemyPlayerNames = false,
     friendlyBars = false,
     friendlyNameSize = 16,
     friendlyBarWidth = 64,

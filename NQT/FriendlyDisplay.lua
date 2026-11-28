@@ -3,8 +3,8 @@ local nameplate=C_NamePlate
 local current,visual,mask={},{},setmetatable({},{__mode="k"})
 local hooks=setmetatable({},{__mode="k"})
 local pools=setmetatable({},{__mode="k"})
-local eventFrame,elapsed,writing,leasing
-local key="nameplateShowFriends"
+local eventFrame,elapsed,writing,leasing,rangeActive
+local key,rangeKey="nameplateShowFriends","nameplatePlayerMaxDistance"
 local function plain(v) return not issecretvalue or not issecretvalue(v) end
 local function call(fn,...)
     if type(fn)~="function" then return end
@@ -21,10 +21,15 @@ local function safe(fn,...)
     if ok and plain(a) then return a end
 end
 local function finite(v) return type(v)=="number" and v==v and v>-math.huge and v<math.huge end
-local function on()
+local function friendOn()
     local d=AT.db
     return d and d.enabled~=false and (d.friendlyNames==true or d.friendlyBars==true)
 end
+local function enemyOn()
+    local d=AT.db
+    return d and d.enabled~=false and d.enemyPlayerNames==true
+end
+local function on() return friendOn() or enemyOn() end
 local function token(unit)
     return plain(unit) and type(unit)=="string" and unit:match("^nameplate%d+$")~=nil
 end
@@ -40,8 +45,47 @@ local function friendly(u)
         and safe(UnitIsUnit,u,"player")~=true and safe(UnitIsFriend,"player",u)==true
         and safe(UnitCanAttack,"player",u)~=true
 end
-local function setting()
-    return safe(C_CVar and C_CVar.GetCVar or GetCVar,key)
+local function mode(u)
+    if friendOn() and friendly(u) then return "friend" end
+    if enemyOn() and token(u) and safe(UnitExists,u)==true and safe(UnitIsPlayer,u)==true
+        and safe(UnitIsUnit,u,"player")~=true and safe(UnitCanAttack,"player",u)==true
+        and safe(UnitIsFriend,"player",u)~=true then return "enemy" end
+end
+local function setting(name)
+    return safe(C_CVar and C_CVar.GetCVar or GetCVar,name or key)
+end
+local function syncRange(active)
+    if writing or safe(InCombatLockdown)==true then return end
+    local d=AT.db
+    if not d then return end
+    local present=setting(rangeKey)
+    local v=tonumber(present)
+    local lease=d.friendlyRangeLease
+    if type(lease)~="table" then lease=nil end
+    local original=lease and tonumber(lease.prior)
+    local applied=lease and tonumber(lease.applied)
+    if not active then
+        rangeActive=false
+        if original and original>0 and original<45 and applied and v==applied and applied>original then
+            writing=true
+            safe(C_CVar and C_CVar.SetCVar or SetCVar,rangeKey,tostring(original))
+            writing=nil
+            if tonumber(setting(rangeKey))==original then d.friendlyRangeLease=nil end
+        else d.friendlyRangeLease=nil end
+        return
+    end
+    if rangeActive then return end
+    rangeActive=true
+    if lease and v==applied then return end
+    if lease then d.friendlyRangeLease=nil end
+    -- This is the public player-only distance setting. Do not change the
+    -- general cap, bypass the client limit, or manufacture off-range anchors.
+    if not v or v<=0 or v>=45 then return end
+    writing=true
+    safe(C_CVar and C_CVar.SetCVar or SetCVar,rangeKey,"45")
+    writing=nil
+    local final=tonumber(setting(rangeKey))
+    if final and final>v and final<=45 then d.friendlyRangeLease={prior=v,applied=final} end
 end
 local function syncVisibility(active)
     if writing or safe(InCombatLockdown)==true then return end
@@ -93,7 +137,7 @@ local function hideArt(region,plate,u)
         pcall(hooksecurefunc,region,"SetAlpha",function(self,alpha)
             local s=mask[self]
             if not s or applying==self or not plain(alpha) or not finite(alpha) or alpha<=0 then return end
-            if not on() or not outdoor() or not friendly(s.u) or not available(s.plate)
+            if not outdoor() or mode(s.u)~=current[s.u] or not current[s.u] or not available(s.plate)
                 or safe(nameplate.GetNamePlateForUnit,s.u)~=s.plate then return end
             s.alpha=alpha;writeAlpha(self,0)
         end)
@@ -162,7 +206,11 @@ local function attach(plate)
     backdrop:SetColorTexture(.025,.022,.02,1)
     local name=f:CreateFontString(nil,"OVERLAY","GameFontNormal")
     name:SetJustifyH("CENTER")
-    f.name,f.bar=name,bar
+    local eagle=f:CreateTexture(nil,"OVERLAY")
+    eagle:SetTexture("Interface\\TargetingFrame\\UI-PVP-Horde")
+    eagle:SetPoint("RIGHT",name,"LEFT",-3,0)
+    eagle:Hide()
+    f.name,f.bar,f.horde=name,bar,eagle
     f:Hide();pools[plate]=f
     return f
 end
@@ -181,8 +229,22 @@ local function maskPlate(plate,u)
     if plate.GetChildren then maskOwned(pcall(plate.GetChildren,plate)) end
     if plate.GetRegions then maskOwned(pcall(plate.GetRegions,plate)) end
 end
+local function maskEnemyName(plate,u)
+    local stock,custom=plate.UnitFrame,plate.unitFramePlater
+    if plain(stock) and type(stock)=="table" then
+        hideArt(stock.name,plate,u);hideArt(stock.Name,plate,u);hideArt(stock.nameText,plate,u)
+    end
+    if plain(custom) and type(custom)=="table" then
+        hideArt(custom.unitName,plate,u);hideArt(custom.nameText,plate,u)
+    end
+    hideArt(plate.ActorNameSpecial,plate,u)
+    hideArt(plate.unitName,plate,u)
+    hideArt(plate.nameText,plate,u)
+end
 local function update(u)
-    if not on() or not outdoor() or not friendly(u) then clear(u);return end
+    local style=outdoor() and mode(u)
+    if not style then clear(u);return end
+    if current[u] and current[u]~=style then clear(u) end
     local plate=safe(nameplate.GetNamePlateForUnit,u)
     if not available(plate) then clear(u);return end
     local previous=pools[plate]
@@ -191,15 +253,16 @@ local function update(u)
     local c=type(klass)=="string" and RAID_CLASS_COLORS and RAID_CLASS_COLORS[klass]
     if type(c)~="table" or not finite(c.r) or not finite(c.g) or not finite(c.b) then clear(u);return end
     local d=AT.db
-    local n=d.friendlyNames==true and nameText(u)
+    local wantedBars=style=="friend" and d.friendlyBars==true
+    local n=(style=="enemy" or d.friendlyNames==true) and nameText(u)
     local names=type(n)=="string" and n~=""
-    if not names and d.friendlyBars~=true then clear(u);return end
+    if not names and not wantedBars then clear(u);return end
     local f=attach(plate)
     if not f then clear(u);return end
-    local bars=d.friendlyBars==true and paintHealth(f.bar,u)
+    local bars=wantedBars and paintHealth(f.bar,u)
     if not names and not bars then clear(u);return end
     if visual[u] and visual[u]~=f then clear(u) end
-    visual[u],current[u],f.owner=f,true,u
+    visual[u],current[u],f.owner=f,style,u
     if names then
         f.name:SetFont(STANDARD_TEXT_FONT or "Fonts\\ARIALN.TTF",fontSize(d.friendlyNameSize),"OUTLINE")
         f.name:SetText(n);f.name:SetTextColor(c.r,c.g,c.b)
@@ -210,13 +273,16 @@ local function update(u)
         f.bar:SetSize(dimension(d.friendlyBarWidth,32,160,64),dimension(d.friendlyBarHeight,4,26,9))
         f.bar:SetStatusBarColor(c.r,c.g,c.b)
     end
-    f.name:SetShown(names);f.bar:SetShown(bars);f:Show()
-    maskPlate(plate,u)
+    local horde=style=="enemy" and names and safe(UnitFactionGroup,u)=="Horde"
+    if horde then local sz=fontSize(d.friendlyNameSize);f.horde:SetSize(sz,sz) end
+    f.horde:SetShown(horde);f.name:SetShown(names);f.bar:SetShown(bars);f:Show()
+    if style=="enemy" then maskEnemyName(plate,u) else maskPlate(plate,u) end
 end
 function AT.RefreshFriendlyDisplay()
     if not eventFrame then return end
     local show=on() and outdoor()
-    syncVisibility(show)
+    syncVisibility(outdoor() and friendOn())
+    syncRange(show)
     if not show then
         for u in pairs(current) do clear(u) end
         for region in pairs(mask) do unmask(region) end
@@ -262,7 +328,8 @@ function AT.InitFriendlyDisplay()
         for u in pairs(current) do
             local f=visual[u]
             local p=safe(nameplate.GetNamePlateForUnit,u)
-            if not on() or not outdoor() or not friendly(u) or not available(p) or pools[p]~=f then clear(u)
+            if not outdoor() or mode(u)~=current[u] or not available(p) or pools[p]~=f then clear(u)
+            elseif current[u]=="enemy" then maskEnemyName(p,u)
             else maskPlate(p,u) end
         end
     end)
