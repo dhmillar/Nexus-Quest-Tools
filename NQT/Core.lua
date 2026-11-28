@@ -9,6 +9,7 @@ local defaults = {
     nextMobHint = true,
     reacquireEachPress = false,
     showQuestRoute = true,
+    vendorIcons = true,
     hunterDeadzone = true,
     petBarEnabled = false,
     hunterDeadzoneX = 0,
@@ -117,6 +118,7 @@ loader:SetScript("OnEvent", function(self, event, arg)
         safeInit("Boss Target Marking", AT.InitBossTargetMarking)
         safeInit("Hunter Deadzone", AT.InitHunterDeadzone)
         safeInit("Pet Bar", AT.InitPetBar)
+        safeInit("Vendor Icons", AT.InitVendorIcons)
         safeInit("Smart Buff", AT.InitSmartBuff)
         safeInit("Settings", AT.InitOptions)
     end

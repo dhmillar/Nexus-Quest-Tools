@@ -51,6 +51,7 @@ local function updateState()
     if AT.RefreshDungeonPosition then AT.RefreshDungeonPosition() end
     if AT.RefreshHunterDeadzone then AT.RefreshHunterDeadzone() end
     if AT.RefreshPetBar then AT.RefreshPetBar() end
+    if AT.RefreshVendorIcons then AT.RefreshVendorIcons() end
     if AT.RefreshSmartBuff then AT.RefreshSmartBuff() end
     refreshPanel()
     if minimapButton then
@@ -335,7 +336,8 @@ local function buildPanel()
     end
     makeText(classes,"GameFontHighlightSmall",-79,"One cast per press. Hunters: Shift + macro for Monkey in combat.")
     makeText(classes,"GameFontDisableSmall",-325,"A slim overhead bar shows the health of your active pet.")
-    status = makeText(general, "GameFontHighlightSmall", -125, "")
+    option(general, "vendorIcons", "Vendor Icons", -114, "Show large icons above nearby vendors and trainers when WoW exposes their nameplates. Does not change nameplate settings.")
+    status = makeText(general, "GameFontHighlightSmall", -153, "")
     status:SetTextColor(.86,.72,.46)
 
     option(macro, "quietTarget", "Mute target macro sounds", -2)

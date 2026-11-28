@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.243
+
+- Added **General > Vendor Icons**, on by default. Large overhead icons distinguish merchants, reagents, ammo and repair, plus class and profession trainers, on visible NPC nameplates. No changes to your nameplate settings.
+
 ## 1.5.242
 
 - Pet Bar follows your actual pet again. It hides when WoW does not expose a usable pet nameplate, rather than attaching to your character or showing a stationary HUD. Friendly player and NPC nameplate settings remain unchanged.
