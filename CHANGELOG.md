@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.286 - 2026-11-28
+
+- Restored missing creature portraits for 27 kill objectives and 24 collection objectives using models confirmed for those exact Forever creatures.
+- Keeps the actual selected creature portrait first when available. Hidden quest-credit units and placeholder models are excluded.
+
 ## 1.5.285 - 2026-11-28
 
 - Stock world map routes now follow the visible map bounds when zoomed or panned and maintain a readable line weight.

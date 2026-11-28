@@ -1,5 +1,5 @@
 local AT={}
-for _,f in ipairs({"LevelGuideData","ForeverQuestFacts","QuestMobData","EverlootDrops","ClassicQuestDropReferences","QuestMobs"}) do assert(loadfile("NQT/"..f..".lua"))("NQT",AT) end
+for _,f in ipairs({"LevelGuideData","ForeverQuestFacts","QuestMobData","EverlootDrops","ClassicQuestDropReferences","NQTDB","QuestMobs"}) do assert(loadfile("NQT/"..f..".lua"))("NQT",AT) end
 local fallback=io.open("NQT/ClassicQuestMobReferences.lua","r")
 if fallback then fallback:close(); assert(loadfile("NQT/ClassicQuestMobReferences.lua"))("NQT",AT) end
 function GetLocale() return "enUS" end

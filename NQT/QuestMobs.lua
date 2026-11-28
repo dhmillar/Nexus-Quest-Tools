@@ -24,6 +24,12 @@ local function mob(id)
     local data=AT.QuestMobData
     local row=data and data.creatures[id]
     if row and pos(row[5]) then return row end
+    local variants=AT.NQTDB and AT.NQTDB.CreaturePortraitVariants
+    local native=variants and variants[id]
+    if native and pos(native[2]) and (not row or normalize(row[1])==normalize(native[1])) then
+        -- An actual variant for this Forever creature, not the model of another NPC.
+        return row and {row[1],row[2],row[3],row[4],native[2]} or {native[1],0,0,"",native[2]}
+    end
     local classic=AT.ClassicQuestCreatureProfiles
     local ref=classic and classic[id]
     if row and ref and normalize(row[1])==normalize(ref[1]) and pos(ref[5]) then
@@ -182,7 +188,8 @@ local function indexed(wanted)
                 nameIndex[name]=nameIndex[name]==nil and id or false
                 if namesByKey[name]==nil then namesByKey[name]=row[1]
                 elseif namesByKey[name]~=row[1] then namesByKey[name]=false end
-                local display=pos(row[5]) and row[5] or false
+                local profile=mob(id)
+                local display=profile and pos(profile[5]) and profile[5] or false
                 if displaysByKey[name]==nil then displaysByKey[name]=display
                 elseif displaysByKey[name]~=display then displaysByKey[name]=false end
             end

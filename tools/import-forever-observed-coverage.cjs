@@ -119,7 +119,7 @@ const catalogBindings=[
 // verified separately. The builder above owns the quest/location core only.
 const dest=path.join(N,"NQTDB.lua");
 const old=fs.existsSync(dest)?fs.readFileSync(dest,"utf8").replace(/\r\n/g,"\n"):"";
-const blocks=["merchant facts","reward facts","classic start references","completed turn-ins","named object pickups","unmappable starter witnesses","object pickup approaches","corroborated turn-in labels"].map(name=>old.match(new RegExp(
+const blocks=["merchant facts","reward facts","classic start references","completed turn-ins","named object pickups","unmappable starter witnesses","object pickup approaches","corroborated turn-in labels","creature portrait variants"].map(name=>old.match(new RegExp(
  "-- BEGIN NQTDB "+name+" \\(generated\\)\\n[\\s\\S]*?-- END NQTDB "+name+"\\n"))?.[0]||"");
 fs.writeFileSync(dest,generated+"\n"+catalogBindings.join("\n")+"\n"+blocks.join(""));
 console.log(result);
