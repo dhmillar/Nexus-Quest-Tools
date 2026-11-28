@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.305 - 2026-11-28
+
+- Quest starters: correctly interpret both Skyborne race IDs and apply known race restrictions to recorded world-map start pins as well as Level Guide recommendations. Keep live offers ahead of recorded starters and preserve the Guide's explicit faction gates.
+
 ## 1.5.304 - 2026-11-28
 
 - Routing: keep land-distance bounds separate for two to four alternate approaches instead of treating them as one broad region. The two bundled terrain benchmarks keep the same optimal routes, with 259 to 114 and 51 to 32 search slices.

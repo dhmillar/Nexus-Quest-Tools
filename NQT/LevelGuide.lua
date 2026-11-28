@@ -84,14 +84,18 @@ local function outdoor(map)
         map=parent
     end
 end
-local function canUseRace(mask,race)
-    if not positive(race) or race>64 or type(mask)~="string" or mask=="" then return true end
-    if not mask:find("[^0]") then return true end
-    local nibble=floor((race-1)/4)
+-- Forever's playable Skyborne race IDs use bits 32 and 33, not 94/95.
+-- Use hex digits so the upper race bits never pass through a rounded Lua number.
+function AT.QuestCatalogRaceAllows(mask,race,side)
+    if not plain(mask) or type(mask)~="string" or mask=="" then return true end
+    if (side==1 and mask=="aa2aaaaa4e0ab3b2") or (side==2 and mask=="55155555b1354c4d") then return false end
+    if not positive(race) or floor(race)~=race or not mask:find("[^0]") then return true end
+    local index=race==95 and 32 or race==96 and 33 or race<=64 and race-1
+    if not index then return true end
+    local nibble=floor(index/4)
     if #mask<=nibble then return false end
-    local bit=(race-1)%4
     local d=tonumber(mask:sub(#mask-nibble,#mask-nibble),16)
-    return d~=nil and floor(d/2^bit)%2==1
+    return d~=nil and floor(d/2^(index%4))%2==1
 end
 local function maskHas(mask,id)
     local usable=plain(mask) and type(mask)=="number" and mask>0 and mask<2^53
@@ -588,18 +592,18 @@ function AT.BuildLevelGuide(playerLevel,size)
                     p.lo=min(p.lo or qLevel,qLevel);p.hi=max(p.hi or qLevel,qLevel)
                 end
                 local isDone=done(q)
-                local raceOkay=not d or canUseRace(d[5],race) and maskHas(d[8],class)
-                -- Explicit dungeon faction data and the full Forever faction masks
-                -- also work when UnitRace cannot supply a usable bit index.
-                local mask=d and d[5]
-                if (side==1 and mask=="aa2aaaaa4e0ab3b2") or (side==2 and mask=="55155555b1354c4d") then raceOkay=false end
+                local raceOkay=not d or AT.QuestCatalogRaceAllows(d[5],race) and maskHas(d[8],class)
+                -- Some native lists include opposing faction offers. Keep
+                -- explicit faction gates, but do not let a stale inferred
+                -- race alone override an explicit native offer.
+                local factionOkay=not d or AT.QuestCatalogRaceAllows(d[5],nil,side)
                 local factionRule=dungeonFaction[q]
-                if factionRule and factionRule~="Both" and factionRule~=faction and side>0 then raceOkay=false end
+                if factionRule and factionRule~="Both" and factionRule~=faction and side>0 then factionOkay=false end
                 local eligible=not blocked(q)
                 local dev=d and lower(d[9])
                 local plausible=not dev or not (dev:match("^test quest") or dev:match("^qa[%s:_]") or dev:match("^unused[:%s]")
                     or dev:match("^deprecated[:%s]") or q<=3)
-                if isDone~=true and raceOkay and (h or liveStart or eligible and plausible) then
+                if isDone~=true and factionOkay and (h or liveStart or raceOkay and eligible and plausible) then
                     local status=h and ((ready[q] or safe(Q and Q.ReadyForTurnIn,q)==true) and "Turn in" or "In log")
                         or liveStart and "Pick up" or "In range"
                     local qname=h and h.title or liveStart and safe(Q and Q.GetTitleForQuestID,q)

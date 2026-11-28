@@ -26,8 +26,8 @@ local function id(x) return num(x) and x>0 and floor(x)==x end
 local function coord(x,y) return num(x) and num(y) and x>=0 and x<=1 and y>=0 and y<=1 and (x~=0 or y~=0) end
 local function read(fn,...)
     if type(fn)~="function" then return end
-    local ok,a,b=pcall(fn,...)
-    if ok then return plain(a) and a or nil,plain(b) and b or nil end
+    local ok,a,b,c=pcall(fn,...)
+    if ok then return plain(a) and a or nil,plain(b) and b or nil,plain(c) and c or nil end
 end
 local function field(t,k)
     if is(t,"table") then local v=t[k];if plain(v) then return v end end
@@ -85,13 +85,17 @@ local function startPoints(map,includeKnown)
         local faction=read(UnitFactionGroup,"player")
         local side=faction=="Alliance" and 1 or faction=="Horde" and 2 or -1
         local level=read(UnitLevel,"player")
+        local _,_,race=read(UnitRace,"player")
+        local catalog,allows=AT.ForeverLevelGuideQuests,AT.QuestCatalogRaceAllows
         for _,p in ipairs(AT.ObservedQuestStarts and AT.ObservedQuestStarts[map] or {}) do
             local q,x,y,access=unpack(p)
             local facts=AT.ForeverQuestFacts and AT.ForeverQuestFacts[q]
             local eligibleLevel=not facts or facts[1]==0 or not id(level) or level>=facts[1]
+            local row=catalog and catalog[q]
+            local eligibleRace=not row or not allows or allows(row[5],race,side)
             -- These are recorded NPC/object offers, not blanket quest-giver markers.
             -- Suppress accepted and completed quests; other prerequisites may still apply.
-            if eligibleLevel and (access==0 or access==side) and exact(Q and Q.IsOnQuest,q)==false
+            if eligibleLevel and eligibleRace and (access==0 or access==side) and exact(Q and Q.IsOnQuest,q)==false
                 and exact(Q and Q.IsQuestFlaggedCompleted,q)==false then add(q,x,y,true) end
         end
     end
