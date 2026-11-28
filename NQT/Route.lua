@@ -261,9 +261,11 @@ local function walk(d, radius, yardRadius)
     end
     if not candidate then return end
     if best > offPathYards*offPathYards then
-        if AT.CancelQuestWalking then AT.CancelQuestWalking() end
+        if AT.ReplanQuestWalking then AT.ReplanQuestWalking(d.path)
+        elseif AT.CancelQuestWalking then AT.CancelQuestWalking() end
         return
     end
+    if AT.NoteQuestWalkingProgress then AT.NoteQuestWalkingProgress(d.path,d.origin,math.sqrt(best)) end
     cursor = candidate
     travelDetail = detailedProgress(d,candidate,fraction,best,count)
     local targetX, targetY

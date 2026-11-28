@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.295 - 2026-11-28
+
+- Walking: keep the verified path while the player follows it instead of restarting the search every 80 yards. When the player leaves the path, discard rejected geometry without cancelling a replacement search already underway.
+
 ## 1.5.294 - 2026-11-28
 
 - Walking: an actively tracked Blizzard map waypoint now uses NQT’s standalone route on the minimap and both world-map styles. Placing a pin alone does not override quests; changing or clearing the tracked pin discards stale geometry. Does not draw unverified straight lines to unsupported pins.

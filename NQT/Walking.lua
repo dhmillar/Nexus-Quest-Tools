@@ -2,6 +2,7 @@ local _, AT = ...
 local OWNER = "AutoTrack.QuestWalking"
 local BATCH_SIZE, SAMPLE_SECONDS, REPLAN_YARDS = 256, 0.70, 80
 local candidateCache, state, currentTargets, lastPublished, lastGoodTargets
+local lastRouteProgress
 local providerBackoff=setmetatable({},{__mode="k"})
 local NO_CANCEL = function() end
 
@@ -98,7 +99,23 @@ end
 
 function AT.CancelQuestWalking()
     clear()
-    candidateCache, lastGoodTargets, lastPublished = nil, nil, nil
+    candidateCache, lastGoodTargets, lastPublished, lastRouteProgress = nil, nil, nil, nil
+end
+
+function AT.NoteQuestWalkingProgress(path, from, yards)
+    if lastPublished and path==lastPublished.path and goodPlace(from) and finite(yards) and yards<=8 then
+        lastRouteProgress={path=path, from=from, at=time()}
+    else
+        lastRouteProgress=nil
+    end
+end
+
+function AT.ReplanQuestWalking(path)
+    -- Drop rejected published geometry, not a useful replacement already
+    -- being calculated for the same navigation job.
+    if not lastPublished or lastPublished.path~=path then return end
+    lastPublished,lastRouteProgress=nil,nil
+    if state and state.path==path then clear() end
 end
 
 local function valid(job)
@@ -328,8 +345,15 @@ function AT.GetFocusedQuestWalkingPath(quest, from, width, height)
         local old = state.from
         local dx, dy = (from.x-old.x)*width, (from.y-old.y)*height
         local limit = state.cancel and 160 or REPLAN_YARDS
+        local moved=dx*dx+dy*dy>limit*limit
+        local recent=lastRouteProgress
+        if moved and state.path and recent and recent.path==state.path
+            and recent.from.map==from.map and now>=recent.at and now-recent.at<=1.2 then
+            local px,py=(from.x-recent.from.x)*width,(from.y-recent.from.y)*height
+            if px*px+py*py<=18^2 then moved=false end
+        end
         if state.quest ~= quest or old.map ~= from.map or state.api ~= api or state.nav ~= nav
-            or state.key ~= cache.key or dx*dx + dy*dy > limit*limit
+            or state.key ~= cache.key or moved
             or (state.cancel and now - state.started > 35)
             or (state.retry and (now >= state.retry or not sameFailedStart(state.backoff,from,cache.key))) then clear() end
     end
@@ -349,7 +373,7 @@ function AT.GetFocusedQuestWalkingPath(quest, from, width, height)
     if state and state.waitingPath and not cache.stale then
         state.path,state.waitingPath=state.waitingPath,nil
     end
-    if state and state.path then
+    if state and state.path and (not lastPublished or lastPublished.path~=state.path) then
         lastPublished={path=state.path,target=state.best,quest=quest,map=from.map,key=cache.key,api=api,nav=nav}
     end
     if lastPublished then return lastPublished.path,lastPublished.target,"routed" end
