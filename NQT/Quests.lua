@@ -1049,8 +1049,31 @@ end
 
 -- A routing backend compares all verified, currently available points on
 -- this UI map. Quest choice remains with the tracker or the ordered queue.
--- Public observations are fallback approach spots, not quest turn-ins or live pins.
--- Require the same unfinished objective type/count and exact target ID if exposed.
+-- Match the live quest by objective identity, not by catalog display order.
+local observedObjectiveIDs={
+    item={"itemID","itemId"},
+    monster={"npcID","creatureID","monsterID"},
+    object={"objectID","objectId"},
+}
+local function liveObjectiveID(id,o,kind)
+    local found
+    for _,key in ipairs(observedObjectiveIDs[kind]) do
+        local ok,v=pcall(function()return o[key] end)
+        if not ok or not ordinary(v) then return nil,true end
+        if v~=nil then
+            if not validID(v) or found and found~=v then return nil,true end
+            found=v
+        end
+    end
+    if not found and kind=="item" then
+        local label=field(o,"text")
+        if isType(label,"string") and label~="" then
+            found=call(AT.ResolveRankQuestObjectiveItem,id,o,label)
+        end
+    end
+    return validID(found) and found or nil,false
+end
+
 function AT.GetObservedQuestObjectiveSpots(id,map)
     local db=AT.NQTDB
     local refs=db and db.ObjectiveSpots and db.ObjectiveSpots[id]
@@ -1060,28 +1083,54 @@ function AT.GetObservedQuestObjectiveSpots(id,map)
     if inside==true and kind~="none" or zoneID(map)~=map then return end
     local live=call(Q.GetQuestObjectives,id)
     if not isType(live,"table") then return end
+
+    local rows,counts,buckets={}, {}, {}
+    local function signature(typ,required)
+        return observedObjectiveIDs[typ] and validID(required) and typ..":"..required or nil
+    end
+    local function remember(observations,fallback)
+        for index,r in pairs(observations or {}) do
+            local key=signature(r[1],r[3])
+            if key and (not fallback or not (refs and refs[index])) then
+                rows[#rows+1]={index=index,record=r,key=key}
+                counts[key]=(counts[key] or 0)+1
+            end
+        end
+    end
+    remember(refs,false)
+    remember(objects,true)
+    table.sort(rows,function(a,b)return a.index<b.index end)
+    for _,o in ipairs(live) do
+        local typ=field(o,"type")
+        local key=signature(typ,field(o,"numRequired"))
+        if key and counts[key] then
+            local typed,blocked=liveObjectiveID(id,o,typ)
+            local b=buckets[key]
+            if not b then b={};buckets[key]=b end
+            b[#b+1]={typed=typed,blocked=blocked,unfinished=field(o,"finished")==false}
+        end
+    end
     local points={}
-    local function collect(rows,isObject)
-        for index,r in pairs(rows or {}) do
-            local o=field(live,index)
-            if (not isObject or not (refs and refs[index])) and field(o,"type")==r[1]
-                and field(o,"numRequired")==r[3] and field(o,"finished")==false then
-                local explicit=field(o,"itemID") or field(o,"itemId") or field(o,"npcID")
-                    or field(o,"creatureID") or field(o,"monsterID") or field(o,"objectID") or field(o,"objectId")
-                local matching=0
-                for _,entry in ipairs(live) do
-                    if field(entry,"type")==r[1] and field(entry,"numRequired")==r[3] then matching=matching+1 end
+    for _,entry in ipairs(rows) do
+        local r,key=entry.record,entry.key
+        local b=buckets[key]
+        if b then
+            local exact,matches
+            for _,o in ipairs(b) do
+                if not o.blocked and o.typed==r[2] then
+                    exact=o
+                    matches=(matches or 0)+1
                 end
-                if explicit==r[2] or explicit==nil and matching==1 then
-                    for _,p in ipairs(r[4]) do
-                        if p[1]==map and xyValid(p[2],p[3]) then points[#points+1]=p end
-                    end
+            end
+            local only=b[1]
+            if matches==1 and exact.unfinished
+                or not matches and #b==1 and counts[key]==1 and not only.blocked and not only.typed and only.unfinished then
+                for _,p in ipairs(r[4]) do
+                    if p[1]==map and xyValid(p[2],p[3]) then points[#points+1]=p end
                 end
             end
         end
     end
-    collect(refs,false)
-    collect(objects,true)
     return points
 end
 

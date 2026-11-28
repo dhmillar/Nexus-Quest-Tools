@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.5.289 - 2026-11-28
+
+- Match known quest pickup and objective routes by the exact live objective, even when the game lists objectives in a different order.
+- Keep native pins first and do not route to completed, conflicting, or ambiguous objectives.
+
 ## 1.5.288 - 2026-11-28
 
 - Walking search now skips redundant terrain reads without changing the path or raising the search budget.
